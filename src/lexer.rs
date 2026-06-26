@@ -276,36 +276,153 @@ impl Lexer {
             self.read_char()
         }
 
-        if self.current == '_' {
+        if self.current == '.' {
+            digits.push(self.current);
             self.read_char();
-
-            let mut suffix = String::new();
-
-            while self.current.is_alphanumeric() {
-                suffix.push(self.current);
-                self.read_char();
+            while self.current.is_ascii_digit() {
+                digits.push(self.current);
+                self.read_char()
             }
 
-            let token = match suffix.as_str() {
-                "i8" => Token::INT8(digits.parse().unwrap()),
-                "i16" => Token::INT16(digits.parse().unwrap()),
-                "i32" => Token::INT32(digits.parse().unwrap()),
-                "i64" => Token::INT64(digits.parse().unwrap()),
+            if self.current == '_' {
+                let mut suffix = String::new();
 
-                "u8" => Token::UINT8(digits.parse().unwrap()),
-                "u16" => Token::UINT16(digits.parse().unwrap()),
-                "u32" => Token::UINT32(digits.parse().unwrap()),
-                "u64" => Token::UINT64(digits.parse().unwrap()),
+                self.read_char();
 
-                "f32" => Token::FLOAT32(digits.parse().unwrap()),
-                "f64" => Token::FLOAT64(digits.parse().unwrap()),
-                _ => Token::ILLEGAL
-            };
+                while self.current.is_alphanumeric() {
+                    suffix.push(self.current);
+                    self.read_char();
+                }
 
-            return token
+                let token = match suffix.as_str() {
+                    "f32" => Token::FLOAT32(digits.parse().unwrap()),
+                    "f64" => Token::FLOAT64(digits.parse().unwrap()),
 
+                    _ => Token::ILLEGAL
+                };
+
+                return token;
+            }
+
+            Token::FLOAT32(digits.parse().unwrap())
+        } else {
+            if self.current == '_' {
+                self.read_char();
+
+                let mut suffix = String::new();
+
+                while self.current.is_alphanumeric() {
+                    suffix.push(self.current);
+                    self.read_char();
+                }
+
+                let token = match suffix.as_str() {
+                    "i8" => Token::INT8(digits.parse().unwrap()),
+                    "i16" => Token::INT16(digits.parse().unwrap()),
+                    "i32" => Token::INT32(digits.parse().unwrap()),
+                    "i64" => Token::INT64(digits.parse().unwrap()),
+
+                    "u8" => Token::UINT8(digits.parse().unwrap()),
+                    "u16" => Token::UINT16(digits.parse().unwrap()),
+                    "u32" => Token::UINT32(digits.parse().unwrap()),
+                    "u64" => Token::UINT64(digits.parse().unwrap()),
+
+                    _ => Token::ILLEGAL
+                };
+
+                return token
+            }
+
+            Token::INT(digits.parse().unwrap())
         }
 
-        Token::INT(digits.parse().unwrap())
+
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::lexer::{Lexer, Token};
+
+    #[test]
+    fn let_x_test() {
+        let input = "let x = 42.0_f64;";
+
+        println!("test1: {}\n", input);
+
+        let mut lexer = Lexer::new(input);
+
+        let mut res: String = String::new();
+
+        loop {
+            let token = lexer.next_token();
+            res.push_str(format!("Got token {:?}\n", token).as_str());
+
+            if token == Token::EOF {
+                println!("Successfully read input string");
+                break;
+            }
+
+            assert_ne!(token, Token::ILLEGAL);
+        }
+
+        println!("res: {}", res);
+
+        assert_eq!(res, "Got token LET
+Got token IDENTIFIER(\"x\")
+Got token ASSIGN
+Got token FLOAT64(42.0)
+Got token SEMICOLON
+Got token EOF
+")
+    }
+
+    #[test]
+    fn fun_fetch_user() {
+        let input = "fun fetchUser(id: int) [Win(User) | Fail(string)] {} // это функция fetchUser";
+
+        println!("test2: {}\n", input);
+
+        let mut lexer = Lexer::new(input);
+
+        let mut res: String = String::new();
+
+        loop {
+            let token = lexer.next_token();
+            res.push_str(format!("Got token {:?}\n", token).as_str());
+
+            if token == Token::EOF {
+                println!("Successfully read input string");
+                break;
+            }
+
+            assert_ne!(token, Token::ILLEGAL);
+        }
+
+        println!("res: {}", res);
+
+        assert_eq!(res, "Got token FUN
+Got token IDENTIFIER(\"fetchUser\")
+Got token LEFT_PAREN
+Got token IDENTIFIER(\"id\")
+Got token COLON
+Got token ITYPE
+Got token RIGHT_PAREN
+Got token LSB
+Got token IDENTIFIER(\"Win\")
+Got token LEFT_PAREN
+Got token IDENTIFIER(\"User\")
+Got token RIGHT_PAREN
+Got token PIPE
+Got token IDENTIFIER(\"Fail\")
+Got token LEFT_PAREN
+Got token STRING_TYPE
+Got token RIGHT_PAREN
+Got token RSB
+Got token LBRACE
+Got token RBRACE
+Got token COMMENTARY
+Got token EOF
+")
     }
 }
