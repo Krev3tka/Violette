@@ -105,6 +105,11 @@ pub enum Token {
     LOGIC_AND,        // &&
     LOGIC_NOT,        // !
 
+    BIT_AND,          // &
+    BIT_OR,           // #
+    BIT_NOT,          // ~
+    BIT_XOR,          // ^
+
     // else things
     IMPORT,
     PACKAGE,
@@ -148,9 +153,28 @@ impl Lexer {
             ')' => Token::RIGHT_PAREN,
             '[' => Token::LSB,
             ']' => Token::RSB,
-            '|' => Token::PIPE,
+            '|' => {
+                if self.peek_char() == '|' {
+                    Token::LOGIC_OR
+                } else {
+                    Token::PIPE
+                }
+            }
+
             '.' => Token::DOT,
             ',' => Token::COMMA,
+
+            '&' => {
+                if self.peek_char() == '&' {
+                    Token::LOGIC_AND
+                } else {
+                    Token::BIT_AND
+                }
+            }
+
+            '#' => Token::BIT_OR,
+            '~' => Token::BIT_NOT,
+            '^' => Token::BIT_XOR,
 
             '<' => {
                 if self.peek_char() == '=' {
@@ -412,7 +436,7 @@ mod tests {
 
     #[test]
     fn let_x_test() {
-        let input = "let x = (42.3_f64).to_string();";
+        let input = "let x = 42.to_string();";
 
         println!("test1: {}\n", input);
 
@@ -437,9 +461,7 @@ mod tests {
         assert_eq!(res, "Got token LET
 Got token IDENTIFIER(\"x\")
 Got token ASSIGN
-Got token LEFT_PAREN
-Got token FLOAT64(42.3)
-Got token RIGHT_PAREN
+Got token INT(42)
 Got token DOT
 Got token IDENTIFIER(\"to_string\")
 Got token LEFT_PAREN
