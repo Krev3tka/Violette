@@ -77,6 +77,8 @@ pub enum Token {
     PIPE,           // |
     COLON,          // :
     SEMICOLON,      // ;
+    DOT,            // .
+    COMMA,          // ,
 
     ADD,            // +
     SUBTRACT,       // -
@@ -90,6 +92,7 @@ pub enum Token {
     SUB_AND_ASSIGN,  // -=
     MUL_AND_ASSIGN,  // *=
     DIV_AND_ASSIGN,  // /=
+    MOD_AND_ASSIGN,  // %=
 
     LEFT_PAREN,       // (
     RIGHT_PAREN,      // )
@@ -146,6 +149,22 @@ impl Lexer {
             '[' => Token::LSB,
             ']' => Token::RSB,
             '|' => Token::PIPE,
+            '.' => Token::DOT,
+            ',' => Token::COMMA,
+
+            '<' => {
+                if self.peek_char() == '=' {
+                    Token::LOE
+                } else {
+                    Token::LESS
+                }
+            },
+
+            '>' => if self.peek_char() == '=' {
+                Token::GOE
+            } else {
+                Token::GREATER
+            }
 
             '=' => {
                 if self.peek_char() == '=' {
@@ -156,8 +175,51 @@ impl Lexer {
                 }
             }
 
+            '!' => {
+                if self.peek_char() == '=' {
+                    self.read_char();
+                    Token::NOTEQUALS
+                } else {
+                    Token::LOGIC_NOT
+                }
+            }
+
+            '+' => {
+                if self.peek_char() == '=' {
+                    self.read_char();
+                    Token::ADD_AND_ASSIGN
+                } else if self.peek_char() == '+' {
+                    Token::INCREMENT
+                } else {
+                    Token::ADD
+                }
+            }
+
+            '-' => {
+                if self.peek_char() == '=' {
+                    self.read_char();
+                    Token::SUB_AND_ASSIGN
+                } else if self.peek_char() == '-' {
+                    Token::DECREMENT
+                } else {
+                    Token::SUBTRACT
+                }
+            }
+
+            '*' => {
+                if self.peek_char() == '=' {
+                    self.read_char();
+                    Token::MUL_AND_ASSIGN
+                } else {
+                    Token::MULTIPLY
+                }
+            }
+
             '/' => {
-                if self.peek_char() == '/' {
+                if self.peek_char() == '=' {
+                    self.read_char();
+                    Token::DIV_AND_ASSIGN
+                } else if self.peek_char() == '/' {
                     while self.current != '\n' && self.current != '\r' && self.current != '\0' {
                         self.read_char()
                     }
@@ -207,6 +269,9 @@ impl Lexer {
                     "uint16" => Token::U16TYPE,
                     "uint32" => Token::U32TYPE,
                     "uint64" => Token::U64TYPE,
+
+                    "float32" => Token::F32TYPE,
+                    "float64" => Token::F64TYPE,
 
                     "bool" => Token::BOOL_TYPE,
                     "string" => Token::STRING_TYPE,
@@ -268,6 +333,17 @@ impl Lexer {
         id
     }
 
+    fn read_suffix(&mut self) -> String {
+        let mut suffix = String::new();
+
+        while self.current.is_alphanumeric() {
+            suffix.push(self.current);
+            self.read_char();
+        }
+
+        suffix
+    }
+
     fn read_number_literal(&mut self) -> Token {
         let mut digits = String::new();
 
@@ -276,7 +352,7 @@ impl Lexer {
             self.read_char()
         }
 
-        if self.current == '.' {
+        if self.current == '.' && self.peek_char().is_ascii_digit() {
             digits.push(self.current);
             self.read_char();
             while self.current.is_ascii_digit() {
@@ -285,14 +361,9 @@ impl Lexer {
             }
 
             if self.current == '_' {
-                let mut suffix = String::new();
-
                 self.read_char();
 
-                while self.current.is_alphanumeric() {
-                    suffix.push(self.current);
-                    self.read_char();
-                }
+                let suffix = self.read_suffix();
 
                 let token = match suffix.as_str() {
                     "f32" => Token::FLOAT32(digits.parse().unwrap()),
@@ -309,12 +380,7 @@ impl Lexer {
             if self.current == '_' {
                 self.read_char();
 
-                let mut suffix = String::new();
-
-                while self.current.is_alphanumeric() {
-                    suffix.push(self.current);
-                    self.read_char();
-                }
+                let suffix = self.read_suffix();
 
                 let token = match suffix.as_str() {
                     "i8" => Token::INT8(digits.parse().unwrap()),
@@ -346,7 +412,7 @@ mod tests {
 
     #[test]
     fn let_x_test() {
-        let input = "let x = 42.0_f64;";
+        let input = "let x = (42.3_f64).to_string();";
 
         println!("test1: {}\n", input);
 
@@ -371,7 +437,13 @@ mod tests {
         assert_eq!(res, "Got token LET
 Got token IDENTIFIER(\"x\")
 Got token ASSIGN
-Got token FLOAT64(42.0)
+Got token LEFT_PAREN
+Got token FLOAT64(42.3)
+Got token RIGHT_PAREN
+Got token DOT
+Got token IDENTIFIER(\"to_string\")
+Got token LEFT_PAREN
+Got token RIGHT_PAREN
 Got token SEMICOLON
 Got token EOF
 ")
