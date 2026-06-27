@@ -142,6 +142,7 @@ impl Lexer {
 
         lexer
     }
+
     pub fn next_token(&mut self) -> Token {
         self.skip_whitespaces();
 
@@ -304,6 +305,15 @@ impl Lexer {
                 }
             }
 
+            '%' => {
+                if self.peek_char() == '=' {
+                    self.read_char();
+                    Token::ModAndAssign
+                } else {
+                    Token::Modulus
+                }
+            }
+
             '\0' => Token::EOF,
 
             '0' => {
@@ -391,6 +401,9 @@ impl Lexer {
 
                     "bool" => Token::BoolType,
                     "string" => Token::StringType,
+
+                    "true" => Token::Bool(true),
+                    "false" => Token::Bool(false),
 
                     _ => Token::Identifier(ident),
                 };
