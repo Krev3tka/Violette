@@ -1,130 +1,131 @@
-#[derive(Debug, PartialEq, Clone)]
-pub enum Token {
-    // identifier
-    IDENTIFIER(String),
-
-    // flow
-    LET,
-    CONST,
-    IF,
-    ELSE,
-    FOR,
-    CONTINUE,
-    BREAK,
-    MATCH,
-    COMMENTARY,     // //
-
-    // functions
-    FUN,
-    RETURN,
-
-    // structs
-    STRUCT,
-    INTERFACE,
-    ENUM,
-    TYPE,
-    OPEN,
-    LOCAL,
-
-    //types
-    ITYPE,
-    I8TYPE,
-    I16TYPE,
-    I32TYPE,
-    I64TYPE,
-
-    UTYPE,
-    U8TYPE,
-    U16TYPE,
-    U32TYPE,
-    U64TYPE,
-
-    F32TYPE,
-    F64TYPE,
-
-    BOOL_TYPE,
-
-    STRING_TYPE,
-
-    // literals
-    INT(isize),
-    INT8(i8),
-    INT16(i16),
-    INT32(i32),
-    INT64(i64),
-
-    UINT(usize),
-    UINT8(u8),
-    UINT16(u16),
-    UINT32(u32),
-    UINT64(u64),
-
-    FLOAT32(f32),
-    FLOAT64(f64),
-
-    BOOL(bool),
-
-    STRING(String),
-
-    // operators
-    ASSIGN,         // =
-    EQUALS,         // ==
-    NOTEQUALS,      // !=
-    LESS,           // <
-    GREATER,        // >
-    LOE,            // <=
-    GOE,            // >=
-    PIPE,           // |
-    COLON,          // :
-    SEMICOLON,      // ;
-    DOT,            // .
-    COMMA,          // ,
-
-    ADD,            // +
-    SUBTRACT,       // -
-    MULTIPLY,       // *
-    DIVIDE,         // /
-    MODULUS,        // %
-    INCREMENT,      // ++
-    DECREMENT,      // --
-
-    ADD_AND_ASSIGN,  // +=
-    SUB_AND_ASSIGN,  // -=
-    MUL_AND_ASSIGN,  // *=
-    DIV_AND_ASSIGN,  // /=
-    MOD_AND_ASSIGN,  // %=
-
-    LEFT_PAREN,       // (
-    RIGHT_PAREN,      // )
-    LSB,              // [
-    RSB,              // ]
-    LBRACE,           // {
-    RBRACE,           // }
-
-    LOGIC_OR,         // ||
-    LOGIC_AND,        // &&
-    LOGIC_NOT,        // !
-
-    BIT_AND,          // &
-    BIT_OR,           // #
-    BIT_NOT,          // ~
-    BIT_XOR,          // ^
-
-    // else things
-    IMPORT,
-    PACKAGE,
-
-    // control
-    EOF,
-    ILLEGAL,
-}
-
 pub struct Lexer {
     input: Vec<char>,
     current: char,
     errors: String,
     position: usize,
     next_position: usize,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum Token {
+    // identifier
+    Identifier(String),
+
+    // flow
+    Let,
+    Const,
+    If,
+    Else,
+    For,
+    Continue,
+    Break,
+    Match,
+
+    // functions
+    Fun,
+    Return,
+    Bloom,
+
+    // structs
+    Struct,
+    Interface,
+    Enum,
+    Type,
+    Open,
+    Local,
+    Cyclic,
+
+    //types
+    IType,
+    I8Type,
+    I16Type,
+    I32Type,
+    I64Type,
+
+    UType,
+    U8Type,
+    U16Type,
+    U32Type,
+    U64Type,
+
+    F32Type,
+    F64Type,
+
+    BoolType,
+
+    StringType,
+
+    // literals
+    Int(isize),
+    Int8(i8),
+    Int16(i16),
+    Int32(i32),
+    Int64(i64),
+
+    Uint(usize),
+    Uint8(u8),
+    Uint16(u16),
+    Uint32(u32),
+    Uint64(u64),
+
+    Float32(f32),
+    Float64(f64),
+
+    Bool(bool),
+
+    String(String),
+
+    // operators
+    Assign,          // =
+    Equals,          // ==
+    NotEquals,       // !=
+    Less,            // <
+    Greater,         // >
+    LessOrEquals,    // <=
+    GreaterOrEquals, // >=
+    Pipe,            // |
+    Colon,           // :
+    Semicolon,       // ;
+    Dot,             // .
+    Comma,           // ,
+
+    Add,       // +
+    Subtract,  // -
+    Multiply,  // *
+    Divide,    // /
+    Modulus,   // %
+    Increment, // ++
+    Decrement, // --
+
+    AddAndAssign, // +=
+    SubAndAssign, // -=
+    MulAndAssign, // *=
+    DivAndAssign, // /=
+    ModAndAssign, // %=
+
+    LeftParen,  // (
+    RightParen, // )
+    LSB,        // [
+    RSB,        // ]
+    LeftBrace,  // {
+    RightBrace, // }
+
+    LogicOr,  // ||
+    LogicAnd, // &&
+    LogicNot, // !
+
+    BitAnd, // &
+    BitOr,  // #
+    BitNot, // ~
+    BitXOR, // ^
+
+    // else things
+    Import,
+    Package,
+
+    // control
+    EOF,
+    Illegal,
 }
 
 impl Lexer {
@@ -145,115 +146,204 @@ impl Lexer {
         self.skip_whitespaces();
 
         let token = match self.current {
-            ';' => Token::SEMICOLON,
-            ':' => Token::COLON,
-            '{' => Token::LBRACE,
-            '}' => Token::RBRACE,
-            '(' => Token::LEFT_PAREN,
-            ')' => Token::RIGHT_PAREN,
+            ';' => Token::Semicolon,
+            ':' => Token::Colon,
+            '{' => Token::LeftBrace,
+            '}' => Token::RightBrace,
+            '(' => Token::LeftParen,
+            ')' => Token::RightParen,
             '[' => Token::LSB,
             ']' => Token::RSB,
             '|' => {
                 if self.peek_char() == '|' {
-                    Token::LOGIC_OR
+                    self.read_char();
+                    Token::LogicOr
                 } else {
-                    Token::PIPE
+                    Token::Pipe
                 }
             }
 
-            '.' => Token::DOT,
-            ',' => Token::COMMA,
+            '.' => Token::Dot,
+            ',' => Token::Comma,
+
+            '"' => {
+                self.read_char();
+                let mut string_val = String::new();
+                while self.current != '"' && self.current != '\0' {
+                    string_val.push(self.current);
+                    self.read_char();
+                }
+
+                if self.current == '\0' {
+                    Token::Illegal
+                } else {
+                    self.read_char();
+                    Token::String(string_val)
+                }
+            }
 
             '&' => {
                 if self.peek_char() == '&' {
-                    Token::LOGIC_AND
+                    self.read_char();
+                    Token::LogicAnd
                 } else {
-                    Token::BIT_AND
+                    Token::BitAnd
                 }
             }
 
-            '#' => Token::BIT_OR,
-            '~' => Token::BIT_NOT,
-            '^' => Token::BIT_XOR,
+            '#' => Token::BitOr,
+            '~' => Token::BitNot,
+            '^' => Token::BitXOR,
 
             '<' => {
                 if self.peek_char() == '=' {
-                    Token::LOE
+                    self.read_char();
+                    Token::LessOrEquals
                 } else {
-                    Token::LESS
+                    Token::Less
                 }
-            },
+            }
 
-            '>' => if self.peek_char() == '=' {
-                Token::GOE
-            } else {
-                Token::GREATER
+            '>' => {
+                if self.peek_char() == '=' {
+                    self.read_char();
+                    Token::GreaterOrEquals
+                } else {
+                    Token::Greater
+                }
             }
 
             '=' => {
                 if self.peek_char() == '=' {
                     self.read_char();
-                    Token::EQUALS
+                    Token::Equals
                 } else {
-                    Token::ASSIGN
+                    Token::Assign
                 }
             }
 
             '!' => {
                 if self.peek_char() == '=' {
                     self.read_char();
-                    Token::NOTEQUALS
+                    Token::NotEquals
                 } else {
-                    Token::LOGIC_NOT
+                    Token::LogicNot
                 }
             }
 
             '+' => {
                 if self.peek_char() == '=' {
                     self.read_char();
-                    Token::ADD_AND_ASSIGN
+                    Token::AddAndAssign
                 } else if self.peek_char() == '+' {
-                    Token::INCREMENT
+                    self.read_char();
+                    Token::Increment
                 } else {
-                    Token::ADD
+                    Token::Add
                 }
             }
 
             '-' => {
                 if self.peek_char() == '=' {
                     self.read_char();
-                    Token::SUB_AND_ASSIGN
+                    Token::SubAndAssign
                 } else if self.peek_char() == '-' {
-                    Token::DECREMENT
+                    self.read_char();
+                    Token::Decrement
                 } else {
-                    Token::SUBTRACT
+                    Token::Subtract
                 }
             }
 
             '*' => {
                 if self.peek_char() == '=' {
                     self.read_char();
-                    Token::MUL_AND_ASSIGN
+                    Token::MulAndAssign
                 } else {
-                    Token::MULTIPLY
+                    Token::Multiply
                 }
             }
 
             '/' => {
                 if self.peek_char() == '=' {
                     self.read_char();
-                    Token::DIV_AND_ASSIGN
+                    Token::DivAndAssign
                 } else if self.peek_char() == '/' {
                     while self.current != '\n' && self.current != '\r' && self.current != '\0' {
                         self.read_char()
                     }
-                    return Token::COMMENTARY;
+
+                    return self.next_token();
+                } else if self.peek_char() == '*' {
+                    self.read_char();
+                    self.read_char();
+
+                    let mut depth = 1;
+
+                    while depth > 0 && self.current != '\0' {
+                        if self.current == '/' && self.peek_char() == '*' {
+                            depth += 1;
+                            self.read_char();
+                            self.read_char();
+                        } else if self.current == '*' && self.peek_char() == '/' {
+                            depth -= 1;
+                            self.read_char();
+                            self.read_char();
+                        } else {
+                            self.read_char();
+                        }
+                    }
+
+                    if depth > 0 {
+                        return Token::Illegal;
+                    }
+
+                    return self.next_token();
                 } else {
-                    Token::DIVIDE
+                    Token::Divide
                 }
             }
 
             '\0' => Token::EOF,
+
+            '0' => {
+                let next = self.peek_char();
+
+                if next == 'b' || next == 'o' || next == 'x' || next == 'X' {
+                    let prefix = next;
+                    self.read_char();
+                    self.read_char();
+
+                    let mut digits = String::new();
+
+                    while match prefix {
+                        'b' => self.current == '0' || self.current == '1' || self.current == '_',
+                        'o' => self.current >= '0' && self.current <= '7' || self.current == '_',
+                        _ => self.current.is_ascii_hexdigit() || self.current == '_',
+                    } {
+                        if self.current != '_' {
+                            digits.push(self.current);
+                        }
+                        self.read_char();
+                    }
+
+                    if digits.is_empty() {
+                        return Token::Illegal;
+                    } else {
+                        let radix = match prefix {
+                            'b' => 2,
+                            'o' => 8,
+                            _ => 16,
+                        };
+
+                        return Token::Int(
+                            isize::from_str_radix(digits.as_str(), radix).unwrap_or(0),
+                        );
+                    }
+                } else {
+                    return self.read_number_literal();
+                }
+            }
 
             ch if ch.is_ascii_digit() => {
                 return self.read_number_literal();
@@ -263,48 +353,50 @@ impl Lexer {
                 let ident = self.read_identifier();
 
                 return match ident.as_str() {
-                    "let" => Token::LET,
-                    "const" => Token::CONST,
-                    "if" => Token::IF,
-                    "else" => Token::ELSE,
-                    "for" => Token::FOR,
-                    "continue" => Token::CONTINUE,
-                    "break" => Token::BREAK,
-                    "match" => Token::MATCH,
+                    "let" => Token::Let,
+                    "const" => Token::Const,
+                    "if" => Token::If,
+                    "else" => Token::Else,
+                    "for" => Token::For,
+                    "continue" => Token::Continue,
+                    "break" => Token::Break,
+                    "match" => Token::Match,
 
-                    "fun" => Token::FUN,
-                    "return" => Token::RETURN,
+                    "fun" => Token::Fun,
+                    "return" => Token::Return,
+                    "bloom" => Token::Bloom,
 
-                    "struct" => Token::STRUCT,
-                    "interface" => Token::INTERFACE,
-                    "enum" => Token::ENUM,
-                    "type" => Token::TYPE,
-                    "open" => Token::OPEN,
-                    "local" => Token::LOCAL,
+                    "struct" => Token::Struct,
+                    "interface" => Token::Interface,
+                    "enum" => Token::Enum,
+                    "type" => Token::Type,
+                    "open" => Token::Open,
+                    "local" => Token::Local,
+                    "cyclic" => Token::Cyclic,
 
-                    "int" => Token::ITYPE,
-                    "int8" => Token::I8TYPE,
-                    "int16" => Token::I16TYPE,
-                    "int32" => Token::I32TYPE,
-                    "int64" => Token::I64TYPE,
+                    "int" => Token::IType,
+                    "int8" => Token::I8Type,
+                    "int16" => Token::I16Type,
+                    "int32" => Token::I32Type,
+                    "int64" => Token::I64Type,
 
-                    "uint" => Token::UTYPE,
-                    "uint8" => Token::U8TYPE,
-                    "uint16" => Token::U16TYPE,
-                    "uint32" => Token::U32TYPE,
-                    "uint64" => Token::U64TYPE,
+                    "uint" => Token::UType,
+                    "uint8" => Token::U8Type,
+                    "uint16" => Token::U16Type,
+                    "uint32" => Token::U32Type,
+                    "uint64" => Token::U64Type,
 
-                    "float32" => Token::F32TYPE,
-                    "float64" => Token::F64TYPE,
+                    "float32" => Token::F32Type,
+                    "float64" => Token::F64Type,
 
-                    "bool" => Token::BOOL_TYPE,
-                    "string" => Token::STRING_TYPE,
+                    "bool" => Token::BoolType,
+                    "string" => Token::StringType,
 
-                    _ => Token::IDENTIFIER(ident),
-                }
+                    _ => Token::Identifier(ident),
+                };
             }
 
-            _ => Token::ILLEGAL,
+            _ => Token::Illegal,
         };
 
         self.read_char();
@@ -315,7 +407,7 @@ impl Lexer {
     fn read_char(&mut self) {
         if self.next_position >= self.input.len() {
             self.current = '\0';
-            return
+            return;
         }
 
         self.current = self.input[self.next_position];
@@ -329,10 +421,10 @@ impl Lexer {
     }
 
     fn skip_whitespaces(&mut self) {
-        while self.current == ' ' ||
-            self.current == '\t' ||
-            self.current == '\n' ||
-            self.current == '\r'
+        while self.current == ' '
+            || self.current == '\t'
+            || self.current == '\n'
+            || self.current == '\r'
         {
             self.read_char()
         }
@@ -371,9 +463,14 @@ impl Lexer {
     fn read_number_literal(&mut self) -> Token {
         let mut digits = String::new();
 
-        while self.current.is_ascii_digit() {
-            digits.push(self.current);
-            self.read_char()
+        while self.current.is_ascii_digit() || self.current == '_' {
+            if self.current == '_' && self.peek_char().is_ascii_alphabetic() {
+                break;
+            }
+            if self.current != '_' {
+                digits.push(self.current);
+            }
+            self.read_char();
         }
 
         if self.current == '.' && self.peek_char().is_ascii_digit() {
@@ -381,52 +478,41 @@ impl Lexer {
             self.read_char();
             while self.current.is_ascii_digit() {
                 digits.push(self.current);
-                self.read_char()
-            }
-
-            if self.current == '_' {
                 self.read_char();
-
-                let suffix = self.read_suffix();
-
-                let token = match suffix.as_str() {
-                    "f32" => Token::FLOAT32(digits.parse().unwrap()),
-                    "f64" => Token::FLOAT64(digits.parse().unwrap()),
-
-                    _ => Token::ILLEGAL
-                };
-
-                return token;
             }
-
-            Token::FLOAT32(digits.parse().unwrap())
-        } else {
-            if self.current == '_' {
-                self.read_char();
-
-                let suffix = self.read_suffix();
-
-                let token = match suffix.as_str() {
-                    "i8" => Token::INT8(digits.parse().unwrap()),
-                    "i16" => Token::INT16(digits.parse().unwrap()),
-                    "i32" => Token::INT32(digits.parse().unwrap()),
-                    "i64" => Token::INT64(digits.parse().unwrap()),
-
-                    "u8" => Token::UINT8(digits.parse().unwrap()),
-                    "u16" => Token::UINT16(digits.parse().unwrap()),
-                    "u32" => Token::UINT32(digits.parse().unwrap()),
-                    "u64" => Token::UINT64(digits.parse().unwrap()),
-
-                    _ => Token::ILLEGAL
-                };
-
-                return token
-            }
-
-            Token::INT(digits.parse().unwrap())
         }
 
+        if self.current == '_' {
+            self.read_char();
+            let suffix = self.read_suffix();
 
+            let cleaned = digits.replace('_', "");
+
+            let token = match (suffix.as_str(), digits.contains('.')) {
+                ("f32", true) => Token::Float32(cleaned.parse().unwrap_or(0.0)),
+                ("f64", true) => Token::Float64(cleaned.parse().unwrap_or(0.0)),
+
+                ("i8", false) => Token::Int8(cleaned.parse().unwrap_or(0)),
+                ("i16", false) => Token::Int16(cleaned.parse().unwrap_or(0)),
+                ("i32", false) => Token::Int32(cleaned.parse().unwrap_or(0)),
+                ("i64", false) => Token::Int64(cleaned.parse().unwrap_or(0)),
+
+                ("u8", false) => Token::Uint8(cleaned.parse().unwrap_or(0)),
+                ("u16", false) => Token::Uint16(cleaned.parse().unwrap_or(0)),
+                ("u32", false) => Token::Uint32(cleaned.parse().unwrap_or(0)),
+                ("u64", false) => Token::Uint64(cleaned.parse().unwrap_or(0)),
+
+                _ => Token::Illegal,
+            };
+
+            return token;
+        }
+
+        if digits.contains('.') {
+            Token::Float32(digits.replace('_', "").parse().unwrap_or(0.0))
+        } else {
+            Token::Int(digits.replace('_', "").parse().unwrap_or(0))
+        }
     }
 }
 
@@ -436,7 +522,11 @@ mod tests {
 
     #[test]
     fn let_x_test() {
-        let input = "let x = 42.to_string();";
+        let input = "
+        let x = 42.5_f64
+        let y = 100_u32
+        let z = 3.14_f32
+        ";
 
         println!("test1: {}\n", input);
 
@@ -453,22 +543,28 @@ mod tests {
                 break;
             }
 
-            assert_ne!(token, Token::ILLEGAL);
+            assert_ne!(token, Token::Illegal);
         }
 
         println!("res: {}", res);
 
-        assert_eq!(res, "Got token LET
-Got token IDENTIFIER(\"x\")
-Got token ASSIGN
-Got token INT(42)
-Got token DOT
-Got token IDENTIFIER(\"to_string\")
-Got token LEFT_PAREN
-Got token RIGHT_PAREN
-Got token SEMICOLON
+        assert_eq!(
+            res,
+            "Got token Let
+Got token Identifier(\"x\")
+Got token Assign
+Got token Float64(42.5)
+Got token Let
+Got token Identifier(\"y\")
+Got token Assign
+Got token Uint32(100)
+Got token Let
+Got token Identifier(\"z\")
+Got token Assign
+Got token Float32(3.14)
 Got token EOF
-")
+"
+        )
     }
 
     #[test]
@@ -490,33 +586,211 @@ Got token EOF
                 break;
             }
 
-            assert_ne!(token, Token::ILLEGAL);
+            assert_ne!(token, Token::Illegal);
         }
 
         println!("res: {}", res);
 
-        assert_eq!(res, "Got token FUN
-Got token IDENTIFIER(\"fetchUser\")
-Got token LEFT_PAREN
-Got token IDENTIFIER(\"id\")
-Got token COLON
-Got token ITYPE
-Got token RIGHT_PAREN
+        assert_eq!(
+            res,
+            "Got token Fun
+Got token Identifier(\"fetchUser\")
+Got token LeftParen
+Got token Identifier(\"id\")
+Got token Colon
+Got token IType
+Got token RightParen
 Got token LSB
-Got token IDENTIFIER(\"Win\")
-Got token LEFT_PAREN
-Got token IDENTIFIER(\"User\")
-Got token RIGHT_PAREN
-Got token PIPE
-Got token IDENTIFIER(\"Fail\")
-Got token LEFT_PAREN
-Got token STRING_TYPE
-Got token RIGHT_PAREN
+Got token Identifier(\"Win\")
+Got token LeftParen
+Got token Identifier(\"User\")
+Got token RightParen
+Got token Pipe
+Got token Identifier(\"Fail\")
+Got token LeftParen
+Got token StringType
+Got token RightParen
 Got token RSB
-Got token LBRACE
-Got token RBRACE
-Got token COMMENTARY
+Got token LeftBrace
+Got token RightBrace
 Got token EOF
-")
+"
+        )
+    }
+
+    #[test]
+    fn illogic_test() {
+        let input = "
+        let a = 0b01101 # 0xAF & ~0o75
+        if cond1 && cond2 || !cond3 {
+            let res = 0x01
+        } else {
+            let res = 0x00
+        }";
+
+        println!("test3: {}\n", input);
+
+        let mut lexer = Lexer::new(input);
+
+        let mut res: String = String::new();
+
+        loop {
+            let token = lexer.next_token();
+            res.push_str(format!("Got token {:?}\n", token).as_str());
+
+            if token == Token::EOF {
+                println!("Successfully read input string");
+                break;
+            }
+
+            assert_ne!(token, Token::Illegal);
+        }
+
+        println!("res: {}", res);
+
+        assert_eq!(
+            res,
+            "Got token Let
+Got token Identifier(\"a\")
+Got token Assign
+Got token Int(13)
+Got token BitOr
+Got token Int(175)
+Got token BitAnd
+Got token BitNot
+Got token Int(61)
+Got token If
+Got token Identifier(\"cond1\")
+Got token LogicAnd
+Got token Identifier(\"cond2\")
+Got token LogicOr
+Got token LogicNot
+Got token Identifier(\"cond3\")
+Got token LeftBrace
+Got token Let
+Got token Identifier(\"res\")
+Got token Assign
+Got token Int(1)
+Got token RightBrace
+Got token Else
+Got token LeftBrace
+Got token Let
+Got token Identifier(\"res\")
+Got token Assign
+Got token Int(0)
+Got token RightBrace
+Got token EOF
+"
+        )
+    }
+
+    #[test]
+    fn space_deficit() {
+        let input = "
+        let a=5+10+0xFA0_3E2&~0o10";
+
+        println!("test4: {}\n", input);
+
+        let mut lexer = Lexer::new(input);
+
+        let mut res: String = String::new();
+
+        loop {
+            let token = lexer.next_token();
+            res.push_str(format!("Got token {:?}\n", token).as_str());
+
+            if token == Token::EOF {
+                println!("Successfully read input string");
+                break;
+            }
+
+            assert_ne!(token, Token::Illegal);
+        }
+
+        println!("res: {}", res);
+
+        assert_eq!(
+            res,
+            "Got token Let
+Got token Identifier(\"a\")
+Got token Assign
+Got token Int(5)
+Got token Add
+Got token Int(10)
+Got token Add
+Got token Int(16384994)
+Got token BitAnd
+Got token BitNot
+Got token Int(8)
+Got token EOF
+"
+        )
+    }
+
+    #[test]
+    fn last_and_very_hard_test_with_edge_cases() {
+        let input = "
+        /*
+        literally Violette Language test i swear
+        /* additional commentary nesting /* and one more */ looks like it's done */
+        */
+
+        let hexVal = 0x1A_2B
+        let s = \"String with // commentaries /* mustn't */ break\"
+
+        let broken_expr = 5/*yeah*/+/*numbers*/10
+
+        let i = 42
+        i++
+        i--
+        ";
+
+        println!("test5: {}\n", input);
+
+        let mut lexer = Lexer::new(input);
+
+        let mut res: String = String::new();
+
+        loop {
+            let token = lexer.next_token();
+            res.push_str(format!("Got token {:?}\n", token).as_str());
+
+            if token == Token::EOF {
+                println!("Successfully read input string");
+                break;
+            }
+
+            assert_ne!(token, Token::Illegal);
+        }
+
+        println!("res: {}", res);
+
+        assert_eq!(
+            res,
+            "Got token Let
+Got token Identifier(\"hexVal\")
+Got token Assign
+Got token Int(6699)
+Got token Let
+Got token Identifier(\"s\")
+Got token Assign
+Got token String(\"String with // commentaries /* mustn't */ break\")
+Got token Let
+Got token Identifier(\"broken_expr\")
+Got token Assign
+Got token Int(5)
+Got token Add
+Got token Int(10)
+Got token Let
+Got token Identifier(\"i\")
+Got token Assign
+Got token Int(42)
+Got token Identifier(\"i\")
+Got token Increment
+Got token Identifier(\"i\")
+Got token Decrement
+Got token EOF
+"
+        )
     }
 }
