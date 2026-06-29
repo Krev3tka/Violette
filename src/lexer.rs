@@ -17,6 +17,7 @@ pub enum Token {
     If,
     Else,
     For,
+    In,
     Continue,
     Break,
     Match,
@@ -94,6 +95,7 @@ pub enum Token {
     Multiply,  // *
     Divide,    // /
     Modulus,   // %
+    Power,     // **
     Increment, // ++
     Decrement, // --
 
@@ -124,6 +126,7 @@ pub enum Token {
     Package,
 
     // control
+    Newline,
     EOF,
     Illegal,
 }
@@ -260,6 +263,9 @@ impl Lexer {
                 if self.peek_char() == '=' {
                     self.read_char();
                     Token::MulAndAssign
+                } else if self.peek_char() == '*' {
+                    self.read_char();
+                    Token::Power
                 } else {
                     Token::Multiply
                 }
@@ -316,6 +322,14 @@ impl Lexer {
 
             '\0' => Token::EOF,
 
+            '\n' | '\r' => {
+                while self.current == '\n' || self.current == '\r' {
+                    self.read_char();
+                }
+
+                return Token::Newline;
+            }
+
             '0' => {
                 let next = self.peek_char();
 
@@ -368,6 +382,7 @@ impl Lexer {
                     "if" => Token::If,
                     "else" => Token::Else,
                     "for" => Token::For,
+                    "in" => Token::In,
                     "continue" => Token::Continue,
                     "break" => Token::Break,
                     "match" => Token::Match,
@@ -436,8 +451,6 @@ impl Lexer {
     fn skip_whitespaces(&mut self) {
         while self.current == ' '
             || self.current == '\t'
-            || self.current == '\n'
-            || self.current == '\r'
         {
             self.read_char()
         }
@@ -505,15 +518,39 @@ impl Lexer {
                 ("f32", true) => Token::Float32(cleaned.parse().unwrap_or(0.0)),
                 ("f64", true) => Token::Float64(cleaned.parse().unwrap_or(0.0)),
 
-                ("i8", false) => Token::Int8(cleaned.parse().unwrap_or(0)),
-                ("i16", false) => Token::Int16(cleaned.parse().unwrap_or(0)),
-                ("i32", false) => Token::Int32(cleaned.parse().unwrap_or(0)),
-                ("i64", false) => Token::Int64(cleaned.parse().unwrap_or(0)),
+                ("i8", false) => match cleaned.parse::<i8>() {
+                    Ok(v)  => Token::Int8(v),
+                    Err(_) => Token::Illegal,
+                },
+                ("i16", false) => match cleaned.parse::<i16>() {
+                    Ok(v)  => Token::Int16(v),
+                    Err(_) => Token::Illegal,
+                },
+                ("i32", false) => match cleaned.parse::<i32>() {
+                    Ok(v)  => Token::Int32(v),
+                    Err(_) => Token::Illegal,
+                },
+                ("i64", false) => match cleaned.parse::<i64>() {
+                    Ok(v)  => Token::Int64(v),
+                    Err(_) => Token::Illegal,
+                },
 
-                ("u8", false) => Token::Uint8(cleaned.parse().unwrap_or(0)),
-                ("u16", false) => Token::Uint16(cleaned.parse().unwrap_or(0)),
-                ("u32", false) => Token::Uint32(cleaned.parse().unwrap_or(0)),
-                ("u64", false) => Token::Uint64(cleaned.parse().unwrap_or(0)),
+                ("u8", false) => match cleaned.parse::<u8>() {
+                    Ok(v)  => Token::Uint8(v),
+                    Err(_) => Token::Illegal,
+                },
+                ("u16", false) => match cleaned.parse::<u16>() {
+                    Ok(v)  => Token::Uint16(v),
+                    Err(_) => Token::Illegal,
+                },
+                ("u32", false) => match cleaned.parse::<u32>() {
+                    Ok(v)  => Token::Uint32(v),
+                    Err(_) => Token::Illegal,
+                },
+                ("u64", false) => match cleaned.parse::<u64>() {
+                    Ok(v)  => Token::Uint64(v),
+                    Err(_) => Token::Illegal,
+                },
 
                 _ => Token::Illegal,
             };
@@ -522,9 +559,15 @@ impl Lexer {
         }
 
         if digits.contains('.') {
-            Token::Float32(digits.replace('_', "").parse().unwrap_or(0.0))
+            match digits.replace('_', "").parse::<f64>() {
+                Ok(v)  => Token::Float64(v),
+                Err(_) => Token::Illegal,
+            }
         } else {
-            Token::Int(digits.replace('_', "").parse().unwrap_or(0))
+            match digits.replace('_', "").parse::<isize>() {
+                Ok(v)  => Token::Int(v),
+                Err(_) => Token::Illegal,
+            }
         }
     }
 }
@@ -535,8 +578,7 @@ mod tests {
 
     #[test]
     fn let_x_test() {
-        let input = "
-        let x = 42.5_f64
+        let input = "let x = 42.5_f64
         let y = 100_u32
         let z = 3.14_f32
         ";
@@ -567,14 +609,17 @@ mod tests {
 Got token Identifier(\"x\")
 Got token Assign
 Got token Float64(42.5)
+Got token Newline
 Got token Let
 Got token Identifier(\"y\")
 Got token Assign
 Got token Uint32(100)
+Got token Newline
 Got token Let
 Got token Identifier(\"z\")
 Got token Assign
 Got token Float32(3.14)
+Got token Newline
 Got token EOF
 "
         )
@@ -633,8 +678,7 @@ Got token EOF
 
     #[test]
     fn illogic_test() {
-        let input = "
-        let a = 0b01101 # 0xAF & ~0o75
+        let input = "let a = 0b01101 # 0xAF & ~0o75
         if cond1 && cond2 || !cond3 {
             let res = 0x01
         } else {
@@ -672,6 +716,7 @@ Got token Int(175)
 Got token BitAnd
 Got token BitNot
 Got token Int(61)
+Got token Newline
 Got token If
 Got token Identifier(\"cond1\")
 Got token LogicAnd
@@ -680,17 +725,21 @@ Got token LogicOr
 Got token LogicNot
 Got token Identifier(\"cond3\")
 Got token LeftBrace
+Got token Newline
 Got token Let
 Got token Identifier(\"res\")
 Got token Assign
 Got token Int(1)
+Got token Newline
 Got token RightBrace
 Got token Else
 Got token LeftBrace
+Got token Newline
 Got token Let
 Got token Identifier(\"res\")
 Got token Assign
 Got token Int(0)
+Got token Newline
 Got token RightBrace
 Got token EOF
 "
@@ -699,8 +748,7 @@ Got token EOF
 
     #[test]
     fn space_deficit() {
-        let input = "
-        let a=5+10+0xFA0_3E2&~0o10";
+        let input = "let a=5+10+0xFA0_3E2&~0o10";
 
         println!("test4: {}\n", input);
 
@@ -780,28 +828,36 @@ Got token EOF
 
         assert_eq!(
             res,
-            "Got token Let
+            "Got token Newline
+Got token Newline
+Got token Let
 Got token Identifier(\"hexVal\")
 Got token Assign
 Got token Int(6699)
+Got token Newline
 Got token Let
 Got token Identifier(\"s\")
 Got token Assign
 Got token String(\"String with // commentaries /* mustn't */ break\")
+Got token Newline
 Got token Let
 Got token Identifier(\"broken_expr\")
 Got token Assign
 Got token Int(5)
 Got token Add
 Got token Int(10)
+Got token Newline
 Got token Let
 Got token Identifier(\"i\")
 Got token Assign
 Got token Int(42)
+Got token Newline
 Got token Identifier(\"i\")
 Got token Increment
+Got token Newline
 Got token Identifier(\"i\")
 Got token Decrement
+Got token Newline
 Got token EOF
 "
         )
