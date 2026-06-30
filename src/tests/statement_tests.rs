@@ -15,7 +15,7 @@ pub mod statement_tests {
     }
 
     #[test]
-    fn many_parsing_stmt_tests() {
+    fn let_the_speed_mend_it() {
         let test_cases = vec![
             (
                 "let x = 5",
@@ -91,7 +91,7 @@ if a > 7 {
     }
 
     #[test]
-    fn for_whom_the_bell_tolls() {
+    fn for_whose_advantage() {
         let test_cases = vec![
             (
                 "for i = 0; i < 10; i++ {
@@ -134,14 +134,14 @@ if a > 7 {
                 }
             ),
             (
-                "for x in upto(1, 10) {
+                "for x in thru(1, 10) {
     let a = 5 * x
     let b = x * 3
 }",
                 Statement::ForRange {
                     variable: "x".to_string(),
                     iterable: Expression::Call {
-                        function: Box::new(Expression::Identifier("upto".to_string())),
+                        function: Box::new(Expression::Identifier("thru".to_string())),
                         args: vec![
                             Expression::IntLiteral(1),
                             Expression::IntLiteral(10),

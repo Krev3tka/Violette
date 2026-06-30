@@ -150,17 +150,12 @@ impl Parser {
     }
 
     pub fn parse_if_statement(&mut self) -> Result<Statement, ParseError> {
-        self.next_token();
+        self.expect(Token::If)?;
 
         let condition = self.parse_expression(Lowest)?;
-
         self.next_token();
 
-        if !matches!(self.current_token, Token::LeftBrace) {
-            return Err(ParseError::UnexpectedToken(self.current_token.clone()));
-        }
-
-        self.next_token();
+        self.expect(Token::LeftBrace)?;
 
         let then_block = self.parse_block()?;
 
@@ -168,10 +163,10 @@ impl Parser {
         let mut else_block = None;
 
         while matches!(self.current_token, Token::Else) {
-            self.next_token();
+            self.expect(Token::Else)?;
 
             if matches!(self.current_token, Token::If) {
-                let else_if_stmt = self.parse_if_statement_as_else_if()?;
+                let else_if_stmt = self.parse_else_if_statement()?;
                 else_if.push(else_if_stmt);
             } else if matches!(self.current_token, Token::LeftBrace) {
                 self.next_token();
@@ -190,18 +185,13 @@ impl Parser {
         }))
     }
 
-    pub fn parse_if_statement_as_else_if(&mut self) -> Result<ElseIf, ParseError> {
-        self.next_token();
+    pub fn parse_else_if_statement(&mut self) -> Result<ElseIf, ParseError> {
+        self.expect(Token::If)?;
 
         let condition = self.parse_expression(Lowest)?;
-
         self.next_token();
 
-        if !matches!(self.current_token, Token::LeftBrace) {
-            return Err(ParseError::UnexpectedToken(self.current_token.clone()))
-        }
-
-        self.next_token();
+        self.expect(Token::LeftBrace)?;
 
         let block = self.parse_block()?;
 
@@ -212,78 +202,87 @@ impl Parser {
     }
 
     pub fn parse_for_statement(&mut self) -> Result<Statement, ParseError> {
-        self.next_token();
+        self.expect(Token::For)?;
 
-        if let Token::Identifier(var) = &self.current_token.clone() {
+        if let Token::Identifier(var) = self.current_token.clone() {
             if matches!(self.peek_token, Token::In) {
-                let variable = var.clone();
-
-                self.next_token();
-                self.next_token();
-
-                let iterable = self.parse_expression(Lowest)?;
-                self.next_token();
-                self.skip_newlines();
-
-                if !matches!(self.current_token, Token::LeftBrace) {
-                    return Err(ParseError::UnexpectedToken(self.current_token.clone()))
-                }
-
-                self.next_token();
-                let body = self.parse_block()?;
-
-                return Ok(Statement::ForRange {
-                    variable,
-                    iterable,
-                    body,
-                })
+                self.expect(Token::Identifier("".to_string()))?;
+                self.expect(Token::In)?;
+                self.parse_for_range(&var)
             } else if matches!(self.peek_token, Token::Assign) {
-                let name = var.clone();
-                self.next_token();
-                self.next_token();
-
-                let value = self.parse_expression(Lowest)?;
-                let init = Box::new(Statement::Let { name, value });
-
-                self.next_token();
-
-                if !matches!(self.current_token, Token::Semicolon) {
-                    return Err(ParseError::UnexpectedToken(self.current_token.clone()))
-                }
-
-                self.next_token();
-
-                let condition = self.parse_expression(Lowest)?;
-                self.next_token();
-
-                if !matches!(self.current_token, Token::Semicolon) {
-                    return Err(ParseError::UnexpectedToken(self.current_token.clone()))
-                }
-
-                self.next_token();
-
-                let post = self.parse_expression(Lowest)?;
-                self.next_token();
-                self.skip_newlines();
-
-                if !matches!(self.current_token, Token::LeftBrace) {
-                    return Err(ParseError::UnexpectedToken(self.current_token.clone()))
-                }
-
-                self.next_token();
-                let body = self.parse_block()?;
-
-                return Ok(ForCounter {
-                    init,
-                    condition,
-                    post,
-                    body
-                })
+                self.parse_for_counter(&var)
+            } else {
+                self.parse_for_condition()
             }
+        } else {
+            Err(ParseError::UnexpectedToken(self.current_token.clone()))
+        }
+    }
+
+    pub fn parse_for_range(&mut self, var: &String) -> Result<Statement, ParseError> {
+        let variable = var.clone();
+
+        let iterable = self.parse_expression(Lowest)?;
+        self.next_token();
+        self.skip_newlines();
+
+        if !matches!(self.current_token, Token::LeftBrace) {
+            return Err(ParseError::UnexpectedToken(self.current_token.clone()))
         }
 
-        let condition = self.parse_expression(Lowest)?;
+        self.expect(Token::LeftBrace)?;
+        self.skip_newlines();
+        let body = self.parse_block()?;
 
+        Ok(Statement::ForRange {
+            variable,
+            iterable,
+            body,
+        })
+    }
+
+    pub fn parse_for_counter(&mut self, var: &String) -> Result<Statement, ParseError> {
+        let name = var.clone();
+        self.expect(Token::Identifier("".to_string()))?;
+        self.expect(Token::Assign)?;
+
+        let value = self.parse_expression(Lowest)?;
+        let init = Box::new(Statement::Let { name, value });
+
+        self.expect(Token::Int(0))?;
+
+        if !matches!(self.current_token, Token::Semicolon) {
+            return Err(ParseError::UnexpectedToken(self.current_token.clone()))
+        }
+
+        self.expect(Token::Semicolon)?;
+
+        let condition = self.parse_expression(Lowest)?;
+        self.next_token();
+
+        if !matches!(self.current_token, Token::Semicolon) {
+            return Err(ParseError::UnexpectedToken(self.current_token.clone()))
+        }
+
+        self.expect(Token::Semicolon)?;
+
+        let post = self.parse_expression(Lowest)?;
+        self.expect(Token::Increment)?;
+        self.expect(Token::LeftBrace)?;
+        self.skip_newlines();
+
+        let body = self.parse_block()?;
+
+        Ok(ForCounter {
+            init,
+            condition,
+            post,
+            body
+        })
+    }
+
+    pub fn parse_for_condition(&mut self) -> Result<Statement, ParseError> {
+        let condition = self.parse_expression(Lowest)?;
         self.next_token();
 
         if !matches!(self.current_token, Token::LeftBrace) {
@@ -321,10 +320,13 @@ impl Parser {
     pub fn parse_program(&mut self) -> Result<Vec<Statement>, ParseError> {
         let mut statements = Vec::new();
 
+        self.skip_newlines();
+
         while !matches!(self.current_token, Token::EOF) {
             let stmt = self.parse_statement()?;
             statements.push(stmt);
-            self.next_token();
+
+            self.skip_newlines();
         }
         Ok(statements)
     }
@@ -345,5 +347,14 @@ impl Parser {
 
     fn peek_precedence(&self) -> Precedence {
         token_precedence(&self.peek_token)
+    }
+
+    fn expect(&mut self, expected: Token) -> Result<(), ParseError> {
+        if std::mem::discriminant(&self.current_token) == std::mem::discriminant(&expected) {
+            self.next_token();
+            Ok(())
+        } else {
+            Err(ParseError::UnexpectedToken(self.current_token.clone()))
+        }
     }
 }

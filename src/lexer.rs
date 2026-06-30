@@ -577,7 +577,7 @@ mod tests {
     use crate::lexer::{Lexer, Token};
 
     #[test]
-    fn let_x_test() {
+    fn let_the_speed_mend_it() {
         let input = "let x = 42.5_f64
         let y = 100_u32
         let z = 3.14_f32
@@ -594,7 +594,6 @@ mod tests {
             res.push_str(format!("Got token {:?}\n", token).as_str());
 
             if token == Token::EOF {
-                println!("Successfully read input string");
                 break;
             }
 
@@ -627,7 +626,7 @@ Got token EOF
 
     #[test]
     fn fun_fetch_user() {
-        let input = "fun fetchUser(id: int) [Win(User) | Fail(string)] {} // это функция fetchUser";
+        let input = "fun fetchUser(id: int) [Win(User) | Fail(string)] {} // it's fetchUser function";
 
         println!("test2: {}\n", input);
 
@@ -640,7 +639,6 @@ Got token EOF
             res.push_str(format!("Got token {:?}\n", token).as_str());
 
             if token == Token::EOF {
-                println!("Successfully read input string");
                 break;
             }
 
@@ -677,7 +675,7 @@ Got token EOF
     }
 
     #[test]
-    fn illogic_test() {
+    fn the_new_order() {
         let input = "let a = 0b01101 # 0xAF & ~0o75
         if cond1 && cond2 || !cond3 {
             let res = 0x01
@@ -747,7 +745,7 @@ Got token EOF
     }
 
     #[test]
-    fn space_deficit() {
+    fn piece_by_piece() {
         let input = "let a=5+10+0xFA0_3E2&~0o10";
 
         println!("test4: {}\n", input);
@@ -789,7 +787,7 @@ Got token EOF
     }
 
     #[test]
-    fn last_and_very_hard_test_with_edge_cases() {
+    fn the_art_of_shredding() {
         let input = "
         /*
         literally Violette Language test i swear

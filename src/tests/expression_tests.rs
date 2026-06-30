@@ -5,7 +5,7 @@ mod expression_tests {
     use crate::parser::parser::Parser;
 
     #[test]
-    fn many_parsing_expr_tests() {
+    fn high_five_ghost() {
         let test_cases = vec![
             ("5", Expression::IntLiteral(5)),
             (
@@ -23,7 +23,7 @@ mod expression_tests {
                 },
             ),
             (
-                "(((2) ** (3)) ** (2))",
+                "(((5) ** (3)) ** (2))",
                 Expression::Infix {
                     left: Box::new(Expression::Infix {
                         left: Box::new(Expression::IntLiteral(2)),
@@ -35,7 +35,7 @@ mod expression_tests {
                 }
             ),
             (
-                "a=b=5+2**3**2*-x==!true!=false",
+                "a=b=5+5**5**2*-x==!true!=false",
                 Expression::Infix {
                     left: Box::new(Expression::Identifier("a".to_string())),
                     operator: Token::Assign,
