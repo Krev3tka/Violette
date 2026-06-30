@@ -26,7 +26,7 @@ mod expression_tests {
                 "(((5) ** (3)) ** (2))",
                 Expression::Infix {
                     left: Box::new(Expression::Infix {
-                        left: Box::new(Expression::IntLiteral(2)),
+                        left: Box::new(Expression::IntLiteral(5)),
                         operator: Token::Power,
                         right: Box::new(Expression::IntLiteral(3))
                     }),
@@ -49,10 +49,10 @@ mod expression_tests {
                                     operator: Token::Add,
                                     right: Box::new(Expression::Infix {
                                         left: Box::new(Expression::Infix {
-                                            left: Box::new(Expression::IntLiteral(2)),
+                                            left: Box::new(Expression::IntLiteral(5)),
                                             operator: Token::Power,
                                             right: Box::new(Expression::Infix {
-                                                left: Box::new(Expression::IntLiteral(3)),
+                                                left: Box::new(Expression::IntLiteral(5)),
                                                 operator: Token::Power,
                                                 right: Box::new(Expression::IntLiteral(2)),
                                             }),
