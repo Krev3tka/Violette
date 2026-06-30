@@ -19,6 +19,16 @@ pub enum Expression {
         operator: Token,
         right: Box<Expression>,
     },
+
+    Postfix {
+        left: Box<Expression>,
+        operator: Token
+    },
+
+    Call {
+        function: Box<Expression>,
+        args: Vec<Expression>,
+    }
 }
 
 pub fn token_precedence(token: &Token) -> Precedence {
@@ -29,6 +39,7 @@ pub fn token_precedence(token: &Token) -> Precedence {
         Token::Add | Token::Subtract => Precedence::Sum,
         Token::Multiply | Token::Divide | Token::Modulus => Precedence::Product,
         Token::Power => Precedence::Power,
+        Token::Increment | Token::Decrement | Token::LeftParen => Precedence::Postfix,
         _ => Precedence::Lowest,
     }
 }

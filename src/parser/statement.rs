@@ -2,6 +2,10 @@ use crate::parser::Expression;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Statement {
+    ExpressionStatement {
+        expression: Expression,
+    },
+
     Let {
         name: String,
         value: Expression,
@@ -16,13 +20,13 @@ pub enum Statement {
 
     ForCondition {
         condition: Expression,
-        body: Vec<Statement>
+        body: Vec<Statement>,
     },
 
     ForRange {
         variable: String,
         iterable: Expression,
-        body: Vec<Statement>
+        body: Vec<Statement>,
     },
 
     ForCounter {
@@ -30,8 +34,7 @@ pub enum Statement {
         condition: Expression,
         post: Expression,
         body: Vec<Statement>,
-    }
-
+    },
 
 }
 

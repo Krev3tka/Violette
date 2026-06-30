@@ -2,6 +2,7 @@
 pub mod statement_tests {
     use crate::lexer::{Lexer, Token};
     use crate::parser::{ElseIf, Expression, IfStatement, Statement};
+    use crate::parser::Expression::{Identifier, IntLiteral};
     use crate::parser::parser::Parser;
 
     fn ident(s: &str) -> Expression { Expression::Identifier(s.to_string()) }
@@ -87,5 +88,120 @@ if a > 7 {
 
             assert_eq!(actual.unwrap(), expected, "Failing case: {}", input);
         });
+    }
+
+    #[test]
+    fn for_whom_the_bell_tolls() {
+        let test_cases = vec![
+            (
+                "for i = 0; i < 10; i++ {
+    let a = 5 * i
+    let b = i * 3
+}",
+
+                Statement::ForCounter {
+                    init: Box::new(Statement::Let {
+                        name: "i".to_string(),
+                        value: Expression::IntLiteral(0)
+                    }),
+                    condition: Expression::Infix {
+                        left: Box::new(Identifier("i".to_string())),
+                        operator: Token::Less,
+                        right: Box::new(IntLiteral(10))
+                    },
+                    post: Expression::Postfix {
+                        left: Box::new(Expression::Identifier("i".to_string())),
+                        operator: Token::Increment
+                    },
+                    body: vec![
+                        Statement::Let {
+                            name: "a".to_string(),
+                            value: Expression::Infix {
+                                left: Box::new(IntLiteral(5)),
+                                operator: Token::Multiply,
+                                right: Box::new(Identifier("i".to_string()))
+                            }
+                        },
+                        Statement::Let {
+                            name: "b".to_string(),
+                            value: Expression::Infix {
+                                left: Box::new(Identifier("i".to_string())),
+                                operator: Token::Multiply,
+                                right: Box::new(IntLiteral(3))
+                            }
+                        },
+                    ]
+                }
+            ),
+            (
+                "for x in upto(1, 10) {
+    let a = 5 * x
+    let b = x * 3
+}",
+                Statement::ForRange {
+                    variable: "x".to_string(),
+                    iterable: Expression::Call {
+                        function: Box::new(Expression::Identifier("upto".to_string())),
+                        args: vec![
+                            Expression::IntLiteral(1),
+                            Expression::IntLiteral(10),
+                        ]
+                    },
+                    body: vec![
+                        Statement::Let {
+                            name: "a".to_string(),
+                            value: Expression::Infix {
+                                left: Box::new(IntLiteral(5)),
+                                operator: Token::Multiply,
+                                right: Box::new(Identifier("x".to_string()))
+                            }
+                        },
+                        Statement::Let {
+                            name: "b".to_string(),
+                            value: Expression::Infix {
+                                left: Box::new(Identifier("x".to_string())),
+                                operator: Token::Multiply,
+                                right: Box::new(IntLiteral(3))
+                            }
+                        },
+                    ]
+                }
+            ),
+            (
+                "for left < right {
+    left++
+    right--
+}",
+                Statement::ForCondition {
+                    condition: Expression::Infix {
+                        left: Box::new(Identifier("left".to_string())),
+                        operator: Token::Less,
+                        right: Box::new(Identifier("right".to_string())),
+                    },
+                    body: vec![
+                        Statement::ExpressionStatement {
+                            expression: Expression::Postfix {
+                                left: Box::new(Identifier("left".to_string())),
+                                operator: Token::Increment
+                            }
+                        },
+                        Statement::ExpressionStatement {
+                            expression: Expression::Postfix {
+                                left: Box::new(Identifier("right".to_string())),
+                                operator: Token::Decrement
+                            }
+                        }
+                    ]
+                }
+            )
+        ];
+
+        test_cases.into_iter().for_each(|(input, expected)| {
+            let lexer = Lexer::new(input);
+            let mut parser = Parser::new(lexer);
+            let actual = parser.parse_statement();
+
+            assert_eq!(actual.unwrap(), expected, "Failing case: {}", input)
+        })
     }
 }

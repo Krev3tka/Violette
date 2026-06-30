@@ -41,7 +41,7 @@ impl Parser {
                     return Err(ParseError::UnexpectedToken(self.current_token.clone()));
                 }
             }
-            Token::Subtract | Token::LogicNot => {
+            Token::Subtract | Token::LogicNot | Token::Increment | Token::Decrement => {
                 let operator = self.current_token.clone();
 
                 self.next_token();
@@ -74,6 +74,35 @@ impl Parser {
                         left: Box::new(left),
                         operator,
                         right: Box::new(right),
+                    };
+                }
+                Token::Decrement | Token::Increment => {
+                    self.next_token();
+                    let operator = self.current_token.clone();
+
+                    left = Expression::Postfix {
+                        left: Box::new(left),
+                        operator,
+                    }
+                }
+                Token::LeftParen => {
+                    self.next_token();
+                    self.next_token();
+
+                    let mut args = Vec::new();
+
+                    while !matches!(self.current_token, Token::RightParen) {
+                        args.push(self.parse_expression(Lowest)?);
+                        self.next_token();
+
+                        if matches!(self.current_token, Token::Comma) {
+                            self.next_token();
+                        }
+                    }
+
+                    left = Expression::Call {
+                        function: Box::new(left),
+                        args
                     };
                 }
                 _ => break,
@@ -111,7 +140,12 @@ impl Parser {
             }
             Token::If => self.parse_if_statement(),
             Token::For => self.parse_for_statement(),
-            _ => Err(ParseError::UnexpectedToken(self.current_token.clone()))
+            _ => {
+                let expr = self.parse_expression(Lowest)?;
+                Ok(Statement::ExpressionStatement {
+                    expression: expr
+                })
+            }
         }
     }
 
@@ -204,7 +238,13 @@ impl Parser {
                     body,
                 })
             } else if matches!(self.peek_token, Token::Assign) {
-                let init = Box::new(self.parse_statement()?);
+                let name = var.clone();
+                self.next_token();
+                self.next_token();
+
+                let value = self.parse_expression(Lowest)?;
+                let init = Box::new(Statement::Let { name, value });
+
                 self.next_token();
 
                 if !matches!(self.current_token, Token::Semicolon) {
@@ -223,11 +263,6 @@ impl Parser {
                 self.next_token();
 
                 let post = self.parse_expression(Lowest)?;
-
-                if !matches!(self.current_token, Token::Semicolon) {
-                    return Err(ParseError::UnexpectedToken(self.current_token.clone()))
-                }
-
                 self.next_token();
                 self.skip_newlines();
 
@@ -255,6 +290,7 @@ impl Parser {
             return Err(ParseError::UnexpectedToken(self.current_token.clone()))
         }
 
+        self.next_token();
         let body = self.parse_block()?;
 
         Ok(ForCondition {

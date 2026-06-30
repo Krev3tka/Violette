@@ -8,13 +8,12 @@ pub enum Precedence {
     LessGreater, // < > <= >=
     Sum,         // + -
     Product,     // * / %
-    Prefix,      // -X, !X
+    Prefix,      // -X, !X ++X --X
     Power,       // **
-    Call,        // myFunction(X)
+    Postfix,     // x++ x-- () [] .
 }
 
 #[derive(Debug)]
 pub enum ParseError {
     UnexpectedToken(Token),
 }
-
