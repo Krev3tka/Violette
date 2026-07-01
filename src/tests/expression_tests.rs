@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod expression_tests {
-    use crate::lexer::{Lexer, Token};
+    use crate::lexer::lexer::Lexer;
+    use crate::lexer::token::Token;
     use crate::parser::{Expression, Precedence, Statement};
     use crate::parser::parser::Parser;
 

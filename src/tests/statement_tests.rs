@@ -1,12 +1,19 @@
 #[cfg(test)]
 pub mod statement_tests {
-    use crate::lexer::{Lexer, Token};
+    use std::iter::StepBy;
+    use crate::lexer::lexer::Lexer;
+    use crate::lexer::token::{PrimitiveType, Token};
+    use crate::lexer::token::PrimitiveType::Int;
+    use crate::lexer::token::Token::{Add, Assign, Subtract};
     use crate::parser::{ElseIf, Expression, IfStatement, Statement};
-    use crate::parser::Expression::{Identifier, IntLiteral};
+    use crate::parser::Expression::{Identifier, Infix, IntLiteral};
     use crate::parser::parser::Parser;
+    use crate::parser::statement::FunParam;
+    use crate::parser::types::{Type, TypePath};
+    use crate::parser::types::Type::{Primitive, Union};
 
-    fn ident(s: &str) -> Expression { Expression::Identifier(s.to_string()) }
-    fn int(n: isize) -> Expression { Expression::IntLiteral(n) }
+    fn ident(s: &str) -> Expression { Identifier(s.to_string()) }
+    fn int(n: isize) -> Expression { IntLiteral(n) }
     fn infix(l: Expression, op: Token, r: Expression) -> Expression {
         Expression::Infix { left: Box::new(l), operator: op, right: Box::new(r) }
     }
@@ -21,7 +28,7 @@ pub mod statement_tests {
                 "let x = 5",
                 Statement::Let {
                     name: "x".to_string(),
-                    value: Expression::IntLiteral(5)
+                    value: IntLiteral(5)
                 }
             ),
             (
@@ -30,20 +37,19 @@ pub mod statement_tests {
                     name: "THREE_HOURS_IN_SECONDS".to_string(),
                     value: Expression::Infix {
                         left: Box::new(Expression::Infix {
-                            left: Box::new(Expression::IntLiteral(3)),
+                            left: Box::new(IntLiteral(3)),
                             operator: Token::Multiply,
-                            right: Box::new(Expression::IntLiteral(24)),
+                            right: Box::new(IntLiteral(24)),
                         }),
                         operator: Token::Multiply,
                         right: Box::new(Expression::Infix {
-                            left: Box::new(Expression::IntLiteral(60)),
+                            left: Box::new(IntLiteral(60)),
                             operator: Token::Power,
-                            right: Box::new(Expression::IntLiteral(2)),
+                            right: Box::new(IntLiteral(2)),
                         })
                     }
                 }
             ),
-
             (
                 "\
 if a > 7 {
@@ -94,15 +100,14 @@ if a > 7 {
     fn for_whose_advantage() {
         let test_cases = vec![
             (
-                "for i = 0; i < 10; i++ {
+                "for i = someVar; i < 10; i++ {
     let a = 5 * i
     let b = i * 3
 }",
-
                 Statement::ForCounter {
                     init: Box::new(Statement::Let {
                         name: "i".to_string(),
-                        value: Expression::IntLiteral(0)
+                        value: Identifier("someVar".to_string())
                     }),
                     condition: Expression::Infix {
                         left: Box::new(Identifier("i".to_string())),
@@ -110,7 +115,7 @@ if a > 7 {
                         right: Box::new(IntLiteral(10))
                     },
                     post: Expression::Postfix {
-                        left: Box::new(Expression::Identifier("i".to_string())),
+                        left: Box::new(Identifier("i".to_string())),
                         operator: Token::Increment
                     },
                     body: vec![
@@ -141,10 +146,10 @@ if a > 7 {
                 Statement::ForRange {
                     variable: "x".to_string(),
                     iterable: Expression::Call {
-                        function: Box::new(Expression::Identifier("thru".to_string())),
+                        function: Box::new(Identifier("thru".to_string())),
                         args: vec![
-                            Expression::IntLiteral(1),
-                            Expression::IntLiteral(10),
+                            IntLiteral(1),
+                            IntLiteral(10),
                         ]
                     },
                     body: vec![
@@ -189,6 +194,243 @@ if a > 7 {
                             expression: Expression::Postfix {
                                 left: Box::new(Identifier("right".to_string())),
                                 operator: Token::Decrement
+                            }
+                        }
+                    ]
+                }
+            )
+        ];
+
+        test_cases.into_iter().for_each(|(input, expected)| {
+            let lexer = Lexer::new(input);
+            let mut parser = Parser::new(lexer);
+            let actual = parser.parse_statement();
+
+            assert_eq!(actual.unwrap(), expected, "Failing case: {}", input)
+        })
+    }
+
+    #[test]
+    fn fun_fetch_user_II() {
+        let input = "fun fetch_user(db: Sql.databases.psql, count: int) [Win(User) | Fail(NotFound) | Fail(NotConnected)] {
+    return count + 5
+}";
+
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
+
+        let actual = parser.parse_function();
+
+        assert_eq!(
+            actual.unwrap(),
+            Statement::Fun {
+                name: "fetch_user".to_string(),
+                params: vec![
+                    FunParam {
+                        name: "db".to_string(),
+                        param_type: Type::Named(TypePath {
+                            segments: vec!["Sql".to_string(), "databases".to_string(), "psql".to_string()]
+                        })
+                    },
+                    FunParam {
+                        name: "count".to_string(),
+                        param_type: Type::Primitive(PrimitiveType::Int)
+                    }
+                ],
+
+                return_type: Type::Union(vec![
+                    Type::Generic {
+                        name: "Win".to_string(),
+                        param: Box::new(Type::Named(TypePath {
+                            segments: vec!["User".to_string()]
+                        }))
+                    },
+                    Type::Generic {
+                        name: "Fail".to_string(),
+                        param: Box::new(Type::Named(TypePath {
+                            segments: vec!["NotFound".to_string()]
+                        }))
+                    },
+                    Type::Generic {
+                        name: "Fail".to_string(),
+                        param: Box::new(Type::Named(TypePath {
+                            segments: vec!["NotConnected".to_string()]
+                        }))
+                    }
+                ]),
+
+                body: vec![
+                    Statement::Return {
+                        value: Expression::Infix {
+                            left: Box::new(Identifier("count".to_string())),
+                            operator: Token::Add,
+                            right: Box::new(IntLiteral(5))
+                        }
+                    }
+                ]
+            }
+        )
+    }
+
+    #[test]
+    fn binary_search() {
+        let test_cases = vec![
+            (
+                "let ans = arr[mid + 1]",
+                Statement::Let {
+                    name: "ans".to_string(),
+                    value: Expression::Index {
+                        left: Box::new(Identifier("arr".to_string())),
+                        index: Box::new(Expression::Infix {
+                            left: Box::new(Identifier("mid".to_string())),
+                            operator: Token::Add,
+                            right: Box::new(IntLiteral(1))
+                        })
+                    }
+                }
+            ),
+            (
+                "fun BinarySearch(arr: std.vector, target: int) [Win(int) | Fail(NotFound)] {
+    let left = 0
+    let right = len(arr)
+
+    for left < right {
+        let mid = left + (right - left) / 2
+
+        if arr[mid] < target {
+            left = mid + 1
+        } else if arr[mid] > target {
+            right = mid - 1
+        } else {
+            return Win(mid)
+        }
+    }
+
+    return Fail(NotFound)
+}",
+                Statement::Fun {
+                    name: "BinarySearch".to_string(),
+                    params: vec![
+                        FunParam {
+                            name: "arr".to_string(),
+                            param_type: Type::Named(TypePath {
+                                segments: vec!["std".to_string(), "vector".to_string()]
+                            })
+                        },
+                        FunParam {
+                            name: "target".to_string(),
+                            param_type: Type::Primitive(Int)
+                        }
+                    ],
+                    return_type: Union(vec![
+                        Type::Generic {
+                            name: "Win".to_string(),
+                            param: Box::new(Primitive(Int))
+                        },
+                        Type::Generic {
+                            name: "Fail".to_string(),
+                            param: Box::new(Type::Named(TypePath {
+                                segments: vec!["NotFound".to_string()]
+                            }))
+                        }
+                    ]),
+                    body: vec![
+                        Statement::Let {
+                            name: "left".to_string(),
+                            value: IntLiteral(0)
+                        },
+                        Statement::Let {
+                            name: "right".to_string(),
+                            value: Expression::Call {
+                                function: Box::new(Identifier("len".to_string())),
+                                args: vec![Identifier("arr".to_string())]
+                            }
+                        },
+                        Statement::ForCondition {
+                            condition: Expression::Infix {
+                                left: Box::new(Identifier("left".to_string())),
+                                operator: Token::Less,
+                                right: Box::new(Identifier("right".to_string()))
+                            },
+                            body: vec![
+                                Statement::Let {
+                                    name: "mid".to_string(),
+                                    value: Expression::Infix {
+                                        left: Box::new(Identifier("left".to_string())),
+                                        operator: Token::Add,
+                                        right: Box::new(Expression::Infix {
+                                            left: Box::new(Expression::Infix {
+                                                left: Box::new(Identifier("right".to_string())),
+                                                operator: Token::Subtract,
+                                                right: Box::new(Identifier("left".to_string()))
+                                            }),
+                                            operator: Token::Divide,
+                                            right: Box::new(IntLiteral(2))
+                                        }),
+                                    }
+                                },
+                                Statement::If(IfStatement {
+                                    condition: Infix {
+                                        left: Box::new(Expression::Index {
+                                            left: Box::new(Identifier("arr".to_string())),
+                                            index: Box::new(Identifier("mid".to_string()))
+                                        }),
+                                        operator: Token::Less,
+                                        right: Box::new(Identifier("target".to_string())),
+                                    },
+                                    then_block: vec![
+                                        Statement::ExpressionStatement {
+                                            expression: Infix {
+                                                left: Box::new(Identifier("left".to_string())),
+                                                operator: Token::Assign,
+                                                right: Box::new(Infix {
+                                                    left: Box::new(Identifier("mid".to_string())),
+                                                    operator: Add,
+                                                    right: Box::new(IntLiteral(1))
+                                                })
+                                            }
+                                        }
+                                    ],
+                                    else_if: vec![
+                                        ElseIf {
+                                            condition: Infix {
+                                                left: Box::new(Expression::Index {
+                                                    left: Box::new(Identifier("arr".to_string())),
+                                                    index: Box::new(Identifier("mid".to_string()))
+                                                }),
+                                                operator: Token::Greater,
+                                                right: Box::new(Identifier("target".to_string())),
+                                            },
+                                            block: vec![
+                                                Statement::ExpressionStatement {
+                                                    expression: Infix {
+                                                        left: Box::new(Identifier("right".to_string())),
+                                                        operator: Assign,
+                                                        right: Box::new(Infix {
+                                                            left: Box::new(Identifier("mid".to_string())),
+                                                            operator: Subtract,
+                                                            right: Box::new(IntLiteral(1))
+                                                        })
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    ],
+                                    else_block: Some(vec![
+                                        Statement::Return {
+                                            value: Expression::Call {
+                                                function: Box::new(Identifier("Win".to_string())),
+                                                args: vec![Identifier("mid".to_string())]
+                                            }
+                                        }
+                                    ])
+                                })
+                            ]
+                        },
+                        Statement::Return {
+                            value: Expression::Call {
+                                function: Box::new(Identifier("Fail".to_string())),
+                                args: vec![Identifier("NotFound".to_string())]
                             }
                         }
                     ]

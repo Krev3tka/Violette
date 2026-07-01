@@ -1,0 +1,18 @@
+fun BinarySearch(arr: std.vector, target: int) [Win(int) | Fail(NotFound)] {
+    let left = 0
+    let right = len(arr)
+
+    for left < right {
+        let mid = left + (right - left) / 2
+
+        if arr[mid] < target {
+            left = mid + 1
+        } else if arr[mid] > target {
+            right = mid - 1
+        } else {
+            return Win(mid)
+        }
+    }
+
+    return Fail(NotFound)
+}
