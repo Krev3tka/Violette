@@ -49,7 +49,8 @@ Got token EOF
 
     #[test]
     fn fun_fetch_user() {
-        let input = "fun fetchUser(id: int) [Win(User) | Fail(string)] {} // it's fetchUser function";
+        let input =
+            "fun fetchUser(id: int) [Win(User) | Fail(string)] {} // it's fetchUser function";
 
         let mut lexer = Lexer::new(input);
 
@@ -111,7 +112,6 @@ Got token EOF
             res.push_str(format!("Got token {:?}\n", token).as_str());
 
             if token == Token::EOF {
-                println!("Successfully read input string");
                 break;
             }
 
@@ -172,7 +172,6 @@ Got token EOF
             res.push_str(format!("Got token {:?}\n", token).as_str());
 
             if token == Token::EOF {
-                println!("Successfully read input string");
                 break;
             }
 
@@ -224,7 +223,6 @@ Got token EOF
             res.push_str(format!("Got token {:?}\n", token).as_str());
 
             if token == Token::EOF {
-                println!("Successfully read input string");
                 break;
             }
 

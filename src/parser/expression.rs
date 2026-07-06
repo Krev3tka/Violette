@@ -1,7 +1,8 @@
 use crate::lexer::token::Token;
-use crate::parser::{ParseError, Precedence, Statement};
-use crate::parser::parser::Parser;
+use crate::parser::Expression::Infix;
 use crate::parser::Precedence::{Lowest, Prefix};
+use crate::parser::parser::Parser;
+use crate::parser::{ParseError, Precedence, Statement};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expression {
@@ -24,33 +25,40 @@ pub enum Expression {
 
     Postfix {
         left: Box<Expression>,
-        operator: Token
+        operator: Token,
     },
 
     Index {
         left: Box<Expression>,
-        index: Box<Expression>
+        index: Box<Expression>,
     },
 
     Call {
         function: Box<Expression>,
         args: Vec<Expression>,
-    }
+    },
 }
 
 pub fn token_precedence(token: &Token) -> Precedence {
     match token {
         Token::Assign => Precedence::Assign,
-        Token::Equals | Token::NotEquals |
-        Token::AddAndAssign | Token::SubAndAssign |
-        Token::MulAndAssign | Token::DivAndAssign |
-        Token::ModAndAssign => Precedence::Equals,
-        Token::Less | Token::Greater | Token::LessOrEquals | Token::GreaterOrEquals => Precedence::LessGreater,
+        Token::Equals
+        | Token::NotEquals
+        | Token::AddAndAssign
+        | Token::SubAndAssign
+        | Token::MulAndAssign
+        | Token::DivAndAssign
+        | Token::ModAndAssign => Precedence::Equals,
+        Token::Less | Token::Greater | Token::LessOrEquals | Token::GreaterOrEquals => {
+            Precedence::LessGreater
+        }
+        Token::Sprout => Precedence::Sprout,
+        Token::LeftShift | Token::RightShift => Precedence::Shift,
         Token::Add | Token::Subtract => Precedence::Sum,
         Token::Multiply | Token::Divide | Token::Modulus => Precedence::Product,
         Token::Power => Precedence::Power,
         Token::Increment | Token::Decrement | Token::LeftParen | Token::LSB => Precedence::Postfix,
-        _ => Precedence::Lowest,
+        _ => Lowest,
     }
 }
 
@@ -63,6 +71,7 @@ impl Parser {
             Token::String(s) => Expression::StringLiteral(s.clone()),
             Token::LeftParen => {
                 self.next_token();
+
                 let expr = self.parse_expression(Lowest)?;
 
                 if matches!(self.peek_token, Token::RightParen) {
@@ -77,23 +86,38 @@ impl Parser {
 
                 self.next_token();
 
-                let right = self.parse_expression(Prefix);
+                let right = self.parse_expression(Prefix)?;
 
                 Expression::Prefix {
                     operator,
-                    right: Box::new(right?),
+                    right: Box::new(right),
                 }
             }
             _ => return Err(ParseError::UnexpectedToken(self.current_token.clone())),
         };
 
         while precedence < self.peek_precedence()
-            || (precedence == self.peek_precedence() && matches!(self.peek_token, Token::Assign | Token::Power))
+            || (precedence == self.peek_precedence()
+                && matches!(self.peek_token, Token::Assign | Token::Power))
         {
             match &self.peek_token {
-                Token::Add | Token::Subtract | Token::Multiply | Token::Divide | Token::Modulus |
-                Token::Equals | Token::NotEquals | Token::Less | Token::Greater | Token::LessOrEquals | Token::GreaterOrEquals |
-                Token::Assign | Token::Power | Token::AddAndAssign | Token::SubAndAssign | Token::MulAndAssign | Token::DivAndAssign => {
+                Token::Add
+                | Token::Subtract
+                | Token::Multiply
+                | Token::Divide
+                | Token::Modulus
+                | Token::Equals
+                | Token::NotEquals
+                | Token::Less
+                | Token::Greater
+                | Token::LessOrEquals
+                | Token::GreaterOrEquals
+                | Token::Assign
+                | Token::Power
+                | Token::AddAndAssign
+                | Token::SubAndAssign
+                | Token::MulAndAssign
+                | Token::DivAndAssign => {
                     let peek_prec = self.peek_precedence();
                     self.next_token();
                     let operator = self.current_token.clone();
@@ -124,6 +148,7 @@ impl Parser {
 
                     while !matches!(self.current_token, Token::RightParen) {
                         args.push(self.parse_expression(Lowest)?);
+
                         self.next_token();
 
                         if matches!(self.current_token, Token::Comma) {
@@ -133,13 +158,42 @@ impl Parser {
 
                     left = Expression::Call {
                         function: Box::new(left),
-                        args
+                        args,
                     };
-                },
+                }
                 Token::LSB => {
                     self.next_token();
+
                     left = self.parse_index_expression(left)?;
-                },
+                }
+                Token::Sprout => {
+                    self.next_token();
+                    self.next_token();
+
+                    let right = self.parse_expression(Precedence::Sprout)?;
+
+                    left = Expression::Call {
+                        function: Box::new(right),
+                        args: vec![left],
+                    }
+                }
+                Token::LeftShift | Token::RightShift => {
+                    let peek_prec = self.peek_precedence();
+
+                    self.next_token();
+
+                    let operator = self.current_token.clone();
+
+                    self.next_token();
+
+                    let right = self.parse_expression(peek_prec)?;
+
+                    left = Infix {
+                        left: Box::new(left),
+                        operator,
+                        right: Box::new(right),
+                    }
+                }
                 _ => break,
             }
         }
@@ -150,8 +204,11 @@ impl Parser {
     fn parse_index_expression(&mut self, left: Expression) -> Result<Expression, ParseError> {
         self.next_token();
 
-
         let index = self.parse_expression(Lowest)?;
+
+        if !matches!(self.peek_token, Token::RSB) {
+            return Err(ParseError::UnexpectedToken(self.peek_token.clone()));
+        }
         self.next_token();
 
         Ok(Expression::Index {

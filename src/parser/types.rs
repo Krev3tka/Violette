@@ -2,13 +2,15 @@ use crate::lexer::token::{PrimitiveType, Token};
 
 #[derive(Debug, PartialEq, PartialOrd, Clone, Copy)]
 pub enum Precedence {
-    Lowest,      // Base syntax
+    Lowest, // Base syntax
     Assign,
     Equals,      // == !=
     LessGreater, // < > <= >=
+    Sprout,      // ~>
+    Shift,       // >> <<
     Sum,         // + -
     Product,     // * / %
-    Prefix,      // -X, !X ++X --X
+    Prefix,      // -X !X ++X --X
     Power,       // **
     Postfix,     // x++ x-- () [] .
 }
@@ -24,15 +26,12 @@ pub enum Type {
 
     Named(TypePath),
 
-    Generic {
-        name: String,
-        param: Box<Type>
-    },
+    Generic { name: String, param: Box<Type> },
 
-    Union(Vec<Type>)
+    Union(Vec<Type>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TypePath {
-    pub segments: Vec<String>
+    pub segments: Vec<String>,
 }

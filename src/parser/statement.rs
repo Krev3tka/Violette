@@ -1,9 +1,10 @@
+use std::cell::Cell;
 use crate::lexer::token::Token;
-use crate::parser::{Expression, ParseError};
-use crate::parser::parser::Parser;
 use crate::parser::Precedence::Lowest;
 use crate::parser::Statement::{ForCondition, ForCounter};
+use crate::parser::parser::Parser;
 use crate::parser::types::Type;
+use crate::parser::{Expression, ParseError};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Statement {
@@ -42,16 +43,15 @@ pub enum Statement {
     },
 
     Return {
-        value: Expression
+        value: Expression,
     },
 
     Fun {
         name: String,
         params: Vec<FunParam>,
         return_type: Type,
-        body: Vec<Statement>
-    }
-
+        body: Vec<Statement>,
+    },
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -76,6 +76,19 @@ pub struct FunParam {
 
 impl Parser {
     pub fn parse_statement(&mut self) -> Result<Statement, ParseError> {
+        trace_before!(self, "parse_statement");
+        self.recursion_depth.set(self.recursion_depth.get() + 1);
+
+        struct LocalGuard(*const Cell<i32>);
+        impl Drop for LocalGuard {
+            fn drop(&mut self) {
+                unsafe {
+                    (*self.0).set((*self.0).get() - 1);
+                }
+            }
+        }
+        let _guard = LocalGuard(&self.recursion_depth as *const Cell<i32>);
+
         match &self.current_token {
             Token::Let | Token::Const => {
                 let is_const = matches!(self.current_token, Token::Const);
@@ -91,7 +104,6 @@ impl Parser {
                 }
 
                 self.next_token();
-
                 let value = self.parse_expression(Lowest)?;
 
                 if is_const {
@@ -99,7 +111,6 @@ impl Parser {
                 } else {
                     Ok(Statement::Let { name, value })
                 }
-
             }
             Token::If => self.parse_if_statement(),
             Token::For => self.parse_for_statement(),
@@ -111,9 +122,7 @@ impl Parser {
             }
             _ => {
                 let expr = self.parse_expression(Lowest)?;
-                Ok(Statement::ExpressionStatement {
-                    expression: expr
-                })
+                Ok(Statement::ExpressionStatement { expression: expr })
             }
         }
     }
@@ -122,7 +131,9 @@ impl Parser {
         self.expect(Token::If)?;
 
         let condition = self.parse_expression(Lowest)?;
+
         self.next_token();
+        trace_before!(self, "if_statement");
 
         self.expect(Token::LeftBrace)?;
 
@@ -136,10 +147,12 @@ impl Parser {
 
             if matches!(self.current_token, Token::If) {
                 let else_if_stmt = self.parse_else_if_statement()?;
+
                 else_if.push(else_if_stmt);
             } else if matches!(self.current_token, Token::LeftBrace) {
                 self.next_token();
                 else_block = Some(self.parse_block()?);
+
                 break;
             } else {
                 return Err(ParseError::UnexpectedToken(self.current_token.clone()));
@@ -158,16 +171,15 @@ impl Parser {
         self.expect(Token::If)?;
 
         let condition = self.parse_expression(Lowest)?;
+
         self.next_token();
+        trace_before!(self, "else_if_statement");
 
         self.expect(Token::LeftBrace)?;
 
         let block = self.parse_block()?;
 
-        Ok(ElseIf {
-            condition,
-            block
-        })
+        Ok(ElseIf { condition, block })
     }
 
     pub fn parse_for_statement(&mut self) -> Result<Statement, ParseError> {
@@ -176,7 +188,8 @@ impl Parser {
         if let Token::Identifier(var) = self.current_token.clone() {
             if matches!(self.peek_token, Token::In) {
                 self.expect(Token::Identifier("".to_string()))?;
-                self.expect(Token::In)?;
+                self.expect(Token::In);
+
                 self.parse_for_range(&var)
             } else if matches!(self.peek_token, Token::Assign) {
                 self.parse_for_counter(&var)
@@ -192,15 +205,17 @@ impl Parser {
         let variable = var.clone();
 
         let iterable = self.parse_expression(Lowest)?;
+
         self.next_token();
         self.skip_newlines();
 
         if !matches!(self.current_token, Token::LeftBrace) {
-            return Err(ParseError::UnexpectedToken(self.current_token.clone()))
+            return Err(ParseError::UnexpectedToken(self.current_token.clone()));
         }
 
         self.expect(Token::LeftBrace)?;
         self.skip_newlines();
+
         let body = self.parse_block()?;
 
         Ok(Statement::ForRange {
@@ -216,31 +231,34 @@ impl Parser {
         self.expect(Token::Assign)?;
 
         let value = self.parse_expression(Lowest)?;
+
         let init = Box::new(Statement::Let { name, value });
 
         self.next_token();
 
         if !matches!(self.current_token, Token::Semicolon) {
-            return Err(ParseError::UnexpectedToken(self.current_token.clone()))
+            return Err(ParseError::UnexpectedToken(self.current_token.clone()));
         }
 
         self.expect(Token::Semicolon)?;
 
         let condition = self.parse_expression(Lowest)?;
+
         self.next_token();
 
         if !matches!(self.current_token, Token::Semicolon) {
-            return Err(ParseError::UnexpectedToken(self.current_token.clone()))
+            return Err(ParseError::UnexpectedToken(self.current_token.clone()));
         }
 
         self.expect(Token::Semicolon)?;
 
         let post = self.parse_expression(Lowest)?;
+
         self.next_token();
         self.skip_newlines();
 
         if !matches!(self.current_token, Token::LeftBrace) {
-            return Err(ParseError::UnexpectedToken(self.current_token.clone()))
+            return Err(ParseError::UnexpectedToken(self.current_token.clone()));
         }
         self.next_token();
 
@@ -250,25 +268,23 @@ impl Parser {
             init,
             condition,
             post,
-            body
+            body,
         })
     }
 
     pub fn parse_for_condition(&mut self) -> Result<Statement, ParseError> {
         let condition = self.parse_expression(Lowest)?;
+
         self.next_token();
 
         if !matches!(self.current_token, Token::LeftBrace) {
-            return Err(ParseError::UnexpectedToken(self.current_token.clone()))
+            return Err(ParseError::UnexpectedToken(self.current_token.clone()));
         }
 
         self.next_token();
         let body = self.parse_block()?;
 
-        Ok(ForCondition {
-            condition,
-            body
-        })
+        Ok(ForCondition { condition, body })
     }
 
     pub fn parse_function(&mut self) -> Result<Statement, ParseError> {
@@ -276,7 +292,7 @@ impl Parser {
 
         let name = match self.current_token.clone() {
             Token::Identifier(fun_name) => fun_name.clone(),
-            _ => return Err(ParseError::UnexpectedToken(self.current_token.clone()))
+            _ => return Err(ParseError::UnexpectedToken(self.current_token.clone())),
         };
 
         self.next_token();
@@ -287,7 +303,7 @@ impl Parser {
         while !matches!(self.current_token, Token::RightParen) {
             let param_name = match self.current_token.clone() {
                 Token::Identifier(name) => name,
-                _ => return Err(ParseError::UnexpectedToken(self.current_token.clone()))
+                _ => return Err(ParseError::UnexpectedToken(self.current_token.clone())),
             };
 
             self.next_token();
@@ -297,7 +313,7 @@ impl Parser {
 
             let param = FunParam {
                 name: param_name,
-                param_type
+                param_type,
             };
 
             params.push(param);
@@ -305,33 +321,36 @@ impl Parser {
             match self.current_token.clone() {
                 Token::Comma => self.expect(Token::Comma),
                 Token::RightParen => break,
-                _ => return Err(ParseError::UnexpectedToken(self.current_token.clone()))
+                _ => return Err(ParseError::UnexpectedToken(self.current_token.clone())),
             }?;
         }
 
         self.expect(Token::RightParen)?;
-        let return_type = self.parse_type()?;
-        self.expect(Token::LeftBrace)?;
-        let body = self.parse_block()?;
-        println!("fun, current token: {:?}, return type {:?}", self.current_token.clone(), return_type);
 
+        let return_type = self.parse_type()?;
+
+        self.expect(Token::LeftBrace)?;
+        trace_before!(self, "parse_function");
+
+        let body = self.parse_block()?;
 
         Ok(Statement::Fun {
             name,
             params,
             return_type,
-            body
+            body,
         })
-
     }
 
     pub fn parse_block(&mut self) -> Result<Vec<Statement>, ParseError> {
         let mut statements = Vec::new();
 
         self.skip_newlines();
+        trace_before!(self, "parse_block");
 
         while !matches!(self.current_token, Token::RightBrace | Token::EOF) {
             let stmt = self.parse_statement()?;
+
             statements.push(stmt);
             self.next_token();
             self.skip_newlines();

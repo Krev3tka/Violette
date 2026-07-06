@@ -64,6 +64,7 @@ pub enum Token {
     Semicolon,       // ;
     Dot,             // .
     Comma,           // ,
+    Sprout,          // ~>
 
     Add,       // +
     Subtract,  // -
@@ -95,6 +96,9 @@ pub enum Token {
     BitOr,  // #
     BitNot, // ~
     BitXOR, // ^
+
+    LeftShift,  // <<
+    RightShift, // >>
 
     // else things
     Import,

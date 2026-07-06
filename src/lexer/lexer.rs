@@ -73,11 +73,21 @@ impl Lexer {
             }
 
             '#' => Token::BitOr,
-            '~' => Token::BitNot,
+            '~' => {
+                if self.peek_char() == '>' {
+                    self.read_char();
+                    Token::Sprout
+                } else {
+                    Token::BitNot
+                }
+            }
             '^' => Token::BitXOR,
 
             '<' => {
-                if self.peek_char() == '=' {
+                if self.peek_char() == '<' {
+                    self.read_char();
+                    Token::LeftShift
+                } else if self.peek_char() == '=' {
                     self.read_char();
                     Token::LessOrEquals
                 } else {
@@ -86,7 +96,10 @@ impl Lexer {
             }
 
             '>' => {
-                if self.peek_char() == '=' {
+                if self.peek_char() == '>' {
+                    self.read_char();
+                    Token::RightShift
+                } else if self.peek_char() == '=' {
                     self.read_char();
                     Token::GreaterOrEquals
                 } else {
@@ -326,9 +339,7 @@ impl Lexer {
     }
 
     fn skip_whitespaces(&mut self) {
-        while self.current == ' '
-            || self.current == '\t'
-        {
+        while self.current == ' ' || self.current == '\t' {
             self.read_char()
         }
     }
@@ -396,36 +407,36 @@ impl Lexer {
                 ("f64", true) => Token::Float64(cleaned.parse().unwrap_or(0.0)),
 
                 ("i8", false) => match cleaned.parse::<i8>() {
-                    Ok(v)  => Token::Int8(v),
+                    Ok(v) => Token::Int8(v),
                     Err(_) => Token::Illegal,
                 },
                 ("i16", false) => match cleaned.parse::<i16>() {
-                    Ok(v)  => Token::Int16(v),
+                    Ok(v) => Token::Int16(v),
                     Err(_) => Token::Illegal,
                 },
                 ("i32", false) => match cleaned.parse::<i32>() {
-                    Ok(v)  => Token::Int32(v),
+                    Ok(v) => Token::Int32(v),
                     Err(_) => Token::Illegal,
                 },
                 ("i64", false) => match cleaned.parse::<i64>() {
-                    Ok(v)  => Token::Int64(v),
+                    Ok(v) => Token::Int64(v),
                     Err(_) => Token::Illegal,
                 },
 
                 ("u8", false) => match cleaned.parse::<u8>() {
-                    Ok(v)  => Token::Uint8(v),
+                    Ok(v) => Token::Uint8(v),
                     Err(_) => Token::Illegal,
                 },
                 ("u16", false) => match cleaned.parse::<u16>() {
-                    Ok(v)  => Token::Uint16(v),
+                    Ok(v) => Token::Uint16(v),
                     Err(_) => Token::Illegal,
                 },
                 ("u32", false) => match cleaned.parse::<u32>() {
-                    Ok(v)  => Token::Uint32(v),
+                    Ok(v) => Token::Uint32(v),
                     Err(_) => Token::Illegal,
                 },
                 ("u64", false) => match cleaned.parse::<u64>() {
-                    Ok(v)  => Token::Uint64(v),
+                    Ok(v) => Token::Uint64(v),
                     Err(_) => Token::Illegal,
                 },
 
@@ -437,12 +448,12 @@ impl Lexer {
 
         if digits.contains('.') {
             match digits.replace('_', "").parse::<f64>() {
-                Ok(v)  => Token::Float64(v),
+                Ok(v) => Token::Float64(v),
                 Err(_) => Token::Illegal,
             }
         } else {
             match digits.replace('_', "").parse::<isize>() {
-                Ok(v)  => Token::Int(v),
+                Ok(v) => Token::Int(v),
                 Err(_) => Token::Illegal,
             }
         }

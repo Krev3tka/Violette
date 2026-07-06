@@ -1,12 +1,9 @@
+use std::cell::Cell;
 use crate::lexer::lexer::Lexer;
-use crate::lexer::token;
-use crate::lexer::token::{Token, PrimitiveType};
-use crate::parser::{Expression, Precedence, Statement};
+use crate::lexer::token::{PrimitiveType, Token};
 use crate::parser::expression::token_precedence;
-use crate::parser::Precedence::{Equals, LessGreater, Lowest, Prefix, Product, Sum};
-use crate::parser::statement::{ElseIf, FunParam, IfStatement};
-use crate::parser::Statement::{ForCondition, ForCounter};
 use crate::parser::types::{ParseError, Type, TypePath};
+use crate::parser::{Precedence, Statement};
 
 macro_rules! primitive {
     ($self:expr, $variant:expr) => {{
@@ -15,10 +12,18 @@ macro_rules! primitive {
     }};
 }
 
+macro_rules! trace_before {
+    ($self:expr, $name:expr) => {{
+        let indent = " ".repeat($self.recursion_depth.get() as usize);
+        println!("{indent}-> {} (current: {:?})", $name, $self.current_token)
+    }};
+}
+
 pub struct Parser {
     lexer: Lexer,
     pub current_token: Token,
     pub peek_token: Token,
+    pub recursion_depth: Cell<i32>,
 }
 
 impl Parser {
@@ -30,6 +35,7 @@ impl Parser {
             lexer,
             current_token,
             peek_token,
+            recursion_depth: Cell::new(0),
         }
     }
 
@@ -54,7 +60,7 @@ impl Parser {
         let first = self.parse_single_type()?;
 
         if !matches!(self.current_token, Token::Pipe) {
-            return Ok(first)
+            return Ok(first);
         }
 
         let mut variants = vec![first];
@@ -81,8 +87,12 @@ impl Parser {
             Token::PrimitiveType(PrimitiveType::Uint32) => primitive!(self, PrimitiveType::Uint32),
             Token::PrimitiveType(PrimitiveType::Uint64) => primitive!(self, PrimitiveType::Uint64),
 
-            Token::PrimitiveType(PrimitiveType::Float32) => primitive!(self, PrimitiveType::Float32),
-            Token::PrimitiveType(PrimitiveType::Float64) => primitive!(self, PrimitiveType::Float64),
+            Token::PrimitiveType(PrimitiveType::Float32) => {
+                primitive!(self, PrimitiveType::Float32)
+            }
+            Token::PrimitiveType(PrimitiveType::Float64) => {
+                primitive!(self, PrimitiveType::Float64)
+            }
 
             Token::PrimitiveType(PrimitiveType::Bool) => primitive!(self, PrimitiveType::Bool),
             Token::PrimitiveType(PrimitiveType::String) => primitive!(self, PrimitiveType::String),
@@ -96,7 +106,7 @@ impl Parser {
 
                     match self.current_token.clone() {
                         Token::Identifier(subname) => segments.push(subname),
-                        _ => return Err(ParseError::UnexpectedToken(self.current_token.clone()))
+                        _ => return Err(ParseError::UnexpectedToken(self.current_token.clone())),
                     }
 
                     self.next_token()
@@ -107,15 +117,16 @@ impl Parser {
                     let param = self.parse_single_type()?;
                     self.expect(Token::RightParen)?;
 
-                    Ok(Type::Generic { name, param: Box::new(param) } )
+                    Ok(Type::Generic {
+                        name,
+                        param: Box::new(param),
+                    })
                 } else {
-                    Ok(Type::Named(TypePath {
-                        segments
-                    }))
+                    Ok(Type::Named(TypePath { segments }))
                 }
             }
 
-            _ => Err(ParseError::UnexpectedToken(self.current_token.clone()))
+            _ => Err(ParseError::UnexpectedToken(self.current_token.clone())),
         }
     }
 
