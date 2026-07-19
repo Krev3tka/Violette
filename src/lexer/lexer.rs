@@ -1,3 +1,4 @@
+use crate::lexer::span::{Span, SpannedToken};
 use crate::lexer::token::{PrimitiveType, Token};
 
 pub struct Lexer {
@@ -6,6 +7,8 @@ pub struct Lexer {
     errors: String,
     position: usize,
     next_position: usize,
+    line: usize,
+    col: usize,
 }
 
 impl Lexer {
@@ -16,6 +19,8 @@ impl Lexer {
             errors: String::new(),
             position: 0,
             next_position: 0,
+            line: 1,
+            col: 0,
         };
 
         lexer.read_char();
@@ -23,8 +28,10 @@ impl Lexer {
         lexer
     }
 
-    pub fn next_token(&mut self) -> Token {
+    pub fn next_token(&mut self) -> SpannedToken {
         self.skip_whitespaces();
+
+        let start = Span::new(self.line, self.col);
 
         let token = match self.current {
             ';' => Token::Semicolon,
@@ -111,6 +118,9 @@ impl Lexer {
                 if self.peek_char() == '=' {
                     self.read_char();
                     Token::Equals
+                } else if self.peek_char() == '>' {
+                    self.read_char();
+                    Token::FatArrow
                 } else {
                     Token::Assign
                 }
@@ -192,7 +202,10 @@ impl Lexer {
                     }
 
                     if depth > 0 {
-                        return Token::Illegal;
+                        return SpannedToken {
+                            token: Token::Illegal,
+                            span: start,
+                        };
                     }
 
                     return self.next_token();
@@ -217,7 +230,10 @@ impl Lexer {
                     self.read_char();
                 }
 
-                return Token::Newline;
+                return SpannedToken {
+                    token: Token::Newline,
+                    span: start,
+                };
             }
 
             '0' => {
@@ -242,7 +258,10 @@ impl Lexer {
                     }
 
                     if digits.is_empty() {
-                        return Token::Illegal;
+                        return SpannedToken {
+                            token: Token::Illegal,
+                            span: start,
+                        };
                     } else {
                         let radix = match prefix {
                             'b' => 2,
@@ -250,9 +269,12 @@ impl Lexer {
                             _ => 16,
                         };
 
-                        return Token::Int(
-                            isize::from_str_radix(digits.as_str(), radix).unwrap_or(0),
-                        );
+                        return SpannedToken {
+                            token: Token::Int(
+                                isize::from_str_radix(digits.as_str(), radix).unwrap_or(0),
+                            ),
+                            span: start,
+                        };
                     }
                 } else {
                     return self.read_number_literal();
@@ -267,50 +289,167 @@ impl Lexer {
                 let ident = self.read_identifier();
 
                 return match ident.as_str() {
-                    "let" => Token::Let,
-                    "const" => Token::Const,
-                    "if" => Token::If,
-                    "else" => Token::Else,
-                    "for" => Token::For,
-                    "in" => Token::In,
-                    "continue" => Token::Continue,
-                    "break" => Token::Break,
-                    "match" => Token::Match,
+                    "let" => SpannedToken {
+                        token: Token::Let,
+                        span: start,
+                    },
+                    "const" => SpannedToken {
+                        token: Token::Const,
+                        span: start,
+                    },
+                    "if" => SpannedToken {
+                        token: Token::If,
+                        span: start,
+                    },
+                    "else" => SpannedToken {
+                        token: Token::Else,
+                        span: start,
+                    },
+                    "for" => SpannedToken {
+                        token: Token::For,
+                        span: start,
+                    },
+                    "in" => SpannedToken {
+                        token: Token::In,
+                        span: start,
+                    },
+                    "continue" => SpannedToken {
+                        token: Token::Continue,
+                        span: start,
+                    },
+                    "break" => SpannedToken {
+                        token: Token::Break,
+                        span: start,
+                    },
+                    "match" => SpannedToken {
+                        token: Token::Match,
+                        span: start,
+                    },
 
-                    "fun" => Token::Fun,
-                    "return" => Token::Return,
-                    "bloom" => Token::Bloom,
+                    "fun" => SpannedToken {
+                        token: Token::Fun,
+                        span: start,
+                    },
+                    "return" => SpannedToken {
+                        token: Token::Return,
+                        span: start,
+                    },
+                    "bloom" => SpannedToken {
+                        token: Token::Bloom,
+                        span: start,
+                    },
+                    "cherry" => SpannedToken {
+                        token: Token::Cherry,
+                        span: start,
+                    },
 
-                    "struct" => Token::Struct,
-                    "interface" => Token::Interface,
-                    "enum" => Token::Enum,
-                    "type" => Token::Type,
-                    "open" => Token::Open,
-                    "local" => Token::Local,
-                    "cyclic" => Token::Cyclic,
+                    "struct" => SpannedToken {
+                        token: Token::Struct,
+                        span: start,
+                    },
+                    "interface" => SpannedToken {
+                        token: Token::Interface,
+                        span: start,
+                    },
+                    "type" => SpannedToken {
+                        token: Token::Type,
+                        span: start,
+                    },
+                    "open" => SpannedToken {
+                        token: Token::Open,
+                        span: start,
+                    },
+                    "local" => SpannedToken {
+                        token: Token::Local,
+                        span: start,
+                    },
+                    "cyclic" => SpannedToken {
+                        token: Token::Cyclic,
+                        span: start,
+                    },
 
-                    "int" => Token::PrimitiveType(PrimitiveType::Int),
-                    "int8" => Token::PrimitiveType(PrimitiveType::Int8),
-                    "int16" => Token::PrimitiveType(PrimitiveType::Int16),
-                    "int32" => Token::PrimitiveType(PrimitiveType::Int32),
-                    "int64" => Token::PrimitiveType(PrimitiveType::Int64),
+                    "import" => SpannedToken {
+                        token: Token::Import,
+                        span: start,
+                    },
 
-                    "uint" => Token::PrimitiveType(PrimitiveType::Uint),
-                    "uint8" => Token::PrimitiveType(PrimitiveType::Uint8),
-                    "uint16" => Token::PrimitiveType(PrimitiveType::Uint16),
-                    "uint32" => Token::PrimitiveType(PrimitiveType::Uint32),
-                    "uint64" => Token::PrimitiveType(PrimitiveType::Uint64),
+                    "package" => SpannedToken {
+                        token: Token::Package,
+                        span: start,
+                    },
 
-                    "float32" => Token::PrimitiveType(PrimitiveType::Float32),
-                    "float64" => Token::PrimitiveType(PrimitiveType::Float64),
+                    "int" => SpannedToken {
+                        token: Token::PrimitiveType(PrimitiveType::Int),
+                        span: start,
+                    },
+                    "int8" => SpannedToken {
+                        token: Token::PrimitiveType(PrimitiveType::Int8),
+                        span: start,
+                    },
+                    "int16" => SpannedToken {
+                        token: Token::PrimitiveType(PrimitiveType::Int16),
+                        span: start,
+                    },
+                    "int32" => SpannedToken {
+                        token: Token::PrimitiveType(PrimitiveType::Int32),
+                        span: start,
+                    },
+                    "int64" => SpannedToken {
+                        token: Token::PrimitiveType(PrimitiveType::Int64),
+                        span: start,
+                    },
 
-                    "bool" => Token::PrimitiveType(PrimitiveType::Bool),
-                    "string" => Token::PrimitiveType(PrimitiveType::String),
+                    "uint" => SpannedToken {
+                        token: Token::PrimitiveType(PrimitiveType::Uint),
+                        span: start,
+                    },
+                    "uint8" => SpannedToken {
+                        token: Token::PrimitiveType(PrimitiveType::Uint8),
+                        span: start,
+                    },
+                    "uint16" => SpannedToken {
+                        token: Token::PrimitiveType(PrimitiveType::Uint16),
+                        span: start,
+                    },
+                    "uint32" => SpannedToken {
+                        token: Token::PrimitiveType(PrimitiveType::Uint32),
+                        span: start,
+                    },
+                    "uint64" => SpannedToken {
+                        token: Token::PrimitiveType(PrimitiveType::Uint64),
+                        span: start,
+                    },
 
-                    "true" => Token::Bool(true),
-                    "false" => Token::Bool(false),
+                    "float32" => SpannedToken {
+                        token: Token::PrimitiveType(PrimitiveType::Float32),
+                        span: start,
+                    },
+                    "float64" => SpannedToken {
+                        token: Token::PrimitiveType(PrimitiveType::Float64),
+                        span: start,
+                    },
 
-                    _ => Token::Identifier(ident),
+                    "bool" => SpannedToken {
+                        token: Token::PrimitiveType(PrimitiveType::Bool),
+                        span: start,
+                    },
+                    "string" => SpannedToken {
+                        token: Token::PrimitiveType(PrimitiveType::String),
+                        span: start,
+                    },
+                    "true" => SpannedToken {
+                        token: Token::Bool(true),
+                        span: start,
+                    },
+                    "false" => SpannedToken {
+                        token: Token::Bool(false),
+                        span: start,
+                    },
+
+                    _ => SpannedToken {
+                        token: Token::Identifier(ident),
+                        span: start,
+                    },
                 };
             }
 
@@ -319,10 +458,14 @@ impl Lexer {
 
         self.read_char();
 
-        token
+        SpannedToken { token, span: start }
     }
 
     fn read_char(&mut self) {
+        if self.current == '\n' {
+            self.line += 1;
+            self.col = 0;
+        }
         if self.next_position >= self.input.len() {
             self.current = '\0';
             return;
@@ -332,6 +475,7 @@ impl Lexer {
 
         self.position = self.next_position;
         self.next_position += 1;
+        self.col += 1;
     }
 
     fn is_letter(ch: char) -> bool {
@@ -374,7 +518,8 @@ impl Lexer {
         suffix
     }
 
-    fn read_number_literal(&mut self) -> Token {
+    fn read_number_literal(&mut self) -> SpannedToken {
+        let start = Span::new(self.line, self.col);
         let mut digits = String::new();
 
         while self.current.is_ascii_digit() || self.current == '_' {
@@ -443,18 +588,30 @@ impl Lexer {
                 _ => Token::Illegal,
             };
 
-            return token;
+            return SpannedToken { token, span: start };
         }
 
         if digits.contains('.') {
             match digits.replace('_', "").parse::<f64>() {
-                Ok(v) => Token::Float64(v),
-                Err(_) => Token::Illegal,
+                Ok(v) => SpannedToken {
+                    token: Token::Float64(v),
+                    span: start,
+                },
+                Err(_) => SpannedToken {
+                    token: Token::Illegal,
+                    span: start,
+                },
             }
         } else {
             match digits.replace('_', "").parse::<isize>() {
-                Ok(v) => Token::Int(v),
-                Err(_) => Token::Illegal,
+                Ok(v) => SpannedToken {
+                    token: Token::Int(v),
+                    span: start,
+                },
+                Err(_) => SpannedToken {
+                    token: Token::Illegal,
+                    span: start,
+                },
             }
         }
     }

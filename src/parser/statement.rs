@@ -1,10 +1,11 @@
-use std::cell::Cell;
+use crate::lexer::span::Span;
 use crate::lexer::token::Token;
 use crate::parser::Precedence::Lowest;
 use crate::parser::Statement::{ForCondition, ForCounter};
 use crate::parser::parser::Parser;
 use crate::parser::types::Type;
 use crate::parser::{Expression, ParseError};
+use std::cell::Cell;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Statement {
@@ -49,8 +50,13 @@ pub enum Statement {
     Fun {
         name: String,
         params: Vec<FunParam>,
-        return_type: Type,
+        return_type: Option<Type>,
         body: Vec<Statement>,
+    },
+
+    Struct {
+        name: String,
+        fields: Vec<FunParam>,
     },
 }
 
@@ -74,6 +80,14 @@ pub struct FunParam {
     pub param_type: Type,
 }
 
+pub type StructParam = FunParam;
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct MatchArm {
+    pub pattern: Expression,
+    pub body: Expression,
+}
+
 impl Parser {
     pub fn parse_statement(&mut self) -> Result<Statement, ParseError> {
         trace_before!(self, "parse_statement");
@@ -89,18 +103,18 @@ impl Parser {
         }
         let _guard = LocalGuard(&self.recursion_depth as *const Cell<i32>);
 
-        match &self.current_token {
+        match &self.current_token.token {
             Token::Let | Token::Const => {
-                let is_const = matches!(self.current_token, Token::Const);
+                let is_const = matches!(self.current_token.token, Token::Const);
                 self.next_token();
-                let name = match &self.current_token {
+                let name = match &self.current_token.token {
                     Token::Identifier(var_name) => var_name.clone(),
-                    _ => return Err(ParseError::UnexpectedToken(self.current_token.clone())),
+                    _ => return Err(self.unexpected(&self.current_token)),
                 };
 
                 self.next_token();
-                if !matches!(self.current_token, Token::Assign) {
-                    return Err(ParseError::UnexpectedToken(self.current_token.clone()));
+                if !matches!(self.current_token.token, Token::Assign) {
+                    return Err(self.unexpected(&self.current_token));
                 }
 
                 self.next_token();
@@ -120,6 +134,7 @@ impl Parser {
                 let value = self.parse_expression(Lowest)?;
                 Ok(Statement::Return { value })
             }
+            Token::Struct => self.parse_struct(),
             _ => {
                 let expr = self.parse_expression(Lowest)?;
                 Ok(Statement::ExpressionStatement { expression: expr })
@@ -142,20 +157,20 @@ impl Parser {
         let mut else_if = Vec::new();
         let mut else_block = None;
 
-        while matches!(self.current_token, Token::Else) {
+        while matches!(self.current_token.token, Token::Else) {
             self.expect(Token::Else)?;
 
-            if matches!(self.current_token, Token::If) {
+            if matches!(self.current_token.token, Token::If) {
                 let else_if_stmt = self.parse_else_if_statement()?;
 
                 else_if.push(else_if_stmt);
-            } else if matches!(self.current_token, Token::LeftBrace) {
+            } else if matches!(self.current_token.token, Token::LeftBrace) {
                 self.next_token();
                 else_block = Some(self.parse_block()?);
 
                 break;
             } else {
-                return Err(ParseError::UnexpectedToken(self.current_token.clone()));
+                return Err(self.unexpected(&self.current_token));
             }
         }
 
@@ -185,19 +200,19 @@ impl Parser {
     pub fn parse_for_statement(&mut self) -> Result<Statement, ParseError> {
         self.expect(Token::For)?;
 
-        if let Token::Identifier(var) = self.current_token.clone() {
-            if matches!(self.peek_token, Token::In) {
+        if let Token::Identifier(var) = self.current_token.token.clone() {
+            if matches!(self.peek_token.token, Token::In) {
                 self.expect(Token::Identifier("".to_string()))?;
-                self.expect(Token::In);
+                self.expect(Token::In)?;
 
                 self.parse_for_range(&var)
-            } else if matches!(self.peek_token, Token::Assign) {
+            } else if matches!(self.peek_token.token, Token::Assign) {
                 self.parse_for_counter(&var)
             } else {
                 self.parse_for_condition()
             }
         } else {
-            Err(ParseError::UnexpectedToken(self.current_token.clone()))
+            Err(self.unexpected(&self.current_token))
         }
     }
 
@@ -209,8 +224,8 @@ impl Parser {
         self.next_token();
         self.skip_newlines();
 
-        if !matches!(self.current_token, Token::LeftBrace) {
-            return Err(ParseError::UnexpectedToken(self.current_token.clone()));
+        if !matches!(self.current_token.token, Token::LeftBrace) {
+            return Err(self.unexpected(&self.current_token));
         }
 
         self.expect(Token::LeftBrace)?;
@@ -236,8 +251,8 @@ impl Parser {
 
         self.next_token();
 
-        if !matches!(self.current_token, Token::Semicolon) {
-            return Err(ParseError::UnexpectedToken(self.current_token.clone()));
+        if !matches!(self.current_token.token, Token::Semicolon) {
+            return Err(self.unexpected(&self.current_token));
         }
 
         self.expect(Token::Semicolon)?;
@@ -246,8 +261,8 @@ impl Parser {
 
         self.next_token();
 
-        if !matches!(self.current_token, Token::Semicolon) {
-            return Err(ParseError::UnexpectedToken(self.current_token.clone()));
+        if !matches!(self.current_token.token, Token::Semicolon) {
+            return Err(self.unexpected(&self.current_token));
         }
 
         self.expect(Token::Semicolon)?;
@@ -257,8 +272,8 @@ impl Parser {
         self.next_token();
         self.skip_newlines();
 
-        if !matches!(self.current_token, Token::LeftBrace) {
-            return Err(ParseError::UnexpectedToken(self.current_token.clone()));
+        if !matches!(self.current_token.token, Token::LeftBrace) {
+            return Err(self.unexpected(&self.current_token));
         }
         self.next_token();
 
@@ -277,8 +292,8 @@ impl Parser {
 
         self.next_token();
 
-        if !matches!(self.current_token, Token::LeftBrace) {
-            return Err(ParseError::UnexpectedToken(self.current_token.clone()));
+        if !matches!(self.current_token.token, Token::LeftBrace) {
+            return Err(self.unexpected(&self.current_token));
         }
 
         self.next_token();
@@ -290,44 +305,23 @@ impl Parser {
     pub fn parse_function(&mut self) -> Result<Statement, ParseError> {
         self.expect(Token::Fun)?;
 
-        let name = match self.current_token.clone() {
+        let name = match self.current_token.token.clone() {
             Token::Identifier(fun_name) => fun_name.clone(),
-            _ => return Err(ParseError::UnexpectedToken(self.current_token.clone())),
+            _ => return Err(self.unexpected(&self.current_token)),
         };
 
         self.next_token();
         self.expect(Token::LeftParen)?;
 
-        let mut params = Vec::new();
-
-        while !matches!(self.current_token, Token::RightParen) {
-            let param_name = match self.current_token.clone() {
-                Token::Identifier(name) => name,
-                _ => return Err(ParseError::UnexpectedToken(self.current_token.clone())),
-            };
-
-            self.next_token();
-            self.expect(Token::Colon)?;
-
-            let param_type = self.parse_type()?;
-
-            let param = FunParam {
-                name: param_name,
-                param_type,
-            };
-
-            params.push(param);
-
-            match self.current_token.clone() {
-                Token::Comma => self.expect(Token::Comma),
-                Token::RightParen => break,
-                _ => return Err(ParseError::UnexpectedToken(self.current_token.clone())),
-            }?;
-        }
+        let params = self.parse_fun_params()?;
 
         self.expect(Token::RightParen)?;
 
-        let return_type = self.parse_type()?;
+        let return_type = match self.current_token.token {
+            Token::LSB => Some(self.parse_type()?),
+            Token::LeftBrace => None,
+            _ => return Err(self.unexpected(&self.current_token)),
+        };
 
         self.expect(Token::LeftBrace)?;
         trace_before!(self, "parse_function");
@@ -342,13 +336,59 @@ impl Parser {
         })
     }
 
+    pub fn parse_struct(&mut self) -> Result<Statement, ParseError> {
+        self.expect(Token::Struct)?;
+
+        let name = match self.current_token.token.clone() {
+            Token::Identifier(struct_name) => struct_name,
+            _ => return Err(self.unexpected(&self.current_token)),
+        };
+
+        self.next_token();
+        self.expect(Token::LeftBrace)?;
+        self.skip_newlines();
+        let mut fields = Vec::new();
+
+        while !matches!(self.current_token.token, Token::RightBrace) {
+            let field_name = match self.current_token.token.clone() {
+                Token::Identifier(name) => name,
+                _ => return Err(self.unexpected(&self.current_token)),
+            };
+            self.next_token();
+            self.expect(Token::Colon)?;
+
+            let field_type = self.parse_type()?;
+            trace_before!(self, "parse_struct");
+
+            let field = StructParam {
+                name: field_name,
+                param_type: field_type,
+            };
+
+            fields.push(field);
+
+            match self.current_token.token.clone() {
+                Token::Comma => self.expect(Token::Comma),
+                Token::Newline => {
+                    self.skip_newlines();
+                    continue;
+                }
+                Token::RightBrace => break,
+                _ => return Err(self.unexpected(&self.current_token)),
+            }?;
+            self.skip_newlines();
+        }
+
+        Ok(Statement::Struct { name, fields })
+    }
+
     pub fn parse_block(&mut self) -> Result<Vec<Statement>, ParseError> {
         let mut statements = Vec::new();
 
         self.skip_newlines();
         trace_before!(self, "parse_block");
 
-        while !matches!(self.current_token, Token::RightBrace | Token::EOF) {
+        while !matches!(self.current_token.token, Token::RightBrace | Token::EOF) {
             let stmt = self.parse_statement()?;
 
             statements.push(stmt);
@@ -356,7 +396,7 @@ impl Parser {
             self.skip_newlines();
         }
 
-        if matches!(self.current_token, Token::RightBrace) {
+        if matches!(self.current_token.token, Token::RightBrace) {
             self.next_token();
         }
 

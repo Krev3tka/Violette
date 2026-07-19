@@ -4,7 +4,7 @@ mod tests {
     use crate::lexer::token::Token;
 
     #[test]
-    fn let_the_speed_mend_it() {
+    fn let_it_be() {
         let input = "let x = 42.5_f64
         let y = 100_u32
         let z = 3.14_f32
@@ -15,14 +15,14 @@ mod tests {
         let mut res: String = String::new();
 
         loop {
-            let token = lexer.next_token();
-            res.push_str(format!("Got token {:?}\n", token).as_str());
+            let spanned_token = lexer.next_token();
+            res.push_str(format!("Got token {:?}\n", spanned_token.token).as_str());
 
-            if token == Token::EOF {
+            if spanned_token.token == Token::EOF {
                 break;
             }
 
-            assert_ne!(token, Token::Illegal);
+            assert_ne!(spanned_token.token, Token::Illegal);
         }
 
         assert_eq!(
@@ -57,14 +57,14 @@ Got token EOF
         let mut res: String = String::new();
 
         loop {
-            let token = lexer.next_token();
-            res.push_str(format!("Got token {:?}\n", token).as_str());
+            let spanned_token = lexer.next_token();
+            res.push_str(format!("Got token {:?}\n", spanned_token.token).as_str());
 
-            if token == Token::EOF {
+            if spanned_token.token == Token::EOF {
                 break;
             }
 
-            assert_ne!(token, Token::Illegal);
+            assert_ne!(spanned_token.token, Token::Illegal);
         }
 
         assert_eq!(
@@ -95,7 +95,7 @@ Got token EOF
     }
 
     #[test]
-    fn the_new_order() {
+    fn bit_operations() {
         let input = "let a = 0b01101 # 0xAF & ~0o75
         if cond1 && cond2 || !cond3 {
             let res = 0x01
@@ -108,14 +108,14 @@ Got token EOF
         let mut res: String = String::new();
 
         loop {
-            let token = lexer.next_token();
-            res.push_str(format!("Got token {:?}\n", token).as_str());
+            let spanned_token = lexer.next_token();
+            res.push_str(format!("Got token {:?}\n", spanned_token.token).as_str());
 
-            if token == Token::EOF {
+            if spanned_token.token == Token::EOF {
                 break;
             }
 
-            assert_ne!(token, Token::Illegal);
+            assert_ne!(spanned_token.token, Token::Illegal);
         }
 
         assert_eq!(
@@ -160,7 +160,7 @@ Got token EOF
     }
 
     #[test]
-    fn piece_by_piece() {
+    fn mixer() {
         let input = "let a=5+10+0xFA0_3E2&~0o10";
 
         let mut lexer = Lexer::new(input);
@@ -168,14 +168,14 @@ Got token EOF
         let mut res: String = String::new();
 
         loop {
-            let token = lexer.next_token();
-            res.push_str(format!("Got token {:?}\n", token).as_str());
+            let spanned_token = lexer.next_token();
+            res.push_str(format!("Got token {:?}\n", spanned_token.token).as_str());
 
-            if token == Token::EOF {
+            if spanned_token.token == Token::EOF {
                 break;
             }
 
-            assert_ne!(token, Token::Illegal);
+            assert_ne!(spanned_token.token, Token::Illegal);
         }
 
         assert_eq!(
@@ -197,11 +197,11 @@ Got token EOF
     }
 
     #[test]
-    fn the_art_of_shredding() {
+    fn final_test() {
         let input = "
         /*
         literally Violette Language test i swear
-        /* additional commentary nesting /* and one more */ looks like it's done */
+        /* comments nesting /* and one more */ looks like it's done */
         */
 
         let hexVal = 0x1A_2B
@@ -219,14 +219,14 @@ Got token EOF
         let mut res: String = String::new();
 
         loop {
-            let token = lexer.next_token();
-            res.push_str(format!("Got token {:?}\n", token).as_str());
+            let spanned_token = lexer.next_token();
+            res.push_str(format!("Got token {:?}\n", spanned_token.token).as_str());
 
-            if token == Token::EOF {
+            if spanned_token.token == Token::EOF {
                 break;
             }
 
-            assert_ne!(token, Token::Illegal);
+            assert_ne!(spanned_token.token, Token::Illegal);
         }
 
         assert_eq!(

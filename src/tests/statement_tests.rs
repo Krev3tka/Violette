@@ -1,12 +1,12 @@
 #[cfg(test)]
 pub mod statement_tests {
     use crate::lexer::lexer::Lexer;
-    use crate::lexer::token::PrimitiveType::Int;
+    use crate::lexer::token::PrimitiveType::{Int, String};
     use crate::lexer::token::Token::{Add, Assign, Subtract};
     use crate::lexer::token::{PrimitiveType, Token};
     use crate::parser::Expression::{Identifier, Infix, IntLiteral};
     use crate::parser::parser::Parser;
-    use crate::parser::statement::FunParam;
+    use crate::parser::statement::{FunParam, StructParam};
     use crate::parser::types::Type::{Primitive, Union};
     use crate::parser::types::{Type, TypePath};
     use crate::parser::{ElseIf, Expression, IfStatement, Statement};
@@ -32,7 +32,7 @@ pub mod statement_tests {
     }
 
     #[test]
-    fn let_the_speed_mend_it() {
+    fn basic_statements() {
         let test_cases = vec![
             (
                 "let x = 5",
@@ -210,7 +210,7 @@ if a > 7 {
     }
 
     #[test]
-    fn fun_fetch_user_II() {
+    fn fun_fetch_user_ii() {
         let input = "fun fetch_user(db: Sql.databases.psql, count: int) [Win(User) | Fail(NotFound) | Fail(NotConnected)] {
     return count + 5
 }";
@@ -241,7 +241,7 @@ if a > 7 {
                     }
                 ],
 
-                return_type: Type::Union(vec![
+                return_type: Some(Union(vec![
                     Type::Generic {
                         name: "Win".to_string(),
                         param: Box::new(Type::Named(TypePath {
@@ -260,7 +260,7 @@ if a > 7 {
                             segments: vec!["NotConnected".to_string()]
                         }))
                     }
-                ]),
+                ])),
 
                 body: vec![Statement::Return {
                     value: Expression::Infix {
@@ -323,7 +323,7 @@ if a > 7 {
                             param_type: Type::Primitive(Int),
                         },
                     ],
-                    return_type: Union(vec![
+                    return_type: Some(Union(vec![
                         Type::Generic {
                             name: "Win".to_string(),
                             param: Box::new(Primitive(Int)),
@@ -334,7 +334,7 @@ if a > 7 {
                                 segments: vec!["NotFound".to_string()],
                             })),
                         },
-                    ]),
+                    ])),
                     body: vec![
                         Statement::Let {
                             name: "left".to_string(),
@@ -456,6 +456,42 @@ if a > 7 {
                         }],
                     }],
                 },
+            },
+        )];
+
+        test_cases.into_iter().for_each(|(input, expected)| {
+            let lexer = Lexer::new(input);
+            let mut parser = Parser::new(lexer);
+            let actual = parser.parse_statement();
+
+            assert_eq!(actual.unwrap(), expected, "Failing case: {}", input)
+        })
+    }
+
+    #[test]
+    fn structuring_answer() {
+        let test_cases = vec![(
+            "struct Person {
+    name: string,
+    age: int,
+    weight: int
+}",
+            Statement::Struct {
+                name: "Person".to_string(),
+                fields: vec![
+                    StructParam {
+                        name: "name".to_string(),
+                        param_type: Primitive(String),
+                    },
+                    StructParam {
+                        name: "age".to_string(),
+                        param_type: Primitive(Int),
+                    },
+                    StructParam {
+                        name: "weight".to_string(),
+                        param_type: Primitive(Int),
+                    },
+                ],
             },
         )];
 

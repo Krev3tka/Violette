@@ -1,18 +1,17 @@
-fun BinarySearch(arr: std.vector, target: int) [Win(int) | Fail(NotFound)] {
-    let left = 0
-    let right = len(arr)
+struct Config {
+    file: File
+    name: `toml:string`
+    age: `toml:int`
+}
 
-    for left < right {
-        let mid = left + (right - left) / 2
+fun BuildConfig(c: &Config, name: string, age: int) [Win(Config) | Fail] {
+    // ...
+}
 
-        if arr[mid] < target {
-            left = mid + 1
-        } else if arr[mid] > target {
-            right = mid - 1
-        } else {
-            return Win(mid)
-        }
+fun main() {
+    let cfg = Config {
+        // ...
     }
 
-    return Fail(NotFound)
+    let cfg = cfg.BuildConfig("debil", 67)
 }

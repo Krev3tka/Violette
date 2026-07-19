@@ -18,11 +18,11 @@ pub enum Token {
     Fun,
     Return,
     Bloom,
+    Cherry,
 
     // structs
     Struct,
     Interface,
-    Enum,
     Type,
     Open,
     Local,
@@ -65,6 +65,7 @@ pub enum Token {
     Dot,             // .
     Comma,           // ,
     Sprout,          // ~>
+    FatArrow,        // =>
 
     Add,       // +
     Subtract,  // -
