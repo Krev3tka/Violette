@@ -261,7 +261,6 @@ impl Parser {
         let mut arms = Vec::new();
 
         while !matches!(self.current_token.token, Token::RightBrace | Token::EOF) {
-            trace_before!(self, "parse_match_expression");
             let pattern = self.parse_pattern()?;
             self.next_token();
             self.expect(Token::FatArrow)?;
@@ -278,7 +277,6 @@ impl Parser {
             };
             arms.push(MatchArm { pattern, body });
             self.skip_arm_separators();
-            trace_before!(self, "parse_match_expression");
         }
 
         if !matches!(self.current_token.token, Token::RightBrace | Token::EOF) {

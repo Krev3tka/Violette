@@ -503,4 +503,24 @@ if a > 7 {
             assert_eq!(actual.unwrap(), expected, "Failing case: {}", input)
         })
     }
+
+    #[test]
+    fn function_body_keeps_all_statements() {
+        let input = "fun outer() {\
+            if c {\
+                y()\
+            }\
+            z()\
+        }";
+
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
+
+        let stmt = parser.parse_statement().expect("outer must be parsed");
+
+        match stmt {
+            Statement::Fun { body, .. } => assert_eq!(body.len(), 2),
+            other => panic!("expected Fun, got {:?}", other),
+        }
+    }
 }

@@ -7,6 +7,13 @@ use crate::parser::types::Type;
 use crate::parser::{Expression, ParseError};
 use std::cell::Cell;
 
+pub struct Program {
+    package: Option<Statement>,
+    imports: Vec<Statement>,
+    declarations: Vec<Statement>,
+    main: Vec<Statement>
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum Statement {
     ExpressionStatement {
@@ -90,7 +97,6 @@ pub struct MatchArm {
 
 impl Parser {
     pub fn parse_statement(&mut self) -> Result<Statement, ParseError> {
-        trace_before!(self, "parse_statement");
         self.recursion_depth.set(self.recursion_depth.get() + 1);
 
         struct LocalGuard(*const Cell<i32>);
@@ -119,6 +125,7 @@ impl Parser {
 
                 self.next_token();
                 let value = self.parse_expression(Lowest)?;
+                self.next_token();
 
                 if is_const {
                     Ok(Statement::Const { name, value })
@@ -132,11 +139,13 @@ impl Parser {
             Token::Return => {
                 self.next_token();
                 let value = self.parse_expression(Lowest)?;
+                self.next_token();
                 Ok(Statement::Return { value })
             }
             Token::Struct => self.parse_struct(),
             _ => {
                 let expr = self.parse_expression(Lowest)?;
+                self.next_token();
                 Ok(Statement::ExpressionStatement { expression: expr })
             }
         }
@@ -148,7 +157,6 @@ impl Parser {
         let condition = self.parse_expression(Lowest)?;
 
         self.next_token();
-        trace_before!(self, "if_statement");
 
         self.expect(Token::LeftBrace)?;
 
@@ -188,8 +196,6 @@ impl Parser {
         let condition = self.parse_expression(Lowest)?;
 
         self.next_token();
-        trace_before!(self, "else_if_statement");
-
         self.expect(Token::LeftBrace)?;
 
         let block = self.parse_block()?;
@@ -312,19 +318,16 @@ impl Parser {
 
         self.next_token();
         self.expect(Token::LeftParen)?;
-
         let params = self.parse_fun_params()?;
 
         self.expect(Token::RightParen)?;
 
         let return_type = match self.current_token.token {
-            Token::LSB => Some(self.parse_type()?),
             Token::LeftBrace => None,
-            _ => return Err(self.unexpected(&self.current_token)),
+            _ => Some(self.parse_type()?),
         };
 
         self.expect(Token::LeftBrace)?;
-        trace_before!(self, "parse_function");
 
         let body = self.parse_block()?;
 
@@ -358,7 +361,6 @@ impl Parser {
             self.expect(Token::Colon)?;
 
             let field_type = self.parse_type()?;
-            trace_before!(self, "parse_struct");
 
             let field = StructParam {
                 name: field_name,
@@ -386,13 +388,11 @@ impl Parser {
         let mut statements = Vec::new();
 
         self.skip_newlines();
-        trace_before!(self, "parse_block");
 
         while !matches!(self.current_token.token, Token::RightBrace | Token::EOF) {
             let stmt = self.parse_statement()?;
 
             statements.push(stmt);
-            self.next_token();
             self.skip_newlines();
         }
 

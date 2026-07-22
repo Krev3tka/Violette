@@ -58,16 +58,24 @@ impl Parser {
             let mut variants = Vec::new();
 
             variants.push(self.parse_single_type()?);
+            self.skip_newlines();
 
             while matches!(self.current_token.token, Token::Pipe) {
                 self.next_token();
                 variants.push(self.parse_single_type()?);
+                self.skip_newlines();
             }
 
             self.expect(Token::RSB)?;
 
-            return Ok(Type::Union(variants));
+            if variants.len() == 1 {
+                return Ok(variants.remove(0));
+            } else {
+                return Ok(Type::Union(variants));
+            }
         }
+
+        self.skip_newlines();
 
         let first = self.parse_single_type()?;
 
