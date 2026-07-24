@@ -4,6 +4,7 @@ use crate::parser::Precedence::{Lowest, Prefix};
 use crate::parser::parser::Parser;
 use crate::parser::statement::{FunParam, MatchArm};
 use crate::parser::{ParseError, Precedence, Statement};
+use crate::parser::types::Type;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expression {
@@ -58,6 +59,12 @@ pub enum Expression {
         name: String,
         args: Vec<Expression>,
     },
+
+    Lambda {
+        params: Vec<FunParam>,
+        return_type: Option<Type>,
+        body: Vec<Statement>
+    }
 }
 
 pub fn token_precedence(token: &Token) -> Precedence {
@@ -128,6 +135,7 @@ impl Parser {
                 }
             }
             Token::Match => self.parse_match_expression()?,
+            Token::Fun => self.parse_lambda()?,
             _ => return Err(self.unexpected(&self.current_token)),
         };
 
@@ -357,6 +365,29 @@ impl Parser {
             }
         }
         Ok(args)
+    }
+
+    pub fn parse_lambda(&mut self) -> Result<Expression, ParseError> {
+        self.expect(Token::Fun)?;
+        self.expect(Token::LeftParen)?;
+        let params = self.parse_fun_params()?;
+        self.expect(Token::RightParen)?;
+        let mut return_type = None;
+
+        if matches!(self.current_token.token, Token::LSB) {
+            self.next_token();
+            return_type = Some(self.parse_type()?);
+            self.expect(Token::RSB)?;
+        }
+        self.expect(Token::LeftBrace)?;
+        
+        let body = self.parse_block()?;
+        Ok(Expression::Lambda {
+            params,
+            return_type,
+            body
+        })
+
     }
 
     fn skip_arm_separators(&mut self) {

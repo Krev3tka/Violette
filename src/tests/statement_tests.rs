@@ -6,10 +6,10 @@ pub mod statement_tests {
     use crate::lexer::token::{PrimitiveType, Token};
     use crate::parser::Expression::{Identifier, Infix, IntLiteral};
     use crate::parser::parser::Parser;
-    use crate::parser::statement::{FunParam, StructParam};
+    use crate::parser::statement::{ElseIf, FunParam, IfStatement, StructParam};
     use crate::parser::types::Type::{Primitive, Union};
     use crate::parser::types::{Type, TypePath};
-    use crate::parser::{ElseIf, Expression, IfStatement, Statement};
+    use crate::parser::{Expression, Statement};
 
     fn ident(s: &str) -> Expression {
         Identifier(s.to_string())
@@ -45,14 +45,14 @@ pub mod statement_tests {
                 "const THREE_HOURS_IN_SECONDS = 3 * 24 * 60 ** 2",
                 Statement::Const {
                     name: "THREE_HOURS_IN_SECONDS".to_string(),
-                    value: Expression::Infix {
-                        left: Box::new(Expression::Infix {
+                    value: Infix {
+                        left: Box::new(Infix {
                             left: Box::new(IntLiteral(3)),
                             operator: Token::Multiply,
                             right: Box::new(IntLiteral(24)),
                         }),
                         operator: Token::Multiply,
-                        right: Box::new(Expression::Infix {
+                        right: Box::new(Infix {
                             left: Box::new(IntLiteral(60)),
                             operator: Token::Power,
                             right: Box::new(IntLiteral(2)),
@@ -263,11 +263,11 @@ if a > 7 {
                 ])),
 
                 body: vec![Statement::Return {
-                    value: Expression::Infix {
+                    value: Some(Expression::Infix {
                         left: Box::new(Identifier("count".to_string())),
                         operator: Token::Add,
                         right: Box::new(IntLiteral(5))
-                    }
+                    })
                 }]
             }
         )
@@ -412,19 +412,19 @@ if a > 7 {
                                         }],
                                     }],
                                     else_block: Some(vec![Statement::Return {
-                                        value: Expression::Call {
+                                        value: Some(Expression::Call {
                                             function: Box::new(Identifier("Win".to_string())),
                                             args: vec![Identifier("mid".to_string())],
-                                        },
+                                        }),
                                     }]),
                                 }),
                             ],
                         },
                         Statement::Return {
-                            value: Expression::Call {
+                            value: Some(Expression::Call {
                                 function: Box::new(Identifier("Fail".to_string())),
                                 args: vec![Identifier("NotFound".to_string())],
-                            },
+                            }),
                         },
                     ],
                 },

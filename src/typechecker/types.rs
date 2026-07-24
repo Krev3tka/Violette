@@ -11,5 +11,9 @@ pub enum Ty {
         name: String,
         param: Box<Ty>,
     },
+    Fn {
+        params: Vec<Ty>,
+        ret: Box<Ty>,
+    },
     Error,
 }

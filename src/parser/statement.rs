@@ -1,4 +1,3 @@
-use crate::lexer::span::Span;
 use crate::lexer::token::Token;
 use crate::parser::Precedence::Lowest;
 use crate::parser::Statement::{ForCondition, ForCounter};
@@ -6,13 +5,6 @@ use crate::parser::parser::Parser;
 use crate::parser::types::Type;
 use crate::parser::{Expression, ParseError};
 use std::cell::Cell;
-
-pub struct Program {
-    package: Option<Statement>,
-    imports: Vec<Statement>,
-    declarations: Vec<Statement>,
-    main: Vec<Statement>
-}
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Statement {
@@ -51,7 +43,7 @@ pub enum Statement {
     },
 
     Return {
-        value: Expression,
+        value: Option<Expression>,
     },
 
     Fun {
@@ -135,12 +127,30 @@ impl Parser {
             }
             Token::If => self.parse_if_statement(),
             Token::For => self.parse_for_statement(),
-            Token::Fun => self.parse_function(),
+            Token::Fun if matches!(self.peek_token.token, Token::Identifier(_)) => {
+                self.parse_function()
+            },
             Token::Return => {
                 self.next_token();
-                let value = self.parse_expression(Lowest)?;
-                self.next_token();
-                Ok(Statement::Return { value })
+                let value = match self.parse_expression(Lowest) {
+                    Ok(expr) =>  {
+                        self.next_token();
+                        expr
+                    },
+                    Err(e) => {
+                        if matches!(self.current_token.token, Token::Newline | Token::EOF | Token::RightBrace) {
+                            return Ok(Statement::Return {
+                                value: None
+                            })
+                        }
+
+                        return Err(e)
+                    }
+                };
+
+                Ok(Statement::Return {
+                    value: Some(value)
+                })
             }
             Token::Struct => self.parse_struct(),
             _ => {
@@ -382,6 +392,62 @@ impl Parser {
         }
 
         Ok(Statement::Struct { name, fields })
+    }
+
+    pub fn parse_package(&mut self) -> Result<String, ParseError> {
+        self.skip_newlines();
+        self.expect(Token::Package)?;
+
+        let name = match self.current_token.token.clone() {
+            Token::Identifier(n) => n,
+            _ => return Err(ParseError::UnexpectedToken {
+                token: self.current_token.token.clone(),
+                span: self.current_token.span
+            })
+        };
+
+        Ok(name)
+    }
+
+    pub fn parse_imports(&mut self) -> Result<Vec<String>, ParseError> {
+        self.expect(Token::Import)?;
+
+        let mut packages = Vec::new();
+
+        if matches!(self.current_token.token, Token::LeftParen) {
+            self.expect(Token::LeftParen)?;
+            self.skip_newlines();
+
+            while !matches!(self.current_token.token, Token::RightParen) {
+                let name = match self.current_token.token.clone() {
+                    Token::Identifier(v) => v,
+                    _ => return Err(self.unexpected(&self.current_token)),
+                };
+
+                self.next_token();
+
+                packages.push(name);
+
+                match self.current_token.token.clone() {
+                    Token::Comma => self.expect(Token::Comma),
+                    Token::Newline => { self.skip_newlines(); continue; }
+                    Token::RightParen => break,
+                    _ => return Err(self.unexpected(&self.current_token)),
+                }?;
+
+                self.skip_newlines();
+            }
+        } else {
+            packages.push(match self.current_token.token.clone() {
+                Token::Identifier(v) => v,
+                _ => return Err(ParseError::UnexpectedToken {
+                    token: self.current_token.token.clone(),
+                    span: self.current_token.span
+                })
+            });
+        }
+
+        Ok(packages)
     }
 
     pub fn parse_block(&mut self) -> Result<Vec<Statement>, ParseError> {

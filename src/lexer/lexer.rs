@@ -65,7 +65,6 @@ impl Lexer {
                 if self.current == '\0' {
                     Token::Illegal
                 } else {
-                    self.read_char();
                     Token::String(string_val)
                 }
             }

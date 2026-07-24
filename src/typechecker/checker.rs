@@ -5,7 +5,7 @@ use crate::typechecker::env::Env;
 pub(crate) use crate::typechecker::error::TypeError;
 use crate::typechecker::types::Ty;
 use std::collections::HashMap;
-use std::ops::Deref;
+use crate::parser::program::Program;
 
 #[derive(Clone, Debug)]
 pub struct FnSig {
@@ -34,10 +34,22 @@ impl Checker {
                     return_type,
                     ..
                 } => {
-                    let params = params.iter().map(|p| self.resolve(&p.param_type)).collect();
+                    let params: Vec<_> = params.iter().map(|p| self.resolve(&p.param_type)).collect();
 
                     let ret = return_type.as_ref().map_or(Ty::Unit, |t| self.resolve(t));
 
+                    let f = Ty::Fn {
+                        params: params.clone(),
+                        ret: Box::new(return_type.as_ref().map_or(Ty::Unit, |t| self.resolve(t)))
+                    };
+
+
+                    if self.funcs.contains_key(name) {
+                        self.errors.push(TypeError::DuplicateDefinition(name.clone()));
+                        continue
+                    }
+
+                    self.env.define(name.clone(), f);
                     self.funcs.insert(name.clone(), FnSig { params, ret });
                 }
 
@@ -46,6 +58,10 @@ impl Checker {
                         .iter()
                         .map(|f| (f.name.clone(), self.resolve(&f.param_type)))
                         .collect();
+                    if self.structs.contains_key(name) {
+                        self.errors.push(TypeError::DuplicateDefinition(name.clone()));
+                        continue
+                    }
                     self.structs.insert(name.clone(), fields);
                 }
                 _ => {}
@@ -69,6 +85,15 @@ impl Checker {
             Type::Primitive(PrimitiveType::Bool) => Ty::Bool,
 
             Type::Named(path) => Ty::Struct(path.segments[0].clone()),
+            Type::Fn {
+                params,
+                ret
+            } => {
+                Ty::Fn {
+                    params: params.iter().map(|t| self.resolve(t)).collect(),
+                    ret: Box::new(ret.as_ref().map_or(Ty::Unit, |t| self.resolve(t)))
+                }
+            }
             Type::Union(types) => {
                 let resolved = types.iter().map(|v| self.resolve(v)).collect();
 
@@ -133,7 +158,10 @@ impl Checker {
                 }
             }
             Statement::Return { value } => {
-                let ty = self.infer(value);
+                let ty = match value {
+                    Some(v) => self.infer(v),
+                    None => Ty::Unit
+                };
 
                 let cur_ref = &self.current_ret.clone();
 
@@ -152,13 +180,23 @@ impl Checker {
         self.env.pop();
     }
 
-    pub fn check_program(&mut self, program: &[Statement]) {
-        self.collect_signatures(program);
-        for stmt in program {
+    pub fn check_program(&mut self, program: &Program) {
+        self.env.push();
+        self.collect_signatures(&program.declarations);
+        for stmt in &program.declarations {
             if let Statement::Fun { .. } = stmt {
-                self.check_fn(stmt);
+                self.check_fn(&stmt);
             }
         }
+        if program.main.len() > 0 && self.funcs.contains_key("main") {
+            self.errors.push(TypeError::ConflictingEntryPoint);
+        }
+        
+        self.current_ret = Ty::Unit;
+        for stmt in &program.main {
+            self.check_statement(stmt);
+        }
+        self.env.pop()
     }
 
     pub fn infer(&mut self, expr: &Expression) -> Ty {
@@ -217,37 +255,80 @@ impl Checker {
                 }
             }
             Expression::Call { function, args} => {
-                let name = match function.as_ref() {
-                    Expression::Identifier(name) => name.clone(),
+                let callee = self.infer(function);
+                match callee {
+                    Ty::Fn {
+                        params,
+                        ret
+                    } => {
+                        if args.len() != params.len() {
+                            self.errors.push(TypeError::ArityMismatch {
+                                name: match function.as_ref() {
+                                    Expression::Identifier(n) => n.to_string(),
+                                    _ => "<function value>".to_string(),
+                                },
+                                expected: params.len(),
+                                found: args.len(),
+                            });
+                            return *ret
+                        }
+
+                        for (arg, param) in args.iter().zip(params.iter()) {
+                            let a = self.infer(arg);
+                            self.expect(&a, param);
+                        }
+                        *ret
+                    }
+                    Ty::Error => Ty::Error,
                     _ => {
                         self.errors.push(TypeError::NotCallable);
-                        return Ty::Error
+                        Ty::Error
                     }
-                };
+                }
+            }
+            Expression::Lambda {
+                params,
+                return_type,
+                body
+            } => {
+                let param_tys: Vec<Ty> = params.iter().map(|p| self.resolve(&p.param_type)).collect();
+                let ret = return_type.as_ref().map_or(Ty::Unit, |t| self.resolve(t));
 
-                let sig = match self.funcs.get(&name) {
-                    Some(s) => s.clone(),
-                    None => {
-                        self.errors.push(TypeError::UnknownName(name));
-                        return Ty::Error
-                    }
-                };
+                let saved_ret = self.current_ret.clone();
+                self.current_ret = ret.clone();
 
-                if args.len() != sig.params.len() {
-                    self.errors.push(TypeError::ArityMismatch {
-                        name,
-                        expected: sig.params.len(),
-                        found: args.len()
-                    });
-                    return Ty::Error
+                self.env.push();
+
+                for (p, ty) in params.iter().zip(param_tys.iter()) {
+                    self.env.define(p.name.clone(), ty.clone());
                 }
 
-                for (arg, param) in args.iter().zip(sig.params.iter()) {
-                    let arg_ty = self.infer(arg);
-                    self.expect(&arg_ty, param)
+                for s in body {
+                    self.check_statement(s);
                 }
+                self.env.pop();
 
-                sig.ret
+                self.current_ret = saved_ret;
+
+                Ty::Fn {
+                    params: param_tys,
+                    ret: Box::new(ret)
+                }
+            }
+            Expression::Field {
+                object,
+                name
+            } => {
+                self.errors.push(TypeError::Unsupported("Struct fields calls".to_string()));
+                Ty::Error
+            },
+            Expression::MethodCall {
+                object,
+                name,
+                args
+            } => {
+                self.errors.push(TypeError::Unsupported("Method calls".to_string()));
+                Ty::Error
             }
             _ => Ty::Error,
         }

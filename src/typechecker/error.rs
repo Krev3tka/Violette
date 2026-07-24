@@ -14,4 +14,6 @@ pub enum TypeError {
         found: usize,
     },
     Unsupported(String),
+    DuplicateDefinition(String),
+    ConflictingEntryPoint
 }

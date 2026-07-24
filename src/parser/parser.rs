@@ -52,6 +52,39 @@ impl Parser {
     }
 
     pub fn parse_type(&mut self) -> Result<Type, ParseError> {
+        if matches!(self.current_token.token, Token::Fun) {
+            self.next_token();
+            self.expect(Token::LeftParen)?;
+
+            let mut types = Vec::new();
+
+            if !matches!(self.current_token.token, Token::RightParen) {
+                loop {
+                    types.push(self.parse_type()?);
+                    if matches!(self.current_token.token, Token::Comma) {
+                        self.next_token();
+                    } else {
+                        break;
+                    }
+                }
+            }
+            self.expect(Token::RightParen)?;
+
+            let mut ret = None;
+
+            if matches!(self.current_token.token, Token::LSB) {
+                self.next_token();
+
+                ret = Some(Box::new(self.parse_type()?));
+                self.expect(Token::RSB)?;
+            }
+
+            return Ok(Type::Fn {
+                params: types,
+                ret,
+            })
+        }
+
         if matches!(self.current_token.token, Token::LSB) {
             self.next_token();
 
@@ -148,20 +181,6 @@ impl Parser {
 
             _ => Err(self.unexpected(&self.current_token)),
         }
-    }
-
-    pub fn parse_program(&mut self) -> Result<Vec<Statement>, ParseError> {
-        let mut statements = Vec::new();
-
-        self.skip_newlines();
-
-        while !matches!(self.current_token.token, Token::EOF) {
-            let stmt = self.parse_statement()?;
-            statements.push(stmt);
-
-            self.skip_newlines();
-        }
-        Ok(statements)
     }
 
     pub fn next_token(&mut self) {

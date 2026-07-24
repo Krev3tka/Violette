@@ -63,6 +63,11 @@ pub enum Type {
 
     Named(TypePath),
 
+    Fn {
+        params: Vec<Type>,
+        ret: Option<Box<Type>>
+    },
+
     Generic { name: String, param: Box<Type> },
 
     Union(Vec<Type>),

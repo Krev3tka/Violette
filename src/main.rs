@@ -1,8 +1,6 @@
 use crate::lexer::lexer::Lexer;
-use crate::parser::Statement;
 use crate::parser::parser::Parser;
-use crate::typechecker::checker::{Checker, FnSig, StructSig, TypeError};
-use std::collections::HashMap;
+use crate::typechecker::checker::{Checker, TypeError};
 
 mod lexer;
 mod parser;
@@ -24,28 +22,38 @@ fn check(input: &str) -> Vec<TypeError> {
 
 fn main() {
     let inputs = vec![
-        "fun f(x: int) [int] {
-            let y = x + 1
-            return y
-        }",
-        "fun f(x: int) int | bool { return true }",
-        "fun f(x: int) [string | bool | int] { return x + 1}",
-        "fun f(x: int) string { return \"hello\" + \"world\"}",
-        "fun f() [bool] { return 1 }",
-        "fun f() bool { return 1 <= 2 }",
-        "fun g() int { return true + 1 }",
+        "package main
 
-        "fun f() int {
-            if 5 > 4 {
-                return 5
-            } else if 3 < 2 {
-                return 32
-            } else {
-                return 4
-            }
+        let x = true + 5",
+
+        "package double
+
+        fun double(x: int) int {
+            return x * 2
+        }
+
+        print(double(6))",
+
+        "package t
+
+        fun main() {
+
         }",
-        "fun caller() int { return f(1, 2) }
-        fun f(x: int) int { return x }"
+
+        "package config
+
+        import (
+            os,
+            strings,
+            time,
+            math
+        )
+
+        fun main() {
+            let content = os.ReadFile(\"log.txt\")
+        }
+
+        let x = 3 + 2"
     ];
 
     let mut errors = vec![];
