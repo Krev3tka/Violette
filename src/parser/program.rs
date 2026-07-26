@@ -6,7 +6,7 @@ pub struct Program {
     pub package: String,
     pub imports: Vec<String>,
     pub declarations: Vec<Statement>,
-    pub main: Vec<Statement>
+    pub main: Vec<Statement>,
 }
 
 impl Parser {
@@ -14,7 +14,7 @@ impl Parser {
         let package = self.parse_package()?;
 
         self.next_token();
-        self.skip_newlines();
+        self.skip_terminators();
 
         let imports = match self.current_token.token.clone() {
             Token::Import => {
@@ -22,22 +22,23 @@ impl Parser {
                 self.next_token();
 
                 res
-            },
-            _ => vec![]
+            }
+            _ => vec![],
         };
 
-        self.skip_newlines();
+        self.skip_terminators();
 
         let mut declarations = Vec::new();
 
-        while matches!(self.current_token.token, Token::Fun | Token::Struct | Token::Const) {
-            declarations.push(
-                self.parse_statement()?
-            );
-            self.skip_newlines();
+        while matches!(
+            self.current_token.token,
+            Token::Fun | Token::Struct | Token::Const
+        ) {
+            declarations.push(self.parse_statement()?);
+            self.skip_terminators();
         }
 
-        self.skip_newlines();
+        self.skip_terminators();
 
         let mut main = vec![];
 
@@ -49,7 +50,7 @@ impl Parser {
             package,
             imports,
             declarations,
-            main
+            main,
         })
     }
 }

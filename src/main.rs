@@ -24,22 +24,23 @@ fn main() {
     let inputs = vec![
         "package main
 
-        let x = true + 5",
-
+        let x = true != 5",
         "package double
 
-        fun double(x: int) int {
+        fun double(x: int) [int] {
             return x * 2
         }
 
         print(double(6))",
-
         "package t
 
+        fun apply(f: fun (int) [int], x: int) [int | string | bool] {
+            return f(x)
+        }
+
         fun main() {
-
+            print(apply(print, 5))
         }",
-
         "package config
 
         import (
@@ -49,11 +50,46 @@ fn main() {
             math
         )
 
-        fun main() {
-            let content = os.ReadFile(\"log.txt\")
+        fun now() [time.Time] {
+            return time.Now
         }
 
-        let x = 3 + 2"
+        fun main() {
+            let content = os.ReadFile(\"log.txt\")
+            let res = os.ReadFile(\"x\") == 5
+
+            let time = now(5)
+        }
+
+        let x = 3 + 2",
+        "package Point
+
+        struct Point {
+            x: int,
+            y: int
+        };
+
+        fun getX(p: Point) [int] {
+            return p.x + 1;
+        }
+
+        fun getXInCondition(p: Point) [int] {
+            if p.x > 5 {
+                return p.x
+            }
+        }
+
+        fun getNotX(p: Point) [int] {
+            return p.i
+        }
+
+        fun getXNotFromPoint(p: Point) [int] {
+            return o.x
+        }
+
+        fun getXFromPrimitive(p: int) [int] {
+            return p.x
+        }",
     ];
 
     let mut errors = vec![];

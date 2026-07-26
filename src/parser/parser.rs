@@ -4,7 +4,8 @@ use crate::lexer::token::{PrimitiveType, Token};
 use crate::parser::expression::token_precedence;
 use crate::parser::types::{ParseError, Type, TypePath};
 use crate::parser::{Precedence, Statement};
-use std::cell::Cell;
+
+pub const MAX_DEPTH: u32 = 64;
 
 macro_rules! primitive {
     ($self:expr, $variant:expr) => {{
@@ -24,7 +25,7 @@ pub struct Parser {
     lexer: Lexer,
     pub current_token: SpannedToken,
     pub peek_token: SpannedToken,
-    pub recursion_depth: Cell<i32>,
+    pub depth: u32,
 }
 
 impl Parser {
@@ -36,7 +37,7 @@ impl Parser {
             lexer,
             current_token: curr_spanned_token,
             peek_token: peek_spanned_token,
-            recursion_depth: Cell::new(0),
+            depth: 0,
         }
     }
 
@@ -52,6 +53,20 @@ impl Parser {
     }
 
     pub fn parse_type(&mut self) -> Result<Type, ParseError> {
+        self.depth += 1;
+
+        if self.depth > MAX_DEPTH {
+            self.depth -= 1;
+            return Err(ParseError::TooDeep {
+                span: self.current_token.span,
+            });
+        }
+        let result = self.parse_type_inner();
+        self.depth -= 1;
+        result
+    }
+
+    fn parse_type_inner(&mut self) -> Result<Type, ParseError> {
         if matches!(self.current_token.token, Token::Fun) {
             self.next_token();
             self.expect(Token::LeftParen)?;
@@ -79,10 +94,7 @@ impl Parser {
                 self.expect(Token::RSB)?;
             }
 
-            return Ok(Type::Fn {
-                params: types,
-                ret,
-            })
+            return Ok(Type::Fn { params: types, ret });
         }
 
         if matches!(self.current_token.token, Token::LSB) {
@@ -91,12 +103,12 @@ impl Parser {
             let mut variants = Vec::new();
 
             variants.push(self.parse_single_type()?);
-            self.skip_newlines();
+            self.skip_terminators();
 
             while matches!(self.current_token.token, Token::Pipe) {
                 self.next_token();
                 variants.push(self.parse_single_type()?);
-                self.skip_newlines();
+                self.skip_terminators();
             }
 
             self.expect(Token::RSB)?;
@@ -108,7 +120,7 @@ impl Parser {
             }
         }
 
-        self.skip_newlines();
+        self.skip_terminators();
 
         let first = self.parse_single_type()?;
 
@@ -127,6 +139,20 @@ impl Parser {
     }
 
     pub fn parse_single_type(&mut self) -> Result<Type, ParseError> {
+        self.depth += 1;
+
+        if self.depth > MAX_DEPTH {
+            self.depth -= 1;
+            return Err(ParseError::TooDeep {
+                span: self.current_token.span,
+            });
+        }
+        let result = self.parse_single_type_inner();
+        self.depth -= 1;
+        result
+    }
+
+    fn parse_single_type_inner(&mut self) -> Result<Type, ParseError> {
         match self.current_token.token.clone() {
             Token::PrimitiveType(PrimitiveType::Int) => primitive!(self, PrimitiveType::Int),
             Token::PrimitiveType(PrimitiveType::Int8) => primitive!(self, PrimitiveType::Int8),
@@ -171,7 +197,7 @@ impl Parser {
                     self.expect(Token::RightParen)?;
 
                     Ok(Type::Generic {
-                        name,
+                        name: segments.last().unwrap().clone(),
                         param: Box::new(param),
                     })
                 } else {
@@ -187,8 +213,8 @@ impl Parser {
         self.current_token = std::mem::replace(&mut self.peek_token, self.lexer.next_token())
     }
 
-    pub fn skip_newlines(&mut self) {
-        while matches!(self.current_token.token, Token::Newline) {
+    pub fn skip_terminators(&mut self) {
+        while matches!(self.current_token.token, Token::Newline | Token::Semicolon) {
             self.next_token();
         }
     }

@@ -1,5 +1,5 @@
 #[cfg(test)]
-pub mod statement_tests {
+pub mod statements_tests {
     use crate::lexer::lexer::Lexer;
     use crate::lexer::token::PrimitiveType::{Int, String};
     use crate::lexer::token::Token::{Add, Assign, Subtract};
@@ -10,26 +10,7 @@ pub mod statement_tests {
     use crate::parser::types::Type::{Primitive, Union};
     use crate::parser::types::{Type, TypePath};
     use crate::parser::{Expression, Statement};
-
-    fn ident(s: &str) -> Expression {
-        Identifier(s.to_string())
-    }
-    fn int(n: isize) -> Expression {
-        IntLiteral(n)
-    }
-    fn infix(l: Expression, op: Token, r: Expression) -> Expression {
-        Expression::Infix {
-            left: Box::new(l),
-            operator: op,
-            right: Box::new(r),
-        }
-    }
-    fn let_stmt(name: &str, val: Expression) -> Statement {
-        Statement::Let {
-            name: name.to_string(),
-            value: val,
-        }
-    }
+    use crate::tests::helpers::{ident, infix, int, let_stmt};
 
     #[test]
     fn basic_statements() {
@@ -84,7 +65,7 @@ if a > 7 {
                             block: vec![let_stmt("b", infix(ident("a"), Token::Subtract, int(2)))],
                         },
                     ],
-                    else_block: Some(vec![let_stmt("b", infix(ident("a"), Token::Add, int(5)))]),
+                    else_block: vec![let_stmt("b", infix(ident("a"), Token::Add, int(5)))],
                 }),
             ),
         ];
@@ -411,12 +392,12 @@ if a > 7 {
                                             },
                                         }],
                                     }],
-                                    else_block: Some(vec![Statement::Return {
+                                    else_block: vec![Statement::Return {
                                         value: Some(Expression::Call {
                                             function: Box::new(Identifier("Win".to_string())),
                                             args: vec![Identifier("mid".to_string())],
                                         }),
-                                    }]),
+                                    }],
                                 }),
                             ],
                         },

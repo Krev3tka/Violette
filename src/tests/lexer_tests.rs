@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod tests {
+mod lexing_tests {
     use crate::lexer::lexer::Lexer;
     use crate::lexer::token::Token;
 
@@ -191,6 +191,38 @@ Got token Int(16384994)
 Got token BitAnd
 Got token BitNot
 Got token Int(8)
+Got token EOF
+"
+        )
+    }
+
+    #[test]
+    fn string_literal_reading() {
+        let input = "
+        f(\"x\")";
+
+        let mut lexer = Lexer::new(input);
+
+        let mut res: String = String::new();
+
+        loop {
+            let spanned_token = lexer.next_token();
+            res.push_str(format!("Got token {:?}\n", spanned_token.token).as_str());
+
+            if spanned_token.token == Token::EOF {
+                break;
+            }
+
+            assert_ne!(spanned_token.token, Token::Illegal);
+        }
+
+        assert_eq!(
+            res,
+            "Got token Newline
+Got token Identifier(\"f\")
+Got token LeftParen
+Got token String(\"x\")
+Got token RightParen
 Got token EOF
 "
         )

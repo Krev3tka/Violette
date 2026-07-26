@@ -1,82 +1,56 @@
 #[cfg(test)]
-mod expression_tests {
+mod expressions_tests {
     use crate::lexer::lexer::Lexer;
     use crate::lexer::token::Token;
+    use crate::lexer::token::Token::{
+        Add, Assign, Equals, Greater, LeftShift, LessOrEquals, LogicNot, Multiply, NotEquals,
+        Power, RightShift, Subtract,
+    };
     use crate::parser::Expression::{BoolLiteral, Call, Identifier, IntLiteral};
     use crate::parser::parser::Parser;
     use crate::parser::statement::MatchArm;
     use crate::parser::{Expression, Precedence, Statement};
+    use crate::tests::helpers::{
+        block, boolean, call, expr_stmt, ident, infix, int, let_stmt, match_expr, prefix, string,
+    };
+
     #[test]
     fn arithmetic_operations() {
         let test_cases = vec![
-            ("5", IntLiteral(5)),
-            (
-                "-5",
-                Expression::Prefix {
-                    operator: Token::Subtract,
-                    right: Box::new(IntLiteral(5)),
-                },
-            ),
-            (
-                "!true",
-                Expression::Prefix {
-                    operator: Token::LogicNot,
-                    right: Box::new(BoolLiteral(true)),
-                },
-            ),
+            ("5", int(5)),
+            ("-5", prefix(Token::Subtract, int(5))),
+            ("!true", prefix(LogicNot, boolean(true))),
             (
                 "(((5) ** (3)) ** (2))",
-                Expression::Infix {
-                    left: Box::new(Expression::Infix {
-                        left: Box::new(IntLiteral(5)),
-                        operator: Token::Power,
-                        right: Box::new(IntLiteral(3)),
-                    }),
-                    operator: Token::Power,
-                    right: Box::new(IntLiteral(2)),
-                },
+                infix(infix(int(5), Power, int(3)), Power, int(2)),
             ),
             (
                 "a=b=5+5**5**2*-x==!true!=false",
-                Expression::Infix {
-                    left: Box::new(Identifier("a".to_string())),
-                    operator: Token::Assign,
-                    right: Box::new(Expression::Infix {
-                        left: Box::new(Identifier("b".to_string())),
-                        operator: Token::Assign,
-                        right: Box::new(Expression::Infix {
-                            left: Box::new(Expression::Infix {
-                                left: Box::new(Expression::Infix {
-                                    left: Box::new(IntLiteral(5)),
-                                    operator: Token::Add,
-                                    right: Box::new(Expression::Infix {
-                                        left: Box::new(Expression::Infix {
-                                            left: Box::new(IntLiteral(5)),
-                                            operator: Token::Power,
-                                            right: Box::new(Expression::Infix {
-                                                left: Box::new(IntLiteral(5)),
-                                                operator: Token::Power,
-                                                right: Box::new(IntLiteral(2)),
-                                            }),
-                                        }),
-                                        operator: Token::Multiply,
-                                        right: Box::new(Expression::Prefix {
-                                            operator: Token::Subtract,
-                                            right: Box::new(Identifier("x".to_string())),
-                                        }),
-                                    }),
-                                }),
-                                operator: Token::Equals,
-                                right: Box::new(Expression::Prefix {
-                                    operator: Token::LogicNot,
-                                    right: Box::new(BoolLiteral(true)),
-                                }),
-                            }),
-                            operator: Token::NotEquals,
-                            right: Box::new(BoolLiteral(false)),
-                        }),
-                    }),
-                },
+                infix(
+                    ident("a"),
+                    Assign,
+                    infix(
+                        ident("b"),
+                        Assign,
+                        infix(
+                            infix(
+                                infix(
+                                    int(5),
+                                    Add,
+                                    infix(
+                                        infix(int(5), Power, infix(int(5), Power, int(2))),
+                                        Multiply,
+                                        prefix(Subtract, ident("x")),
+                                    ),
+                                ),
+                                Equals,
+                                prefix(LogicNot, boolean(true)),
+                            ),
+                            NotEquals,
+                            boolean(false),
+                        ),
+                    ),
+                ),
             ),
         ];
         for (input, expected) in test_cases {
@@ -91,33 +65,18 @@ mod expression_tests {
         let test_cases = vec![
             (
                 "let mask = 1 << 8",
-                Statement::Let {
-                    name: "mask".to_string(),
-                    value: Expression::Infix {
-                        left: Box::new(IntLiteral(1)),
-                        operator: Token::LeftShift,
-                        right: Box::new(IntLiteral(8)),
-                    },
-                },
+                let_stmt("mask", infix(int(1), LeftShift, int(8))),
             ),
             (
                 "let res = base + 2 >> offset - 1",
-                Statement::Let {
-                    name: "res".to_string(),
-                    value: Expression::Infix {
-                        left: Box::new(Expression::Infix {
-                            left: Box::new(Identifier("base".to_string())),
-                            operator: Token::Add,
-                            right: Box::new(IntLiteral(2)),
-                        }),
-                        operator: Token::RightShift,
-                        right: Box::new(Expression::Infix {
-                            left: Box::new(Identifier("offset".to_string())),
-                            operator: Token::Subtract,
-                            right: Box::new(IntLiteral(1)),
-                        }),
-                    },
-                },
+                let_stmt(
+                    "res",
+                    infix(
+                        infix(ident("base"), Add, int(2)),
+                        RightShift,
+                        infix(ident("offset"), Subtract, int(1)),
+                    ),
+                ),
             ),
         ];
         for (input, expected) in test_cases {
@@ -138,53 +97,28 @@ mod expression_tests {
                         NewUser()
                     }
                 }",
-                Statement::Let {
-                    name: "user".to_string(),
-                    value: Expression::Match {
-                        target: Box::new(Identifier("res".to_string())),
-                        arms: vec![
+                let_stmt(
+                    "user",
+                    match_expr(
+                        ident("res"),
+                        vec![
                             MatchArm {
-                                pattern: Call {
-                                    function: Box::new(Identifier("Win".to_string())),
-                                    args: vec![Identifier("u".to_string())],
-                                },
-                                body: Identifier("u".to_string()),
+                                pattern: call(ident("Win"), vec![ident("u")]),
+                                body: ident("u"),
                             },
                             MatchArm {
-                                pattern: Call {
-                                    function: Box::new(Identifier("Fail".to_string())),
-                                    args: vec![Identifier("r".to_string())],
-                                },
-                                body: Expression::Block {
-                                    body: vec![
-                                        Statement::ExpressionStatement {
-                                            expression: Call {
-                                                function: Box::new(Identifier(
-                                                    "println".to_string(),
-                                                )),
-                                                args: vec![Expression::Infix {
-                                                    left: Box::new(Expression::StringLiteral(
-                                                        "Error: ".to_string(),
-                                                    )),
-                                                    operator: Token::Add,
-                                                    right: Box::new(Identifier("r".to_string())),
-                                                }],
-                                            },
-                                        },
-                                        Statement::ExpressionStatement {
-                                            expression: Call {
-                                                function: Box::new(Identifier(
-                                                    "NewUser".to_string(),
-                                                )),
-                                                args: Vec::new(),
-                                            },
-                                        },
-                                    ],
-                                },
+                                pattern: call(ident("Fail"), vec![ident("r")]),
+                                body: block(vec![
+                                    expr_stmt(call(
+                                        ident("println"),
+                                        vec![infix(string("Error: "), Add, ident("r"))],
+                                    )),
+                                    expr_stmt(call(ident("NewUser"), Vec::new())),
+                                ]),
                             },
                         ],
-                    },
-                },
+                    ),
+                ),
             ),
             (
                 "match res {
@@ -196,58 +130,31 @@ mod expression_tests {
                     }
                     Fail(r) => print(r)
                 }",
-                Statement::ExpressionStatement {
-                    expression: Expression::Match {
-                        target: Box::new(Identifier("res".to_string())),
-                        arms: vec![
-                            MatchArm {
-                                pattern: Call {
-                                    function: Box::new(Identifier("Win".to_string())),
-                                    args: vec![Identifier("num".to_string())],
-                                },
-                                body: Expression::Block {
-                                    body: vec![Statement::ExpressionStatement {
-                                        expression: Expression::Match {
-                                            target: Box::new(Identifier("num".to_string())),
-                                            arms: vec![
-                                                MatchArm {
-                                                    pattern: Expression::Infix {
-                                                        left: Box::new(Identifier(
-                                                            "num".to_string(),
-                                                        )),
-                                                        operator: Token::Greater,
-                                                        right: Box::new(IntLiteral(5)),
-                                                    },
-                                                    body: BoolLiteral(true),
-                                                },
-                                                MatchArm {
-                                                    pattern: Expression::Infix {
-                                                        left: Box::new(Identifier(
-                                                            "num".to_string(),
-                                                        )),
-                                                        operator: Token::LessOrEquals,
-                                                        right: Box::new(IntLiteral(5)),
-                                                    },
-                                                    body: BoolLiteral(false),
-                                                },
-                                            ],
-                                        },
-                                    }],
-                                },
-                            },
-                            MatchArm {
-                                pattern: Call {
-                                    function: Box::new(Identifier("Fail".to_string())),
-                                    args: vec![Identifier("r".to_string())],
-                                },
-                                body: Call {
-                                    function: Box::new(Identifier("print".to_string())),
-                                    args: vec![Identifier("r".to_string())],
-                                },
-                            },
-                        ],
-                    },
-                },
+                expr_stmt(match_expr(
+                    ident("res"),
+                    vec![
+                        MatchArm {
+                            pattern: call(ident("Win"), vec![ident("num")]),
+                            body: block(vec![expr_stmt(match_expr(
+                                ident("num"),
+                                vec![
+                                    MatchArm {
+                                        pattern: infix(ident("num"), Greater, int(5)),
+                                        body: boolean(true),
+                                    },
+                                    MatchArm {
+                                        pattern: infix(ident("num"), LessOrEquals, int(5)),
+                                        body: boolean(false),
+                                    },
+                                ],
+                            ))]),
+                        },
+                        MatchArm {
+                            pattern: call(ident("Fail"), vec![ident("r")]),
+                            body: call(ident("print"), vec![ident("r")]),
+                        },
+                    ],
+                )),
             ),
         ];
         for (input, expected) in test_cases {

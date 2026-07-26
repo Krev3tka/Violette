@@ -1,10 +1,9 @@
 use crate::lexer::token::Token;
 use crate::parser::Precedence::Lowest;
 use crate::parser::Statement::{ForCondition, ForCounter};
-use crate::parser::parser::Parser;
+use crate::parser::parser::{MAX_DEPTH, Parser};
 use crate::parser::types::Type;
 use crate::parser::{Expression, ParseError};
-use std::cell::Cell;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Statement {
@@ -64,7 +63,7 @@ pub struct IfStatement {
     pub condition: Expression,
     pub then_block: Vec<Statement>,
     pub else_if: Vec<ElseIf>,
-    pub else_block: Option<Vec<Statement>>,
+    pub else_block: Vec<Statement>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -89,18 +88,19 @@ pub struct MatchArm {
 
 impl Parser {
     pub fn parse_statement(&mut self) -> Result<Statement, ParseError> {
-        self.recursion_depth.set(self.recursion_depth.get() + 1);
+        self.depth += 1;
 
-        struct LocalGuard(*const Cell<i32>);
-        impl Drop for LocalGuard {
-            fn drop(&mut self) {
-                unsafe {
-                    (*self.0).set((*self.0).get() - 1);
-                }
-            }
+        if self.depth > MAX_DEPTH {
+            self.depth -= 1;
+            return Err(ParseError::TooDeep {
+                span: self.current_token.span,
+            });
         }
-        let _guard = LocalGuard(&self.recursion_depth as *const Cell<i32>);
-
+        let result = self.parse_statement_inner();
+        self.depth -= 1;
+        result
+    }
+    fn parse_statement_inner(&mut self) -> Result<Statement, ParseError> {
         match &self.current_token.token {
             Token::Let | Token::Const => {
                 let is_const = matches!(self.current_token.token, Token::Const);
@@ -129,28 +129,27 @@ impl Parser {
             Token::For => self.parse_for_statement(),
             Token::Fun if matches!(self.peek_token.token, Token::Identifier(_)) => {
                 self.parse_function()
-            },
+            }
             Token::Return => {
                 self.next_token();
                 let value = match self.parse_expression(Lowest) {
-                    Ok(expr) =>  {
+                    Ok(expr) => {
                         self.next_token();
                         expr
-                    },
+                    }
                     Err(e) => {
-                        if matches!(self.current_token.token, Token::Newline | Token::EOF | Token::RightBrace) {
-                            return Ok(Statement::Return {
-                                value: None
-                            })
+                        if matches!(
+                            self.current_token.token,
+                            Token::Newline | Token::EOF | Token::RightBrace
+                        ) {
+                            return Ok(Statement::Return { value: None });
                         }
 
-                        return Err(e)
+                        return Err(e);
                     }
                 };
 
-                Ok(Statement::Return {
-                    value: Some(value)
-                })
+                Ok(Statement::Return { value: Some(value) })
             }
             Token::Struct => self.parse_struct(),
             _ => {
@@ -173,7 +172,7 @@ impl Parser {
         let then_block = self.parse_block()?;
 
         let mut else_if = Vec::new();
-        let mut else_block = None;
+        let mut else_block = vec![];
 
         while matches!(self.current_token.token, Token::Else) {
             self.expect(Token::Else)?;
@@ -184,7 +183,7 @@ impl Parser {
                 else_if.push(else_if_stmt);
             } else if matches!(self.current_token.token, Token::LeftBrace) {
                 self.next_token();
-                else_block = Some(self.parse_block()?);
+                else_block = self.parse_block()?;
 
                 break;
             } else {
@@ -238,14 +237,14 @@ impl Parser {
         let iterable = self.parse_expression(Lowest)?;
 
         self.next_token();
-        self.skip_newlines();
+        self.skip_terminators();
 
         if !matches!(self.current_token.token, Token::LeftBrace) {
             return Err(self.unexpected(&self.current_token));
         }
 
         self.expect(Token::LeftBrace)?;
-        self.skip_newlines();
+        self.skip_terminators();
 
         let body = self.parse_block()?;
 
@@ -286,7 +285,7 @@ impl Parser {
         let post = self.parse_expression(Lowest)?;
 
         self.next_token();
-        self.skip_newlines();
+        self.skip_terminators();
 
         if !matches!(self.current_token.token, Token::LeftBrace) {
             return Err(self.unexpected(&self.current_token));
@@ -334,7 +333,8 @@ impl Parser {
 
         let return_type = match self.current_token.token {
             Token::LeftBrace => None,
-            _ => Some(self.parse_type()?),
+            Token::LSB => Some(self.parse_type()?),
+            _ => return Err(self.unexpected(&self.current_token)),
         };
 
         self.expect(Token::LeftBrace)?;
@@ -359,7 +359,7 @@ impl Parser {
 
         self.next_token();
         self.expect(Token::LeftBrace)?;
-        self.skip_newlines();
+        self.skip_terminators();
         let mut fields = Vec::new();
 
         while !matches!(self.current_token.token, Token::RightBrace) {
@@ -382,28 +382,32 @@ impl Parser {
             match self.current_token.token.clone() {
                 Token::Comma => self.expect(Token::Comma),
                 Token::Newline => {
-                    self.skip_newlines();
+                    self.skip_terminators();
                     continue;
                 }
                 Token::RightBrace => break,
                 _ => return Err(self.unexpected(&self.current_token)),
             }?;
-            self.skip_newlines();
+            self.skip_terminators();
         }
+
+        self.expect(Token::RightBrace)?;
 
         Ok(Statement::Struct { name, fields })
     }
 
     pub fn parse_package(&mut self) -> Result<String, ParseError> {
-        self.skip_newlines();
+        self.skip_terminators();
         self.expect(Token::Package)?;
 
         let name = match self.current_token.token.clone() {
             Token::Identifier(n) => n,
-            _ => return Err(ParseError::UnexpectedToken {
-                token: self.current_token.token.clone(),
-                span: self.current_token.span
-            })
+            _ => {
+                return Err(ParseError::UnexpectedToken {
+                    token: self.current_token.token.clone(),
+                    span: self.current_token.span,
+                });
+            }
         };
 
         Ok(name)
@@ -416,7 +420,7 @@ impl Parser {
 
         if matches!(self.current_token.token, Token::LeftParen) {
             self.expect(Token::LeftParen)?;
-            self.skip_newlines();
+            self.skip_terminators();
 
             while !matches!(self.current_token.token, Token::RightParen) {
                 let name = match self.current_token.token.clone() {
@@ -430,20 +434,25 @@ impl Parser {
 
                 match self.current_token.token.clone() {
                     Token::Comma => self.expect(Token::Comma),
-                    Token::Newline => { self.skip_newlines(); continue; }
+                    Token::Newline => {
+                        self.skip_terminators();
+                        continue;
+                    }
                     Token::RightParen => break,
                     _ => return Err(self.unexpected(&self.current_token)),
                 }?;
 
-                self.skip_newlines();
+                self.skip_terminators();
             }
         } else {
             packages.push(match self.current_token.token.clone() {
                 Token::Identifier(v) => v,
-                _ => return Err(ParseError::UnexpectedToken {
-                    token: self.current_token.token.clone(),
-                    span: self.current_token.span
-                })
+                _ => {
+                    return Err(ParseError::UnexpectedToken {
+                        token: self.current_token.token.clone(),
+                        span: self.current_token.span,
+                    });
+                }
             });
         }
 
@@ -453,13 +462,13 @@ impl Parser {
     pub fn parse_block(&mut self) -> Result<Vec<Statement>, ParseError> {
         let mut statements = Vec::new();
 
-        self.skip_newlines();
+        self.skip_terminators();
 
         while !matches!(self.current_token.token, Token::RightBrace | Token::EOF) {
             let stmt = self.parse_statement()?;
 
             statements.push(stmt);
-            self.skip_newlines();
+            self.skip_terminators();
         }
 
         if matches!(self.current_token.token, Token::RightBrace) {

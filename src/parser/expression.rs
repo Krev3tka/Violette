@@ -1,10 +1,10 @@
 use crate::lexer::token::Token;
 use crate::parser::Expression::Infix;
 use crate::parser::Precedence::{Lowest, Prefix};
-use crate::parser::parser::Parser;
+use crate::parser::parser::{MAX_DEPTH, Parser};
 use crate::parser::statement::{FunParam, MatchArm};
-use crate::parser::{ParseError, Precedence, Statement};
 use crate::parser::types::Type;
+use crate::parser::{ParseError, Precedence, Statement};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expression {
@@ -63,8 +63,8 @@ pub enum Expression {
     Lambda {
         params: Vec<FunParam>,
         return_type: Option<Type>,
-        body: Vec<Statement>
-    }
+        body: Vec<Statement>,
+    },
 }
 
 pub fn token_precedence(token: &Token) -> Precedence {
@@ -101,6 +101,19 @@ pub fn token_precedence(token: &Token) -> Precedence {
 
 impl Parser {
     pub fn parse_expression(&mut self, precedence: Precedence) -> Result<Expression, ParseError> {
+        self.depth += 1;
+
+        if self.depth > MAX_DEPTH {
+            self.depth -= 1;
+            return Err(ParseError::TooDeep {
+                span: self.current_token.span,
+            });
+        }
+        let result = self.parse_expression_inner(precedence);
+        self.depth -= 1;
+        result
+    }
+    fn parse_expression_inner(&mut self, precedence: Precedence) -> Result<Expression, ParseError> {
         let mut left = match &self.current_token.token {
             Token::Int(v) => Expression::IntLiteral(*v),
             Token::Identifier(s) => Expression::Identifier(s.clone()),
@@ -303,8 +316,8 @@ impl Parser {
             Token::Identifier(name) => name,
             _ => return Err(self.unexpected(&self.current_token)),
         };
-        self.next_token();
-        if matches!(self.current_token.token, Token::LeftParen) {
+        if matches!(self.peek_token.token, Token::LeftParen) {
+            self.next_token();
             let args = self.parse_call_args()?;
             Ok(Expression::MethodCall {
                 object: Box::new(left),
@@ -380,14 +393,13 @@ impl Parser {
             self.expect(Token::RSB)?;
         }
         self.expect(Token::LeftBrace)?;
-        
+
         let body = self.parse_block()?;
         Ok(Expression::Lambda {
             params,
             return_type,
-            body
+            body,
         })
-
     }
 
     fn skip_arm_separators(&mut self) {

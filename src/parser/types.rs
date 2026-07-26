@@ -1,5 +1,6 @@
 use crate::lexer::span::Span;
 use crate::lexer::token::{PrimitiveType, Token};
+use crate::parser::parser::MAX_DEPTH;
 
 #[derive(Debug, PartialEq, PartialOrd, Clone, Copy)]
 pub enum Precedence {
@@ -33,6 +34,9 @@ pub enum ParseError {
         found: Token,
         span: Span,
     },
+    TooDeep {
+        span: Span,
+    },
 }
 
 impl std::fmt::Display for ParseError {
@@ -53,6 +57,13 @@ impl std::fmt::Display for ParseError {
                 "expected {:?}, found {:?} at {}:{}",
                 expected, found, span.line, span.col
             ),
+            ParseError::TooDeep { span } => {
+                write!(
+                    f,
+                    "nesting too deep (limit {}) at {}:{} — check for unbalanced delimiters",
+                    MAX_DEPTH, span.line, span.col
+                )
+            }
         }
     }
 }
@@ -65,10 +76,13 @@ pub enum Type {
 
     Fn {
         params: Vec<Type>,
-        ret: Option<Box<Type>>
+        ret: Option<Box<Type>>,
     },
 
-    Generic { name: String, param: Box<Type> },
+    Generic {
+        name: String,
+        param: Box<Type>,
+    },
 
     Union(Vec<Type>),
 }

@@ -1,11 +1,11 @@
 use crate::lexer::token::{PrimitiveType, Token};
+use crate::parser::program::Program;
 use crate::parser::types::Type;
 use crate::parser::{Expression, Statement};
 use crate::typechecker::env::Env;
 pub(crate) use crate::typechecker::error::TypeError;
 use crate::typechecker::types::Ty;
 use std::collections::HashMap;
-use crate::parser::program::Program;
 
 #[derive(Clone, Debug)]
 pub struct FnSig {
@@ -34,19 +34,20 @@ impl Checker {
                     return_type,
                     ..
                 } => {
-                    let params: Vec<_> = params.iter().map(|p| self.resolve(&p.param_type)).collect();
+                    let params: Vec<_> =
+                        params.iter().map(|p| self.resolve(&p.param_type)).collect();
 
                     let ret = return_type.as_ref().map_or(Ty::Unit, |t| self.resolve(t));
 
                     let f = Ty::Fn {
                         params: params.clone(),
-                        ret: Box::new(return_type.as_ref().map_or(Ty::Unit, |t| self.resolve(t)))
+                        ret: Box::new(return_type.as_ref().map_or(Ty::Unit, |t| self.resolve(t))),
                     };
 
-
                     if self.funcs.contains_key(name) {
-                        self.errors.push(TypeError::DuplicateDefinition(name.clone()));
-                        continue
+                        self.errors
+                            .push(TypeError::DuplicateDefinition(name.clone()));
+                        continue;
                     }
 
                     self.env.define(name.clone(), f);
@@ -59,8 +60,9 @@ impl Checker {
                         .map(|f| (f.name.clone(), self.resolve(&f.param_type)))
                         .collect();
                     if self.structs.contains_key(name) {
-                        self.errors.push(TypeError::DuplicateDefinition(name.clone()));
-                        continue
+                        self.errors
+                            .push(TypeError::DuplicateDefinition(name.clone()));
+                        continue;
                     }
                     self.structs.insert(name.clone(), fields);
                 }
@@ -84,16 +86,11 @@ impl Checker {
             Type::Primitive(PrimitiveType::String) => Ty::String,
             Type::Primitive(PrimitiveType::Bool) => Ty::Bool,
 
-            Type::Named(path) => Ty::Struct(path.segments[0].clone()),
-            Type::Fn {
-                params,
-                ret
-            } => {
-                Ty::Fn {
-                    params: params.iter().map(|t| self.resolve(t)).collect(),
-                    ret: Box::new(ret.as_ref().map_or(Ty::Unit, |t| self.resolve(t)))
-                }
-            }
+            Type::Named(path) => Ty::Struct(path.segments[path.segments.len() - 1].clone()),
+            Type::Fn { params, ret } => Ty::Fn {
+                params: params.iter().map(|t| self.resolve(t)).collect(),
+                ret: Box::new(ret.as_ref().map_or(Ty::Unit, |t| self.resolve(t))),
+            },
             Type::Union(types) => {
                 let resolved = types.iter().map(|v| self.resolve(v)).collect();
 
@@ -153,14 +150,14 @@ impl Checker {
                     self.check_block(&s.block);
                 }
 
-                if let Some(else_branch) = if_stmt.else_block.clone() {
-                    self.check_block(&else_branch);
+                if !if_stmt.else_block.is_empty() {
+                    self.check_block(&if_stmt.else_block);
                 }
             }
             Statement::Return { value } => {
                 let ty = match value {
                     Some(v) => self.infer(v),
-                    None => Ty::Unit
+                    None => Ty::Unit,
                 };
 
                 let cur_ref = &self.current_ret.clone();
@@ -176,22 +173,25 @@ impl Checker {
 
     pub fn check_block(&mut self, block: &[Statement]) {
         self.env.push();
-        for s in block { self.check_statement(s); }
+        for s in block {
+            self.check_statement(s);
+        }
         self.env.pop();
     }
 
     pub fn check_program(&mut self, program: &Program) {
         self.env.push();
+        self.define_builtins();
         self.collect_signatures(&program.declarations);
         for stmt in &program.declarations {
             if let Statement::Fun { .. } = stmt {
-                self.check_fn(&stmt);
+                self.check_fn(stmt);
             }
         }
-        if program.main.len() > 0 && self.funcs.contains_key("main") {
+        if !program.main.is_empty() && self.funcs.contains_key("main") {
             self.errors.push(TypeError::ConflictingEntryPoint);
         }
-        
+
         self.current_ret = Ty::Unit;
         for stmt in &program.main {
             self.check_statement(stmt);
@@ -225,9 +225,10 @@ impl Checker {
                         (Ty::String, Ty::String) => Ty::String,
                         (Ty::Error, _) | (_, Ty::Error) => Ty::Error,
                         _ => {
-                            self.errors.push(TypeError::Mismatch {
-                                expected: left_ty.clone(),
-                                found: right_ty.clone(),
+                            self.errors.push(TypeError::InvalidOperator {
+                                operator: operator.clone(),
+                                left: left_ty,
+                                right: right_ty,
                             });
                             Ty::Error
                         }
@@ -235,17 +236,27 @@ impl Checker {
                     Token::Subtract | Token::Multiply | Token::Divide | Token::Modulus => {
                         self.expect(&left_ty, &Ty::Int);
                         self.expect(&right_ty, &Ty::Int);
-                        return Ty::Int;
+                        Ty::Int
                     }
                     Token::Less | Token::Greater | Token::LessOrEquals | Token::GreaterOrEquals => {
                         self.expect(&left_ty, &Ty::Int);
                         self.expect(&right_ty, &Ty::Int);
                         Ty::Bool
                     }
-                    Token::Equals | Token::NotEquals => {
-                        self.expect(&right_ty, &left_ty);
-                        Ty::Bool
-                    }
+                    Token::Equals | Token::NotEquals => match (&left_ty, &right_ty) {
+                        (Ty::Error, _) | (_, Ty::Error) => Ty::Error,
+                        _ => {
+                            if left_ty != right_ty {
+                                self.errors.push(TypeError::InvalidOperator {
+                                    operator: operator.clone(),
+                                    left: left_ty,
+                                    right: right_ty,
+                                });
+                                return Ty::Error;
+                            }
+                            Ty::Bool
+                        }
+                    },
                     Token::LogicAnd | Token::LogicOr => {
                         self.expect(&left_ty, &Ty::Bool);
                         self.expect(&right_ty, &Ty::Bool);
@@ -254,13 +265,15 @@ impl Checker {
                     _ => Ty::Error,
                 }
             }
-            Expression::Call { function, args} => {
+            Expression::Index { .. } => {
+                self.errors
+                    .push(TypeError::Unsupported("Indexing".to_string()));
+                Ty::Error
+            }
+            Expression::Call { function, args } => {
                 let callee = self.infer(function);
                 match callee {
-                    Ty::Fn {
-                        params,
-                        ret
-                    } => {
+                    Ty::Fn { params, ret } => {
                         if args.len() != params.len() {
                             self.errors.push(TypeError::ArityMismatch {
                                 name: match function.as_ref() {
@@ -270,7 +283,7 @@ impl Checker {
                                 expected: params.len(),
                                 found: args.len(),
                             });
-                            return *ret
+                            return *ret;
                         }
 
                         for (arg, param) in args.iter().zip(params.iter()) {
@@ -289,9 +302,10 @@ impl Checker {
             Expression::Lambda {
                 params,
                 return_type,
-                body
+                body,
             } => {
-                let param_tys: Vec<Ty> = params.iter().map(|p| self.resolve(&p.param_type)).collect();
+                let param_tys: Vec<Ty> =
+                    params.iter().map(|p| self.resolve(&p.param_type)).collect();
                 let ret = return_type.as_ref().map_or(Ty::Unit, |t| self.resolve(t));
 
                 let saved_ret = self.current_ret.clone();
@@ -312,33 +326,62 @@ impl Checker {
 
                 Ty::Fn {
                     params: param_tys,
-                    ret: Box::new(ret)
+                    ret: Box::new(ret),
                 }
             }
-            Expression::Field {
-                object,
-                name
-            } => {
-                self.errors.push(TypeError::Unsupported("Struct fields calls".to_string()));
-                Ty::Error
-            },
-            Expression::MethodCall {
-                object,
-                name,
-                args
-            } => {
-                self.errors.push(TypeError::Unsupported("Method calls".to_string()));
+            Expression::Field { object, name } => {
+                let obj_ty = self.infer(object.as_ref());
+
+                match obj_ty {
+                    Ty::Struct(s) => match self.structs.get(&s) {
+                        Some(struct_sig) => {
+                            match struct_sig.iter().find(|(curr_name, _)| curr_name == name) {
+                                Some(field) => field.1.clone(),
+                                None => {
+                                    self.errors.push(TypeError::UnknownField {
+                                        struct_name: s,
+                                        field: name.clone(),
+                                    });
+                                    Ty::Error
+                                }
+                            }
+                        }
+                        None => {
+                            self.errors.push(TypeError::UnknownName(name.clone()));
+                            Ty::Error
+                        }
+                    },
+                    Ty::Error => Ty::Error,
+                    _ => {
+                        self.errors.push(TypeError::NoFields(obj_ty));
+                        Ty::Error
+                    }
+                }
+            }
+            Expression::MethodCall { .. } => {
+                self.errors
+                    .push(TypeError::Unsupported("Method calls".to_string()));
                 Ty::Error
             }
             _ => Ty::Error,
         }
     }
 
+    pub fn define_builtins(&mut self) {
+        self.env.define(
+            "print".to_string(),
+            Ty::Fn {
+                params: vec![Ty::Union(vec![Ty::Int, Ty::String, Ty::Bool])],
+                ret: Box::new(Ty::Unit),
+            },
+        );
+    }
+
     pub fn expect(&mut self, actual: &Ty, expected: &Ty) {
-        if let Ty::Union(types) = expected {
-            if types.iter().any(|ty| ty == actual) {
-                return;
-            }
+        if let Ty::Union(types) = expected
+            && types.iter().any(|ty| ty == actual)
+        {
+            return;
         }
 
         if !matches!(actual, Ty::Error) && !matches!(expected, Ty::Error) && actual != expected {
