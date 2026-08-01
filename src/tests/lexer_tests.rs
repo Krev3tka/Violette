@@ -1,7 +1,39 @@
 #[cfg(test)]
+#[allow(clippy::approx_constant)]
 mod lexing_tests {
     use crate::lexer::lexer::Lexer;
-    use crate::lexer::token::Token;
+    use crate::lexer::token::PrimitiveType::{Int};
+    use crate::lexer::token::{PrimitiveType, Token};
+    use pretty_assertions::assert_eq;
+
+    fn lex(input: &str) -> Vec<Token> {
+        let mut lexer = Lexer::new(input);
+        let mut res = Vec::new();
+
+        loop {
+            let spanned_token = lexer.next_token();
+            res.push(spanned_token.token.clone());
+
+            if spanned_token.token == Token::Eof {
+                break;
+            }
+
+            assert_ne!(spanned_token.token, Token::Illegal);
+        }
+
+        res
+    }
+
+    pub fn assert_tokens(input: &str, expected: Vec<Token>) {
+        let actual = lex(input);
+
+        for (i, (a, e)) in actual.iter().zip(expected.iter()).enumerate() {
+            assert_eq!(a, e, "Token #{i} mismatch : got {a:?}, expected {e:?}");
+        }
+
+        assert_eq!(actual.len(), expected.len(),
+                   "token count mismatch: got {}, expected {}", actual.len(), expected.len());
+    }
 
     #[test]
     fn let_it_be() {
@@ -10,40 +42,26 @@ mod lexing_tests {
         let z = 3.14_f32
         ";
 
-        let mut lexer = Lexer::new(input);
-
-        let mut res: String = String::new();
-
-        loop {
-            let spanned_token = lexer.next_token();
-            res.push_str(format!("Got token {:?}\n", spanned_token.token).as_str());
-
-            if spanned_token.token == Token::Eof {
-                break;
-            }
-
-            assert_ne!(spanned_token.token, Token::Illegal);
-        }
-
-        assert_eq!(
-            res,
-            "Got token Let
-Got token Identifier(\"x\")
-Got token Assign
-Got token Float64(42.5)
-Got token Newline
-Got token Let
-Got token Identifier(\"y\")
-Got token Assign
-Got token Uint32(100)
-Got token Newline
-Got token Let
-Got token Identifier(\"z\")
-Got token Assign
-Got token Float32(3.14)
-Got token Newline
-Got token EOF
-"
+        assert_tokens(
+            input,
+            vec![
+                Token::Let,
+                Token::Identifier("x".to_string()),
+                Token::Assign,
+                Token::Float64(42.5),
+                Token::Newline,
+                Token::Let,
+                Token::Identifier("y".to_string()),
+                Token::Assign,
+                Token::Uint32(100),
+                Token::Newline,
+                Token::Let,
+                Token::Identifier("z".to_string()),
+                Token::Assign,
+                Token::Float32(3.14),
+                Token::Newline,
+                Token::Eof
+            ]
         )
     }
 
@@ -52,45 +70,31 @@ Got token EOF
         let input =
             "fun fetchUser(id: int) [Win(User) | Fail(string)] {} // it's fetchUser function";
 
-        let mut lexer = Lexer::new(input);
-
-        let mut res: String = String::new();
-
-        loop {
-            let spanned_token = lexer.next_token();
-            res.push_str(format!("Got token {:?}\n", spanned_token.token).as_str());
-
-            if spanned_token.token == Token::Eof {
-                break;
-            }
-
-            assert_ne!(spanned_token.token, Token::Illegal);
-        }
-
-        assert_eq!(
-            res,
-            "Got token Fun
-Got token Identifier(\"fetchUser\")
-Got token LeftParen
-Got token Identifier(\"id\")
-Got token Colon
-Got token PrimitiveType(Int)
-Got token RightParen
-Got token LSB
-Got token Identifier(\"Win\")
-Got token LeftParen
-Got token Identifier(\"User\")
-Got token RightParen
-Got token Pipe
-Got token Identifier(\"Fail\")
-Got token LeftParen
-Got token PrimitiveType(String)
-Got token RightParen
-Got token RSB
-Got token LeftBrace
-Got token RightBrace
-Got token EOF
-"
+        assert_tokens(
+            input,
+            vec![
+                Token::Fun,
+                Token::Identifier("fetchUser".to_string()),
+                Token::LeftParen,
+                Token::Identifier("id".to_string()),
+                Token::Colon,
+                Token::PrimitiveType(Int),
+                Token::RightParen,
+                Token::LeftBracket,
+                Token::Identifier("Win".to_string()),
+                Token::LeftParen,
+                Token::Identifier("User".to_string()),
+                Token::RightParen,
+                Token::Pipe,
+                Token::Identifier("Fail".to_string()),
+                Token::LeftParen,
+                Token::PrimitiveType(PrimitiveType::String),
+                Token::RightParen,
+                Token::RightBracket,
+                Token::LeftBrace,
+                Token::RightBrace,
+                Token::Eof
+            ]
         )
     }
 
@@ -103,59 +107,45 @@ Got token EOF
             let res = 0x00
         }";
 
-        let mut lexer = Lexer::new(input);
-
-        let mut res: String = String::new();
-
-        loop {
-            let spanned_token = lexer.next_token();
-            res.push_str(format!("Got token {:?}\n", spanned_token.token).as_str());
-
-            if spanned_token.token == Token::Eof {
-                break;
-            }
-
-            assert_ne!(spanned_token.token, Token::Illegal);
-        }
-
-        assert_eq!(
-            res,
-            "Got token Let
-Got token Identifier(\"a\")
-Got token Assign
-Got token Int(13)
-Got token BitOr
-Got token Int(175)
-Got token BitAnd
-Got token BitNot
-Got token Int(61)
-Got token Newline
-Got token If
-Got token Identifier(\"cond1\")
-Got token LogicAnd
-Got token Identifier(\"cond2\")
-Got token LogicOr
-Got token LogicNot
-Got token Identifier(\"cond3\")
-Got token LeftBrace
-Got token Newline
-Got token Let
-Got token Identifier(\"res\")
-Got token Assign
-Got token Int(1)
-Got token Newline
-Got token RightBrace
-Got token Else
-Got token LeftBrace
-Got token Newline
-Got token Let
-Got token Identifier(\"res\")
-Got token Assign
-Got token Int(0)
-Got token Newline
-Got token RightBrace
-Got token EOF
-"
+        assert_tokens(
+            input,
+            vec![
+                Token::Let,
+                Token::Identifier("a".to_string()),
+                Token::Assign,
+                Token::Int(13),
+                Token::BitOr,
+                Token::Int(175),
+                Token::BitAnd,
+                Token::BitNot,
+                Token::Int(61),
+                Token::Newline,
+                Token::If,
+                Token::Identifier("cond1".to_string()),
+                Token::LogicAnd,
+                Token::Identifier("cond2".to_string()),
+                Token::LogicOr,
+                Token::LogicNot,
+                Token::Identifier("cond3".to_string()),
+                Token::LeftBrace,
+                Token::Newline,
+                Token::Let,
+                Token::Identifier("res".to_string()),
+                Token::Assign,
+                Token::Int(1),
+                Token::Newline,
+                Token::RightBrace,
+                Token::Else,
+                Token::LeftBrace,
+                Token::Newline,
+                Token::Let,
+                Token::Identifier("res".to_string()),
+                Token::Assign,
+                Token::Int(0),
+                Token::Newline,
+                Token::RightBrace,
+                Token::Eof
+            ]
         )
     }
 
@@ -163,36 +153,22 @@ Got token EOF
     fn mixer() {
         let input = "let a=5+10+0xFA0_3E2&~0o10";
 
-        let mut lexer = Lexer::new(input);
-
-        let mut res: String = String::new();
-
-        loop {
-            let spanned_token = lexer.next_token();
-            res.push_str(format!("Got token {:?}\n", spanned_token.token).as_str());
-
-            if spanned_token.token == Token::Eof {
-                break;
-            }
-
-            assert_ne!(spanned_token.token, Token::Illegal);
-        }
-
-        assert_eq!(
-            res,
-            "Got token Let
-Got token Identifier(\"a\")
-Got token Assign
-Got token Int(5)
-Got token Add
-Got token Int(10)
-Got token Add
-Got token Int(16384994)
-Got token BitAnd
-Got token BitNot
-Got token Int(8)
-Got token EOF
-"
+        assert_tokens(
+            input,
+            vec![
+                Token::Let,
+                Token::Identifier("a".to_string()),
+                Token::Assign,
+                Token::Int(5),
+                Token::Add,
+                Token::Int(10),
+                Token::Add,
+                Token::Int(16384994),
+                Token::BitAnd,
+                Token::BitNot,
+                Token::Int(8),
+                Token::Eof
+            ]
         )
     }
 
@@ -201,30 +177,16 @@ Got token EOF
         let input = "
         f(\"x\")";
 
-        let mut lexer = Lexer::new(input);
-
-        let mut res: String = String::new();
-
-        loop {
-            let spanned_token = lexer.next_token();
-            res.push_str(format!("Got token {:?}\n", spanned_token.token).as_str());
-
-            if spanned_token.token == Token::Eof {
-                break;
-            }
-
-            assert_ne!(spanned_token.token, Token::Illegal);
-        }
-
         assert_eq!(
-            res,
-            "Got token Newline
-Got token Identifier(\"f\")
-Got token LeftParen
-Got token String(\"x\")
-Got token RightParen
-Got token EOF
-"
+            lex(input),
+            vec![
+                Token::Newline,
+                Token::Identifier("f".to_string()),
+                Token::LeftParen,
+                Token::String("x".to_string()),
+                Token::RightParen,
+                Token::Eof
+            ]
         )
     }
 
@@ -246,55 +208,41 @@ Got token EOF
         i--
         ";
 
-        let mut lexer = Lexer::new(input);
-
-        let mut res: String = String::new();
-
-        loop {
-            let spanned_token = lexer.next_token();
-            res.push_str(format!("Got token {:?}\n", spanned_token.token).as_str());
-
-            if spanned_token.token == Token::Eof {
-                break;
-            }
-
-            assert_ne!(spanned_token.token, Token::Illegal);
-        }
-
-        assert_eq!(
-            res,
-            "Got token Newline
-Got token Newline
-Got token Let
-Got token Identifier(\"hexVal\")
-Got token Assign
-Got token Int(6699)
-Got token Newline
-Got token Let
-Got token Identifier(\"s\")
-Got token Assign
-Got token String(\"String with // commentaries /* mustn't */ break\")
-Got token Newline
-Got token Let
-Got token Identifier(\"broken_expr\")
-Got token Assign
-Got token Int(5)
-Got token Add
-Got token Int(10)
-Got token Newline
-Got token Let
-Got token Identifier(\"i\")
-Got token Assign
-Got token Int(42)
-Got token Newline
-Got token Identifier(\"i\")
-Got token Increment
-Got token Newline
-Got token Identifier(\"i\")
-Got token Decrement
-Got token Newline
-Got token EOF
-"
+        assert_tokens(
+            input,
+            vec![
+                Token::Newline,
+                Token::Newline,
+                Token::Let,
+                Token::Identifier("hexVal".to_string()),
+                Token::Assign,
+                Token::Int(6699),
+                Token::Newline,
+                Token::Let,
+                Token::Identifier("s".to_string()),
+                Token::Assign,
+                Token::String("String with // commentaries /* mustn't */ break".to_string()),
+                Token::Newline,
+                Token::Let,
+                Token::Identifier("broken_expr".to_string()),
+                Token::Assign,
+                Token::Int(5),
+                Token::Add,
+                Token::Int(10),
+                Token::Newline,
+                Token::Let,
+                Token::Identifier("i".to_string()),
+                Token::Assign,
+                Token::Int(42),
+                Token::Newline,
+                Token::Identifier("i".to_string()),
+                Token::Increment,
+                Token::Newline,
+                Token::Identifier("i".to_string()),
+                Token::Decrement,
+                Token::Newline,
+                Token::Eof
+            ]
         )
     }
 }

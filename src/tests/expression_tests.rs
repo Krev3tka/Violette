@@ -6,10 +6,10 @@ mod expressions_tests {
         Add, Assign, Equals, Greater, LeftShift, LessOrEquals, LogicNot, Multiply, NotEquals,
         Power, RightShift, Subtract,
     };
-    use crate::parser::Expression::{BoolLiteral, Call, Identifier, IntLiteral};
+    use crate::parser::Expression::{ Call, Identifier, IntLiteral};
     use crate::parser::parser::Parser;
     use crate::parser::statement::MatchArm;
-    use crate::parser::{Expression, Precedence, Statement};
+    use crate::parser::{Expression, Precedence};
     use crate::tests::helpers::{
         block, boolean, call, expr_stmt, ident, infix, int, let_stmt, match_expr, prefix, string,
     };
@@ -18,7 +18,7 @@ mod expressions_tests {
     fn arithmetic_operations() {
         let test_cases = vec![
             ("5", int(5)),
-            ("-5", prefix(Token::Subtract, int(5))),
+            ("-5", prefix(Subtract, int(5))),
             ("!true", prefix(LogicNot, boolean(true))),
             (
                 "(((5) ** (3)) ** (2))",
