@@ -459,7 +459,7 @@ impl Parser {
         Ok(packages)
     }
 
-    pub fn parse_block(&mut self) -> Result<Vec<Statement>, ParseError> {
+    fn parse_statements(&mut self) -> Result<Vec<Statement>, ParseError> {
         let mut statements = Vec::new();
 
         self.skip_terminators();
@@ -471,10 +471,21 @@ impl Parser {
             self.skip_terminators();
         }
 
-        if matches!(self.current_token.token, Token::RightBrace) {
-            self.next_token();
+        Ok(statements)
+    }
+
+    pub fn parse_block(&mut self) -> Result<Vec<Statement>, ParseError> {
+        let statements = self.parse_statements()?;
+
+        if !matches!(self.current_token.token, Token::RightBrace) {
+            return Err(ParseError::UnexpectedEof);
         }
+        self.next_token();
 
         Ok(statements)
+    }
+
+    pub fn parse_top_level(&mut self) -> Result<Vec<Statement>, ParseError> {
+        self.parse_statements()
     }
 }

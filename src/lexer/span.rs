@@ -7,7 +7,9 @@ pub struct Span {
 }
 
 impl PartialEq for Span {
-    fn eq(&self, _: &Self) -> bool { true }
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
 }
 
 impl Span {
@@ -15,8 +17,6 @@ impl Span {
         Span { line, col }
     }
 }
-
-
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct SpannedToken {

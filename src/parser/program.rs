@@ -43,7 +43,7 @@ impl Parser {
         let mut main = vec![];
 
         if !matches!(self.current_token.token, Token::EOF) {
-            main = self.parse_block()?;
+            main = self.parse_top_level()?;
         }
 
         Ok(Program {

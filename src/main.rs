@@ -1,13 +1,15 @@
+use crate::codegen::codegen::Codegen;
 use crate::lexer::lexer::Lexer;
 use crate::parser::parser::Parser;
 use crate::typechecker::checker::{Checker, TypeError};
 
+mod codegen;
 mod lexer;
 mod parser;
 mod tests;
 mod typechecker;
 
-fn check(input: &str) -> Vec<TypeError> {
+fn check(input: &str) -> String {
     let lexer = Lexer::new(input);
 
     let mut parser = Parser::new(lexer);
@@ -17,7 +19,9 @@ fn check(input: &str) -> Vec<TypeError> {
 
     checker.check_program(&ast);
 
-    checker.errors
+    let codegen = Codegen::new();
+
+    codegen.out
 }
 
 fn main() {
@@ -92,11 +96,7 @@ fn main() {
         }",
     ];
 
-    let mut errors = vec![];
-
     for input in inputs {
-        errors.push(check(input));
+        println!("{}", check(input));
     }
-
-    println!("errors: {:?}", errors);
 }
