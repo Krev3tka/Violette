@@ -11,6 +11,7 @@ pub enum Expression {
     Identifier(String),
 
     IntLiteral(isize),
+    FloatLiteral(f64),
     BoolLiteral(bool),
     StringLiteral(String),
 
@@ -116,6 +117,8 @@ impl Parser {
     fn parse_expression_inner(&mut self, precedence: Precedence) -> Result<Expression, ParseError> {
         let mut left = match &self.current_token.token {
             Token::Int(v) => Expression::IntLiteral(*v),
+            Token::Float32(v) => Expression::FloatLiteral(*v as f64),
+            Token::Float64(v) => Expression::FloatLiteral(*v),
             Token::Identifier(s) => Expression::Identifier(s.clone()),
             Token::Bool(b) => Expression::BoolLiteral(*b),
             Token::String(s) => Expression::StringLiteral(s.clone()),

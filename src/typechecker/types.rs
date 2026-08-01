@@ -1,6 +1,7 @@
 #[derive(Debug, Clone, PartialEq, Default)]
 pub enum Ty {
     Int,
+    Float,
     Bool,
     String,
     #[default]

@@ -83,6 +83,8 @@ impl Checker {
             | Type::Primitive(PrimitiveType::Uint16)
             | Type::Primitive(PrimitiveType::Uint32)
             | Type::Primitive(PrimitiveType::Uint64) => Ty::Int,
+            Type::Primitive(PrimitiveType::Float32) |
+            Type::Primitive(PrimitiveType::Float64) => Ty::Float,
             Type::Primitive(PrimitiveType::String) => Ty::String,
             Type::Primitive(PrimitiveType::Bool) => Ty::Bool,
 
@@ -100,7 +102,6 @@ impl Checker {
                 name: name.clone(),
                 param: Box::new(self.resolve(param)),
             },
-            _ => Ty::Error,
         }
     }
 
@@ -164,7 +165,7 @@ impl Checker {
 
                 self.expect(&ty, cur_ref)
             }
-            Statement::ExpressionStatement { expression } => {
+            Statement::Expression { expression } => {
                 self.infer(expression);
             }
             _ => {}
@@ -204,6 +205,7 @@ impl Checker {
             Expression::IntLiteral(_) => Ty::Int,
             Expression::BoolLiteral(_) => Ty::Bool,
             Expression::StringLiteral(_) => Ty::String,
+            Expression::FloatLiteral(_) => Ty::Float,
             Expression::Identifier(name) => match self.env.lookup(name) {
                 Some(ty) => ty,
                 None => {
@@ -222,6 +224,7 @@ impl Checker {
                 match operator {
                     Token::Add => match (&left_ty, &right_ty) {
                         (Ty::Int, Ty::Int) => Ty::Int,
+                        (Ty::Float, Ty::Float) => Ty::Float,
                         (Ty::String, Ty::String) => Ty::String,
                         (Ty::Error, _) | (_, Ty::Error) => Ty::Error,
                         _ => {
@@ -233,10 +236,18 @@ impl Checker {
                             Ty::Error
                         }
                     },
-                    Token::Subtract | Token::Multiply | Token::Divide | Token::Modulus => {
-                        self.expect(&left_ty, &Ty::Int);
-                        self.expect(&right_ty, &Ty::Int);
-                        Ty::Int
+                    Token::Subtract | Token::Multiply | Token::Divide | Token::Modulus => match (&left_ty, &right_ty) {
+                        (Ty::Int, Ty::Int) => Ty::Int,
+                        (Ty::Float, Ty::Float) => Ty::Float,
+                        (Ty::Error, _) | (_, Ty::Error) => Ty::Error,
+                        _ => {
+                            self.errors.push(TypeError::InvalidOperator {
+                                operator: operator.clone(),
+                                left: left_ty,
+                                right: right_ty,
+                            });
+                            Ty::Error
+                        }
                     }
                     Token::Less | Token::Greater | Token::LessOrEquals | Token::GreaterOrEquals => {
                         self.expect(&left_ty, &Ty::Int);
@@ -371,7 +382,7 @@ impl Checker {
         self.env.define(
             "print".to_string(),
             Ty::Fn {
-                params: vec![Ty::Union(vec![Ty::Int, Ty::String, Ty::Bool])],
+                params: vec![Ty::Union(vec![Ty::Int, Ty::Float, Ty::String, Ty::Bool])],
                 ret: Box::new(Ty::Unit),
             },
         );
