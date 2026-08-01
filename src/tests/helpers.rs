@@ -88,7 +88,7 @@ pub fn lambda(params: Vec<FunParam>, ret: Option<Type>, body: Vec<Statement>) ->
 }
 
 pub fn expr_stmt(expr: Expression) -> Statement {
-    Statement::ExpressionStatement { expression: expr }
+    Statement::Expression { expression: expr }
 }
 
 pub fn let_stmt(name: &str, val: Expression) -> Statement {

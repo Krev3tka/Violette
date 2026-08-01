@@ -164,13 +164,13 @@ if a > 7 {
                         right: Box::new(Identifier("right".to_string())),
                     },
                     body: vec![
-                        Statement::ExpressionStatement {
+                        Statement::Expression {
                             expression: Expression::Postfix {
                                 left: Box::new(Identifier("left".to_string())),
                                 operator: Token::Increment,
                             },
                         },
-                        Statement::ExpressionStatement {
+                        Statement::Expression {
                             expression: Expression::Postfix {
                                 left: Box::new(Identifier("right".to_string())),
                                 operator: Token::Decrement,
@@ -360,7 +360,7 @@ if a > 7 {
                                         operator: Token::Less,
                                         right: Box::new(Identifier("target".to_string())),
                                     },
-                                    then_block: vec![Statement::ExpressionStatement {
+                                    then_block: vec![Statement::Expression {
                                         expression: Infix {
                                             left: Box::new(Identifier("left".to_string())),
                                             operator: Token::Assign,
@@ -380,7 +380,7 @@ if a > 7 {
                                             operator: Token::Greater,
                                             right: Box::new(Identifier("target".to_string())),
                                         },
-                                        block: vec![Statement::ExpressionStatement {
+                                        block: vec![Statement::Expression {
                                             expression: Infix {
                                                 left: Box::new(Identifier("right".to_string())),
                                                 operator: Assign,

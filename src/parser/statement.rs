@@ -7,7 +7,7 @@ use crate::parser::{Expression, ParseError};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Statement {
-    ExpressionStatement {
+    Expression {
         expression: Expression,
     },
 
@@ -155,7 +155,7 @@ impl Parser {
             _ => {
                 let expr = self.parse_expression(Lowest)?;
                 self.next_token();
-                Ok(Statement::ExpressionStatement { expression: expr })
+                Ok(Statement::Expression { expression: expr })
             }
         }
     }
@@ -231,8 +231,8 @@ impl Parser {
         }
     }
 
-    pub fn parse_for_range(&mut self, var: &String) -> Result<Statement, ParseError> {
-        let variable = var.clone();
+    pub fn parse_for_range(&mut self, var: &str) -> Result<Statement, ParseError> {
+        let variable = var.to_owned();
 
         let iterable = self.parse_expression(Lowest)?;
 
@@ -255,8 +255,8 @@ impl Parser {
         })
     }
 
-    pub fn parse_for_counter(&mut self, var: &String) -> Result<Statement, ParseError> {
-        let name = var.clone();
+    pub fn parse_for_counter(&mut self, var: &str) -> Result<Statement, ParseError> {
+        let name = var.to_owned();
         self.expect(Token::Identifier("".to_string()))?;
         self.expect(Token::Assign)?;
 

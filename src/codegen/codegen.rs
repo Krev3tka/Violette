@@ -43,6 +43,7 @@ impl Codegen {
     pub fn c_type(&mut self, ty: &Ty) -> String {
         match ty {
             Ty::Int => "int64_t".to_string(),
+            Ty::Float => "float_t".to_string(),
             Ty::Bool => "bool".to_string(),
             Ty::String => "char*".to_string(),
             Ty::Struct(s) => format!("struct {}", s),
@@ -139,7 +140,7 @@ impl Codegen {
 
                 format!("return{};", val_str)
             }
-            Statement::ExpressionStatement { expression } => {
+            Statement::Expression { expression } => {
                 format!("{};", self.emit_expression(expression)?)
             }
             Statement::Fun {
@@ -247,6 +248,7 @@ impl Codegen {
     fn infer_expr(&mut self, expr: &Expression) -> Ty {
         match expr {
             Expression::IntLiteral(_) => Ty::Int,
+            Expression::FloatLiteral(_) => Ty::Float,
             Expression::BoolLiteral(_) => Ty::Bool,
             Expression::StringLiteral(_) => Ty::String,
             Expression::Identifier(name) => self.env.lookup(name).unwrap_or(Ty::Error),
