@@ -1,15 +1,9 @@
 use crate::lexer::token::Token;
 
-#[derive(Debug, Eq, Clone, Copy)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub struct Span {
     pub line: usize,
     pub col: usize,
-}
-
-impl PartialEq for Span {
-    fn eq(&self, _: &Self) -> bool {
-        true
-    }
 }
 
 impl Span {
@@ -18,7 +12,7 @@ impl Span {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SpannedToken {
     pub token: Token,
     pub span: Span,

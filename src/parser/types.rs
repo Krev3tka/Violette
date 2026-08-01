@@ -22,7 +22,7 @@ pub enum Precedence {
     Postfix,     // x++ x-- () [] .
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone)]
 pub enum ParseError {
     UnexpectedToken {
         token: Token,
