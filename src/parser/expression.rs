@@ -92,7 +92,7 @@ pub fn token_precedence(token: &Token) -> Precedence {
         Token::Increment
         | Token::Decrement
         | Token::LeftParen
-        | Token::LSB
+        | Token::LeftBracket
         | Token::Pipe
         | Token::Dot => Precedence::Postfix,
         _ => Lowest,
@@ -214,7 +214,7 @@ impl Parser {
                         args,
                     };
                 }
-                Token::LSB => {
+                Token::LeftBracket => {
                     self.next_token();
 
                     left = self.parse_index_expression(left)?;
@@ -259,7 +259,7 @@ impl Parser {
 
         let index = self.parse_expression(Lowest)?;
 
-        if !matches!(self.peek_token.token, Token::RSB) {
+        if !matches!(self.peek_token.token, Token::RightBracket) {
             return Err(self.unexpected(&self.peek_token));
         }
         self.next_token();
@@ -281,7 +281,7 @@ impl Parser {
 
         let mut arms = Vec::new();
 
-        while !matches!(self.current_token.token, Token::RightBrace | Token::EOF) {
+        while !matches!(self.current_token.token, Token::RightBrace | Token::Eof) {
             let pattern = self.parse_pattern()?;
             self.next_token();
             self.expect(Token::FatArrow)?;
@@ -300,7 +300,7 @@ impl Parser {
             self.skip_arm_separators();
         }
 
-        if !matches!(self.current_token.token, Token::RightBrace | Token::EOF) {
+        if !matches!(self.current_token.token, Token::RightBrace | Token::Eof) {
             return Err(self.unexpected(&self.current_token));
         }
 
@@ -387,10 +387,10 @@ impl Parser {
         self.expect(Token::RightParen)?;
         let mut return_type = None;
 
-        if matches!(self.current_token.token, Token::LSB) {
+        if matches!(self.current_token.token, Token::LeftBracket) {
             self.next_token();
             return_type = Some(self.parse_type()?);
-            self.expect(Token::RSB)?;
+            self.expect(Token::RightBracket)?;
         }
         self.expect(Token::LeftBrace)?;
 

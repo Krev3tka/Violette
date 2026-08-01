@@ -84,8 +84,8 @@ pub enum Token {
 
     LeftParen,  // (
     RightParen, // )
-    LSB,        // [
-    RSB,        // ]
+    LeftBracket,        // [
+    RightBracket,        // ]
     LeftBrace,  // {
     RightBrace, // }
 
@@ -107,7 +107,7 @@ pub enum Token {
 
     // control
     Newline,
-    EOF,
+    Eof,
     Illegal,
 }
 

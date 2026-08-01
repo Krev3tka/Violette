@@ -42,7 +42,7 @@ impl Parser {
     }
 
     pub fn unexpected(&self, tok: &SpannedToken) -> ParseError {
-        if tok.token == Token::EOF {
+        if tok.token == Token::Eof {
             ParseError::UnexpectedEof
         } else {
             ParseError::UnexpectedToken {
@@ -87,17 +87,17 @@ impl Parser {
 
             let mut ret = None;
 
-            if matches!(self.current_token.token, Token::LSB) {
+            if matches!(self.current_token.token, Token::LeftBracket) {
                 self.next_token();
 
                 ret = Some(Box::new(self.parse_type()?));
-                self.expect(Token::RSB)?;
+                self.expect(Token::RightBracket)?;
             }
 
             return Ok(Type::Fn { params: types, ret });
         }
 
-        if matches!(self.current_token.token, Token::LSB) {
+        if matches!(self.current_token.token, Token::LeftBracket) {
             self.next_token();
 
             let mut variants = Vec::new();
@@ -111,7 +111,7 @@ impl Parser {
                 self.skip_terminators();
             }
 
-            self.expect(Token::RSB)?;
+            self.expect(Token::RightBracket)?;
 
             if variants.len() == 1 {
                 return Ok(variants.remove(0));

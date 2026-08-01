@@ -40,8 +40,8 @@ impl Lexer {
             '}' => Token::RightBrace,
             '(' => Token::LeftParen,
             ')' => Token::RightParen,
-            '[' => Token::LSB,
-            ']' => Token::RSB,
+            '[' => Token::LeftBracket,
+            ']' => Token::RightBracket,
             '|' => {
                 if self.peek_char() == '|' {
                     self.read_char();
@@ -222,7 +222,7 @@ impl Lexer {
                 }
             }
 
-            '\0' => Token::EOF,
+            '\0' => Token::Eof,
 
             '\n' | '\r' => {
                 while self.current == '\n' || self.current == '\r' {

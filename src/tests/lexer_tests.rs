@@ -18,7 +18,7 @@ mod lexing_tests {
             let spanned_token = lexer.next_token();
             res.push_str(format!("Got token {:?}\n", spanned_token.token).as_str());
 
-            if spanned_token.token == Token::EOF {
+            if spanned_token.token == Token::Eof {
                 break;
             }
 
@@ -60,7 +60,7 @@ Got token EOF
             let spanned_token = lexer.next_token();
             res.push_str(format!("Got token {:?}\n", spanned_token.token).as_str());
 
-            if spanned_token.token == Token::EOF {
+            if spanned_token.token == Token::Eof {
                 break;
             }
 
@@ -111,7 +111,7 @@ Got token EOF
             let spanned_token = lexer.next_token();
             res.push_str(format!("Got token {:?}\n", spanned_token.token).as_str());
 
-            if spanned_token.token == Token::EOF {
+            if spanned_token.token == Token::Eof {
                 break;
             }
 
@@ -171,7 +171,7 @@ Got token EOF
             let spanned_token = lexer.next_token();
             res.push_str(format!("Got token {:?}\n", spanned_token.token).as_str());
 
-            if spanned_token.token == Token::EOF {
+            if spanned_token.token == Token::Eof {
                 break;
             }
 
@@ -209,7 +209,7 @@ Got token EOF
             let spanned_token = lexer.next_token();
             res.push_str(format!("Got token {:?}\n", spanned_token.token).as_str());
 
-            if spanned_token.token == Token::EOF {
+            if spanned_token.token == Token::Eof {
                 break;
             }
 
@@ -254,7 +254,7 @@ Got token EOF
             let spanned_token = lexer.next_token();
             res.push_str(format!("Got token {:?}\n", spanned_token.token).as_str());
 
-            if spanned_token.token == Token::EOF {
+            if spanned_token.token == Token::Eof {
                 break;
             }
 

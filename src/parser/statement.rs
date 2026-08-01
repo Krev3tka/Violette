@@ -140,7 +140,7 @@ impl Parser {
                     Err(e) => {
                         if matches!(
                             self.current_token.token,
-                            Token::Newline | Token::EOF | Token::RightBrace
+                            Token::Newline | Token::Eof | Token::RightBrace
                         ) {
                             return Ok(Statement::Return { value: None });
                         }
@@ -333,7 +333,7 @@ impl Parser {
 
         let return_type = match self.current_token.token {
             Token::LeftBrace => None,
-            Token::LSB => Some(self.parse_type()?),
+            Token::LeftBracket => Some(self.parse_type()?),
             _ => return Err(self.unexpected(&self.current_token)),
         };
 
@@ -464,7 +464,7 @@ impl Parser {
 
         self.skip_terminators();
 
-        while !matches!(self.current_token.token, Token::RightBrace | Token::EOF) {
+        while !matches!(self.current_token.token, Token::RightBrace | Token::Eof) {
             let stmt = self.parse_statement()?;
 
             statements.push(stmt);
