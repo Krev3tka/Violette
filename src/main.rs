@@ -1,3 +1,5 @@
+#![allow(clippy::module_inception)]
+
 use crate::codegen::codegen::Codegen;
 use crate::lexer::lexer::Lexer;
 use crate::parser::parser::Parser;
