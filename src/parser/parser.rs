@@ -3,7 +3,7 @@ use crate::lexer::span::SpannedToken;
 use crate::lexer::token::{PrimitiveType, Token};
 use crate::parser::expression::token_precedence;
 use crate::parser::types::{ParseError, Type, TypePath};
-use crate::parser::{Precedence, Statement};
+use crate::parser::Precedence;
 
 pub const MAX_DEPTH: u32 = 64;
 
@@ -233,7 +233,7 @@ impl Parser {
             Ok(())
         } else {
             Err(ParseError::Expected {
-                expected: expected,
+                expected,
                 found: self.current_token.token.clone(),
                 span: self.current_token.span,
             })

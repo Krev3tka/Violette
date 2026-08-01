@@ -249,7 +249,7 @@ impl Codegen {
             Expression::IntLiteral(_) => Ty::Int,
             Expression::BoolLiteral(_) => Ty::Bool,
             Expression::StringLiteral(_) => Ty::String,
-            Expression::Identifier(name) => self.env.lookup(name).unwrap_or_else(|| Ty::Error),
+            Expression::Identifier(name) => self.env.lookup(name).unwrap_or(Ty::Error),
             Expression::Infix {
                 left,
                 operator,
@@ -282,7 +282,7 @@ impl Codegen {
                     _ => Ty::Error,
                 }
             }
-            Expression::Prefix { operator, right } => match operator {
+            Expression::Prefix { operator, right: _ } => match operator {
                 Token::Subtract | Token::Increment | Token::Decrement => Ty::Int,
                 Token::LogicNot => Ty::Bool,
                 _ => Ty::Error,
@@ -296,8 +296,8 @@ impl Codegen {
                             return *ret;
                         }
 
-                        for (arg, param) in args.iter().zip(params.iter()) {
-                            let a = self.infer_expr(arg);
+                        for (arg, _param) in args.iter().zip(params.iter()) {
+                            let _a = self.infer_expr(arg);
                         }
                         *ret
                     }
@@ -305,7 +305,7 @@ impl Codegen {
                     _ => Ty::Error,
                 }
             }
-            Expression::Field { object, name } => self.infer_expr(object.as_ref()),
+            Expression::Field { object, name: _ } => self.infer_expr(object.as_ref()),
             Expression::MethodCall { .. } => Ty::Error,
             _ => Ty::Error,
         }

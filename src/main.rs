@@ -1,7 +1,7 @@
 use crate::codegen::codegen::Codegen;
 use crate::lexer::lexer::Lexer;
 use crate::parser::parser::Parser;
-use crate::typechecker::checker::{Checker, TypeError};
+use crate::typechecker::checker::Checker;
 
 mod codegen;
 mod lexer;
