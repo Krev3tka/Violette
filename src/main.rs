@@ -6,6 +6,8 @@ use crate::typechecker::checker::Checker;
 mod codegen;
 mod lexer;
 mod parser;
+
+#[cfg(test)]
 mod tests;
 mod typechecker;
 
