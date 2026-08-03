@@ -1,6 +1,7 @@
 use crate::codegen::error::CodegenError;
 use crate::codegen::error::CodegenError::Unexpected;
 use crate::lexer::token::Token;
+use crate::parser::program::Program;
 use crate::parser::statement::FunParam;
 use crate::parser::{Expression, Statement};
 use crate::typechecker::checker::Checker;
@@ -8,9 +9,6 @@ use crate::typechecker::env::Env;
 use crate::typechecker::types::Ty;
 
 pub struct Codegen {
-    pub out: String,
-    indent: usize,
-    temp_counter: u32,
     checker: Checker,
     env: Env,
 }
@@ -18,53 +16,90 @@ pub struct Codegen {
 impl Codegen {
     pub fn new() -> Self {
         Codegen {
-            out: String::from(
-                "#include <stdint.h>\n#include <stdbool.h>\n#include <stdio.h>\n#include <math.h>\n\n",
-            ),
-            indent: 0,
-            temp_counter: 0,
             checker: Checker::default(),
             env: Env::default(),
         }
     }
 
-    pub fn emit(&mut self, s: &str) {
-        self.out
-            .push_str(format!("{}{}\n", " ".repeat(self.indent * 4), s).as_str());
-    }
-
-    pub fn fresh_temp(&mut self) -> String {
-        let res = format!("_tmp{}", self.temp_counter);
-        self.temp_counter += 1;
-
-        res
-    }
-
     pub fn c_type(&mut self, ty: &Ty) -> String {
         match ty {
             Ty::Int => "int64_t".to_string(),
-            Ty::Float => "float_t".to_string(),
+            Ty::Float => "double".to_string(),
             Ty::Bool => "bool".to_string(),
             Ty::String => "char*".to_string(),
             Ty::Struct(s) => format!("struct {}", s),
             Ty::Unit => "void".to_string(),
-            Ty::Fn { params, ret } => format!(
-                "{} (*{})({})",
-                self.c_type(ret.as_ref()),
-                self.fresh_temp(),
-                params
-                    .iter()
-                    .map(|x| { self.c_type(x) })
-                    .collect::<Vec<String>>()
-                    .join(", ")
-            ),
+            Ty::Fn { .. } => todo!(),
             _ => "unknown".to_string(),
         }
     }
 
+    pub fn emit_program(&mut self, prg: Program) -> Result<String, CodegenError> {
+        let mut lines: Vec<String> = vec![
+            "#include <stdio.h>".to_string(),
+            "#include <math.h>".to_string(),
+            "#include <stdbool.h>".to_string(),
+            "#include <stdint.h>\n".to_string(),
+
+            "static void print_int(int64_t x)  { printf(\"%lld\", (long long)x); }".to_string(),
+            "static void print_float(double x) { printf(\"%g\", x); }".to_string(),
+            "static void print_string(char* s)    { printf(\"%s\", s); }".to_string(),
+            "static void print_bool(bool b)    { printf(\"%s\", b ? \"true\" : \"false\"); }".to_string(),
+            "static void println_int(int64_t x)  { printf(\"%lld\\n\", (long long)x); }".to_string(),
+            "static void println_float(double x) { printf(\"%g\\n\", x); }".to_string(),
+            "static void println_string(char* s) { printf(\"%s\\n\", s); }".to_string(),
+            "static void println_bool(bool b)    { printf(\"%s\\n\", b ? \"true\" : \"false\"); }\n".to_string(),
+        ];
+
+        self.env.push();
+
+        for s in &prg.declarations {
+            if let Statement::Fun { name, params, return_type, .. } = s {
+                let p: Vec<Ty> = params
+                    .iter()
+                    .map(|p| self.checker.resolve(&p.param_type))
+                    .collect();
+                let ret = return_type
+                    .as_ref()
+                    .map_or(Ty::Unit, |t| self.checker.resolve(t));
+                self.env.define(
+                    name.clone(),
+                    Ty::Fn { params: p, ret: Box::new(ret) },
+                );
+            }
+        }
+
+        for s in &prg.declarations {
+            if let Statement::Fun { name, .. } = s
+                && name == "main"
+            {
+                lines.push("int main() {".to_string());
+                lines.push(self.emit_block(&prg.main)?);
+                lines.push("}".to_string());
+
+                continue
+            }
+            let stmt = self.emit_statement(s)?;
+            for line in stmt.lines() {
+                lines.push(line.to_string());
+            }
+        }
+
+        if !prg.main.is_empty() {
+            lines.push("int main() {".to_string());
+            lines.push(self.emit_block(&prg.main)?);
+            lines.push("}".to_string());
+        }
+
+        Ok(lines.join("\n"))
+    }
+
     pub fn emit_expression(&mut self, expr: &Expression) -> Result<String, CodegenError> {
-        let res = match expr.clone() {
+        Ok(match expr.clone() {
             Expression::IntLiteral(i) => i.to_string(),
+            Expression::FloatLiteral(f) => {
+                if f.fract() == 0.0 { format!("{f:.1}") } else { f.to_string() }
+            },
             Expression::BoolLiteral(b) => b.to_string(),
             Expression::StringLiteral(s) => format!("\"{}\"", s),
             Expression::Prefix { operator, right } => {
@@ -102,21 +137,43 @@ impl Codegen {
                 )
             }
             Expression::Identifier(ident) => ident,
+            Expression::Call { function, args } => {
+                if let Expression::Identifier(name) = function.as_ref()
+                    && (name == "print" || name == "println") && args.len() == 1 {
+                    let arg_ty = self.infer_expr(&args[0]);
+                    let suffix = match arg_ty {
+                        Ty::Int => "int",
+                        Ty::Float => "float",
+                        Ty::Bool => "bool",
+                        Ty::String => "string",
+                        _ => return Err(CodegenError::Unsupported("print for this type".to_string()))
+                    };
+
+                    let a = self.emit_expression(&args[0])?;
+
+                    return Ok(format!("{name}_{suffix}({a})"))
+                }
+
+                let f = self.emit_expression(function.as_ref())?;
+                let a = args
+                    .iter()
+                    .map(|arg| self.emit_expression(arg))
+                    .collect::<Result<Vec<_>, _>>()?
+                    .join(", ");
+
+                format!("{}({})", f, a)
+            }
             _ => {
                 return Err(CodegenError::Unsupported(format!(
                     "this expression: {:?}",
                     expr
                 )));
             }
-        };
-
-        self.emit(res.as_str());
-
-        Ok(res)
+        })
     }
 
     pub fn emit_statement(&mut self, stmt: &Statement) -> Result<String, CodegenError> {
-        let res = match stmt {
+        Ok(match stmt {
             Statement::Let { name, value } | Statement::Const { name, value } => {
                 let val_str = self.emit_expression(value)?;
 
@@ -143,22 +200,12 @@ impl Codegen {
             Statement::Expression { expression } => {
                 format!("{};", self.emit_expression(expression)?)
             }
-            Statement::Fun {
-                ..
-            } => {
-                self.emit_function(stmt)?;
-
-                String::new()
-            }
+            Statement::Fun { .. } => self.emit_function(stmt)?,
             _ => return Err(CodegenError::Unsupported(format!("{:?}", stmt))),
-        };
-
-        self.emit(res.as_str());
-
-        Ok(res)
+        })
     }
 
-    pub fn emit_function(&mut self, stmt: &Statement) -> Result<(), CodegenError> {
+    pub fn emit_function(&mut self, stmt: &Statement) -> Result<String, CodegenError> {
         if let Statement::Fun {
             name,
             params,
@@ -177,44 +224,47 @@ impl Codegen {
                 self.env.define(p.name.clone(), param_ty.clone())
             }
 
-            let mut ret = String::from("void");
+            let mut ret = if name == "main" {
+                "int".to_string()
+            } else {
+                String::from("void")
+            };
 
             if let Some(ty) = return_type {
                 let ty = self.checker.resolve(ty);
                 ret = self.c_type(&ty)
             }
 
-            let res = format!(
-                "{} {}({}) {{",
-                ret,
-                name,
-                params
-                    .iter()
-                    .map(|FunParam { name, param_type }| {
-                        let ty = self.checker.resolve(param_type);
-                        format!("{} {}", self.c_type(&ty), name.clone())
-                    })
-                    .collect::<Vec<String>>()
-                    .join(", ")
-            );
+            let parameters = params
+                .iter()
+                .map(|FunParam { name, param_type }| {
+                    let ty = self.checker.resolve(param_type);
+                    format!("{} {}", self.c_type(&ty), name.clone())
+                })
+                .collect::<Vec<String>>()
+                .join(", ");
 
-            self.emit(res.as_str());
-
-            self.indent += 1;
-
-            for s in body {
-                let stmt_str = self.emit_statement(s)?;
-                self.emit(stmt_str.as_str());
-            }
-
-            self.indent -= 1;
-
-            self.emit("}");
+            let body_str = self.emit_block(body)?;
 
             self.env.pop();
+
+            Ok(format!("{ret} {name}({parameters}) {{\n{body_str}\n}}"))
+        } else {
+            Err(Unexpected(format!("{:?}", stmt)))
+        }
+    }
+
+    pub fn emit_block(&mut self, body: &[Statement]) -> Result<String, CodegenError> {
+        let mut lines = Vec::new();
+
+        for s in body {
+            let stmt = self.emit_statement(s)?;
+            for line in stmt.lines() {
+                lines.push(format!("    {line}"));
+            }
         }
 
-        Ok(())
+        Ok(lines.join("\n"))
     }
 
     fn correlate_operator(&mut self, op: &Token) -> Result<String, CodegenError> {

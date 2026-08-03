@@ -83,8 +83,9 @@ impl Checker {
             | Type::Primitive(PrimitiveType::Uint16)
             | Type::Primitive(PrimitiveType::Uint32)
             | Type::Primitive(PrimitiveType::Uint64) => Ty::Int,
-            Type::Primitive(PrimitiveType::Float32) |
-            Type::Primitive(PrimitiveType::Float64) => Ty::Float,
+            Type::Primitive(PrimitiveType::Float32) | Type::Primitive(PrimitiveType::Float64) => {
+                Ty::Float
+            }
             Type::Primitive(PrimitiveType::String) => Ty::String,
             Type::Primitive(PrimitiveType::Bool) => Ty::Bool,
 
@@ -236,17 +237,19 @@ impl Checker {
                             Ty::Error
                         }
                     },
-                    Token::Subtract | Token::Multiply | Token::Divide | Token::Modulus => match (&left_ty, &right_ty) {
-                        (Ty::Int, Ty::Int) => Ty::Int,
-                        (Ty::Float, Ty::Float) => Ty::Float,
-                        (Ty::Error, _) | (_, Ty::Error) => Ty::Error,
-                        _ => {
-                            self.errors.push(TypeError::InvalidOperator {
-                                operator: operator.clone(),
-                                left: left_ty,
-                                right: right_ty,
-                            });
-                            Ty::Error
+                    Token::Subtract | Token::Multiply | Token::Divide | Token::Modulus => {
+                        match (&left_ty, &right_ty) {
+                            (Ty::Int, Ty::Int) => Ty::Int,
+                            (Ty::Float, Ty::Float) => Ty::Float,
+                            (Ty::Error, _) | (_, Ty::Error) => Ty::Error,
+                            _ => {
+                                self.errors.push(TypeError::InvalidOperator {
+                                    operator: operator.clone(),
+                                    left: left_ty,
+                                    right: right_ty,
+                                });
+                                Ty::Error
+                            }
                         }
                     }
                     Token::Less | Token::Greater | Token::LessOrEquals | Token::GreaterOrEquals => {
@@ -381,6 +384,13 @@ impl Checker {
     pub fn define_builtins(&mut self) {
         self.env.define(
             "print".to_string(),
+            Ty::Fn {
+                params: vec![Ty::Union(vec![Ty::Int, Ty::Float, Ty::String, Ty::Bool])],
+                ret: Box::new(Ty::Unit),
+            },
+        );
+        self.env.define(
+            "println".to_string(),
             Ty::Fn {
                 params: vec![Ty::Union(vec![Ty::Int, Ty::Float, Ty::String, Ty::Bool])],
                 ret: Box::new(Ty::Unit),
