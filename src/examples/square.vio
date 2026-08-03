@@ -1,0 +1,7 @@
+package square
+
+fun square(x: float32) [float64] {
+    return x ** 2
+}
+
+println(square(6.4))
