@@ -2,7 +2,7 @@
 #[allow(clippy::approx_constant)]
 mod lexing_tests {
     use crate::lexer::lexer::Lexer;
-    use crate::lexer::token::PrimitiveType::{Int};
+    use crate::lexer::token::PrimitiveType::Int;
     use crate::lexer::token::{PrimitiveType, Token};
     use pretty_assertions::assert_eq;
 
@@ -31,8 +31,13 @@ mod lexing_tests {
             assert_eq!(a, e, "Token #{i} mismatch : got {a:?}, expected {e:?}");
         }
 
-        assert_eq!(actual.len(), expected.len(),
-                   "token count mismatch: got {}, expected {}", actual.len(), expected.len());
+        assert_eq!(
+            actual.len(),
+            expected.len(),
+            "token count mismatch: got {}, expected {}",
+            actual.len(),
+            expected.len()
+        );
     }
 
     #[test]
@@ -60,8 +65,8 @@ mod lexing_tests {
                 Token::Assign,
                 Token::Float32(3.14),
                 Token::Newline,
-                Token::Eof
-            ]
+                Token::Eof,
+            ],
         )
     }
 
@@ -93,8 +98,8 @@ mod lexing_tests {
                 Token::RightBracket,
                 Token::LeftBrace,
                 Token::RightBrace,
-                Token::Eof
-            ]
+                Token::Eof,
+            ],
         )
     }
 
@@ -144,8 +149,8 @@ mod lexing_tests {
                 Token::Int(0),
                 Token::Newline,
                 Token::RightBrace,
-                Token::Eof
-            ]
+                Token::Eof,
+            ],
         )
     }
 
@@ -167,8 +172,8 @@ mod lexing_tests {
                 Token::BitAnd,
                 Token::BitNot,
                 Token::Int(8),
-                Token::Eof
-            ]
+                Token::Eof,
+            ],
         )
     }
 
@@ -241,8 +246,8 @@ mod lexing_tests {
                 Token::Identifier("i".to_string()),
                 Token::Decrement,
                 Token::Newline,
-                Token::Eof
-            ]
+                Token::Eof,
+            ],
         )
     }
 }

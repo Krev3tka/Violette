@@ -1,9 +1,9 @@
 use crate::lexer::lexer::Lexer;
 use crate::lexer::span::SpannedToken;
 use crate::lexer::token::{PrimitiveType, Token};
+use crate::parser::Precedence;
 use crate::parser::expression::token_precedence;
 use crate::parser::types::{ParseError, Type, TypePath};
-use crate::parser::Precedence;
 
 pub const MAX_DEPTH: u32 = 64;
 

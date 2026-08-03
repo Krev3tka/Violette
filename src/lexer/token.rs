@@ -82,12 +82,12 @@ pub enum Token {
     DivAndAssign, // /=
     ModAndAssign, // %=
 
-    LeftParen,  // (
-    RightParen, // )
-    LeftBracket,        // [
-    RightBracket,        // ]
-    LeftBrace,  // {
-    RightBrace, // }
+    LeftParen,    // (
+    RightParen,   // )
+    LeftBracket,  // [
+    RightBracket, // ]
+    LeftBrace,    // {
+    RightBrace,   // }
 
     LogicOr,  // ||
     LogicAnd, // &&

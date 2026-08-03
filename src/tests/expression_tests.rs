@@ -6,7 +6,7 @@ mod expressions_tests {
         Add, Assign, Equals, Greater, LeftShift, LessOrEquals, LogicNot, Multiply, NotEquals,
         Power, RightShift, Subtract,
     };
-    use crate::parser::Expression::{ Call, Identifier, IntLiteral};
+    use crate::parser::Expression::{Call, Identifier, IntLiteral};
     use crate::parser::parser::Parser;
     use crate::parser::statement::MatchArm;
     use crate::parser::{Expression, Precedence};
