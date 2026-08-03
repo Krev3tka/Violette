@@ -122,12 +122,46 @@ impl Checker {
                 self.env.define(p.name.clone(), ty)
             }
 
-            for s in body {
-                self.check_statement(s);
-            }
+            self.check_block(body);
         }
 
         self.env.pop();
+    }
+
+    pub fn check_for_stmt(&mut self, stmt: &Statement) {
+        self.env.push();
+        if let Statement::ForCondition {
+            condition: cond,
+            body
+        } = stmt {
+            let cond_ty = self.infer(cond);
+
+            self.expect(&cond_ty, &Ty::Bool);
+
+            self.check_block(body);
+        } else if let Statement::ForRange {
+            variable,
+            iterable,
+            body
+        } = stmt {
+            todo!();
+        } else if let Statement::ForCounter {
+            init,
+            condition: cond,
+            post,
+            body
+        } = stmt {
+            self.check_statement(init.as_ref());
+
+            let cond_ty = self.infer(cond);
+
+            self.expect(&cond_ty, &Ty::Bool);
+
+            let post_ty = self.infer(post);
+
+            self.check_block(body);
+        }
+        self.env.pop()
     }
 
     pub fn check_statement(&mut self, stmt: &Statement) {
@@ -156,6 +190,13 @@ impl Checker {
                     self.check_block(&if_stmt.else_block);
                 }
             }
+            Statement::ForCondition {
+                ..
+            } | Statement::ForCounter {
+                ..
+            } | Statement::ForRange {
+                ..
+            } => self.check_for_stmt(stmt),
             Statement::Return { value } => {
                 let ty = match value {
                     Some(v) => self.infer(v),
@@ -237,7 +278,7 @@ impl Checker {
                             Ty::Error
                         }
                     },
-                    Token::Subtract | Token::Multiply | Token::Divide | Token::Modulus => {
+                    Token::Subtract | Token::Multiply | Token::Divide => {
                         match (&left_ty, &right_ty) {
                             (Ty::Int, Ty::Int) => Ty::Int,
                             (Ty::Float, Ty::Float) => Ty::Float,
@@ -251,21 +292,30 @@ impl Checker {
                                 Ty::Error
                             }
                         }
-                    }
+                    },
+                    Token::Modulus => {
+                        match (&left_ty, &right_ty) {
+                            (Ty::Int, Ty::Int) => Ty::Int,
+                            (Ty::Error, _) | (_, Ty::Error) => Ty::Error,
+                            _ => {
+                                self.errors.push(TypeError::InvalidOperator {
+                                    operator: operator.clone(),
+                                    left: left_ty,
+                                    right: right_ty,
+                                });
+                                Ty::Error
+                            }
+                        }
+                    },
                     Token::Less | Token::Greater | Token::LessOrEquals | Token::GreaterOrEquals => {
-                        if let (Ty::Int, Ty::Int) = (&left_ty, &right_ty) {
-                            Ty::Int
-                        } else if let (Ty::Float, Ty::Float) = (&left_ty, &right_ty) {
-                            Ty::Float
-                        } else if let (Ty::Error, _) | (_, Ty::Error) = (&left_ty, &right_ty) {
-                            Ty::Error
-                        } else {
-                            self.errors.push(TypeError::InvalidOperator {
+                        match (&left_ty, &right_ty) {
+                            (Ty::Int, Ty::Int) | (Ty::Float, Ty::Float) => {}
+                            (Ty::Error, _) | (_, Ty::Error) => return Ty::Error,
+                            _ => self.errors.push(TypeError::InvalidOperator {
                                 operator: operator.clone(),
                                 left: left_ty,
                                 right: right_ty,
-                            });
-                            Ty::Error
+                            }),
                         };
                         Ty::Bool
                     }

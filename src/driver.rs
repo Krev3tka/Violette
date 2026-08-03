@@ -57,10 +57,12 @@ pub fn compile(command: &str, file: &str) {
 
     c_file.write_all(code.as_bytes()).expect("Failed to write to temporary C file");
 
-    let out = Path::new(file).file_stem().unwrap().to_str().unwrap();
+    fs::create_dir_all("bin/").unwrap();
+
+    let out = format!("bin/{}", Path::new(file).file_stem().unwrap().to_str().unwrap());
 
     let status = Command::new(&compiler)
-        .args(["-std=c99", "-O3", c_path.to_str().unwrap(), "-o", out])
+        .args(["-std=c99", "-O3", c_path.to_str().unwrap(), "-o", out.as_str()])
         .status()
         .map_err(|e| e.to_string())
         .expect("Failed to compile");

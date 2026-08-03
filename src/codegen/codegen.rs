@@ -2,7 +2,7 @@ use crate::codegen::error::CodegenError;
 use crate::codegen::error::CodegenError::Unexpected;
 use crate::lexer::token::Token;
 use crate::parser::program::Program;
-use crate::parser::statement::FunParam;
+use crate::parser::statement::{FunParam, IfStatement};
 use crate::parser::{Expression, Statement};
 use crate::typechecker::checker::Checker;
 use crate::typechecker::env::Env;
@@ -190,13 +190,44 @@ impl Codegen {
                 self.env.define(name.clone(), ty.clone());
 
                 format!("{} {} = {};", self.c_type(&ty), name, val_str)
+            },
+            Statement::If(IfStatement {
+                condition,
+                then_block,
+                else_if,
+                else_block
+            }) => {
+
+                self.env.push();
+
+                let mut res = String::new();
+
+                let cond = self.emit_expression(condition)?;
+
+                let first_block = self.emit_block(then_block)?;
+
+                res.push_str(format!("if ({}) {{\n{}\n}}\n", cond, first_block).as_str());
+
+                if !else_if.is_empty() {
+                    for if_s in else_if {
+                        let cond = self.emit_expression(&if_s.condition)?;
+
+                        let some_block = self.emit_block(&if_s.block)?;
+
+                        res.push_str(format!("else if ({}) {{\n{}\n}}\n", cond, some_block).as_str());
+                    }
+                }
+
+                if !else_block.is_empty() {
+                    let el_block = self.emit_block(else_block)?;
+
+                    res.push_str(format!("else {{\n{}\n}}\n", el_block).as_str())
+                }
+
+                self.env.pop();
+
+                res
             }
-            // Statement::If(if_stmt) => {
-            //     format("if ({}) {\n{}\n}",
-            //            self.emit_expression(if_stmt.condition)?,
-            //     self.emit_statement(if_stmt.then_block))
-            // }
-            // finish up later
             Statement::Return { value } => {
                 let mut val_str = String::new();
                 if let Some(expr) = value {
@@ -208,9 +239,52 @@ impl Codegen {
             Statement::Expression { expression } => {
                 format!("{};", self.emit_expression(expression)?)
             }
+            Statement::ForCondition {
+                ..
+            } | Statement::ForCounter {
+                ..
+            } => self.emit_for(stmt)?,
             Statement::Fun { .. } => self.emit_function(stmt)?,
             _ => return Err(CodegenError::Unsupported(format!("{:?}", stmt))),
         })
+    }
+
+    pub fn emit_for(&mut self, stmt: &Statement) -> Result<String, CodegenError>{
+        if let Statement::ForCondition {
+            condition,
+            body
+        } = stmt {
+            self.env.push();
+
+            let cond = self.emit_expression(condition)?;
+
+            let body = self.emit_block(body)?;
+
+            self.env.pop();
+
+            Ok(format!("while ({}) {{\n{}\n}}", cond, body))
+        } else if let Statement::ForCounter {
+            init,
+            condition,
+            post,
+            body
+        } = stmt {
+            self.env.push();
+
+            let initial = self.emit_statement(init.as_ref())?;
+
+            let cond = self.emit_expression(condition)?;
+
+            let postfix = self.emit_expression(post)?;
+
+            let body = self.emit_block(body)?;
+
+            self.env.pop();
+
+            Ok(format!("for ({} {}; {}) {{\n{}\n}}", initial, cond, postfix, body))
+        } else {
+            Err(Unexpected(self.emit_statement(stmt)?))
+        }
     }
 
     pub fn emit_function(&mut self, stmt: &Statement) -> Result<String, CodegenError> {

@@ -1,9 +1,9 @@
 package square
 
-fun square(x: float32) [float64] {
+fun square(x: int) [float64] {
     return x ** 2
 }
 
 fun main() {
-    println(square(6.4))
+    println(square(6))
 }

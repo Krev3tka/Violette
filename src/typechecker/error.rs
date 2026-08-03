@@ -8,6 +8,7 @@ pub enum TypeError {
         found: Ty,
     },
     UnknownName(String),
+    AlreadyUsed(String),
     NotCallable,
     ArityMismatch {
         name: String,
