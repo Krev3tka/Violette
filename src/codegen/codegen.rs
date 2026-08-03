@@ -70,11 +70,15 @@ impl Codegen {
         }
 
         for s in &prg.declarations {
-            if let Statement::Fun { name, .. } = s
+            if let Statement::Fun { name,
+                body, ..
+            } = s
                 && name == "main"
             {
-                lines.push("int main() {".to_string());
-                lines.push(self.emit_block(&prg.main)?);
+                lines.push("int main(void) {".to_string());
+
+                lines.push(self.emit_block(body)?);
+
                 lines.push("}".to_string());
 
                 continue
@@ -86,12 +90,16 @@ impl Codegen {
         }
 
         if !prg.main.is_empty() {
-            lines.push("int main() {".to_string());
+            lines.push("int main(void) {".to_string());
             lines.push(self.emit_block(&prg.main)?);
             lines.push("}".to_string());
         }
 
-        Ok(lines.join("\n"))
+        let mut res = lines.join("\n");
+
+        res.push('\n');
+
+        Ok(res)
     }
 
     pub fn emit_expression(&mut self, expr: &Expression) -> Result<String, CodegenError> {
@@ -248,7 +256,11 @@ impl Codegen {
 
             self.env.pop();
 
-            Ok(format!("{ret} {name}({parameters}) {{\n{body_str}\n}}"))
+            if !params.is_empty() {
+                Ok(format!("{ret} {name}({parameters}) {{\n{body_str}\n}}"))
+            } else {
+                Ok(format!("{ret} {name}(void) {{\n{body_str}\n}}"))
+            }
         } else {
             Err(Unexpected(format!("{:?}", stmt)))
         }

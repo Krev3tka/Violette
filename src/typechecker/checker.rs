@@ -253,8 +253,20 @@ impl Checker {
                         }
                     }
                     Token::Less | Token::Greater | Token::LessOrEquals | Token::GreaterOrEquals => {
-                        self.expect(&left_ty, &Ty::Int);
-                        self.expect(&right_ty, &Ty::Int);
+                        if let (Ty::Int, Ty::Int) = (&left_ty, &right_ty) {
+                            Ty::Int
+                        } else if let (Ty::Float, Ty::Float) = (&left_ty, &right_ty) {
+                            Ty::Float
+                        } else if let (Ty::Error, _) | (_, Ty::Error) = (&left_ty, &right_ty) {
+                            Ty::Error
+                        } else {
+                            self.errors.push(TypeError::InvalidOperator {
+                                operator: operator.clone(),
+                                left: left_ty,
+                                right: right_ty,
+                            });
+                            Ty::Error
+                        };
                         Ty::Bool
                     }
                     Token::Equals | Token::NotEquals => match (&left_ty, &right_ty) {
