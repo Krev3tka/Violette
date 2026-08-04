@@ -26,6 +26,7 @@ pub struct Parser {
     pub current_token: SpannedToken,
     pub peek_token: SpannedToken,
     pub depth: u32,
+    pub allowed_struct_literal: bool,
 }
 
 impl Parser {
@@ -38,6 +39,7 @@ impl Parser {
             current_token: curr_spanned_token,
             peek_token: peek_spanned_token,
             depth: 0,
+            allowed_struct_literal: true
         }
     }
 

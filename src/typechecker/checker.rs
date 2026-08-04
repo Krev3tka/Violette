@@ -214,6 +214,20 @@ impl Checker {
         }
     }
 
+    pub fn check_struct(&mut self, stmt: &Statement) {
+        if let Statement::Struct {
+            name,
+            fields
+        } = stmt {
+            self.env.push();
+            for f in fields {
+                let ty = self.resolve(&f.param_type);
+                self.env.define(f.name.clone(), ty)
+            }
+            self.env.pop();
+        }
+    }
+
     pub fn check_block(&mut self, block: &[Statement]) {
         self.env.push();
         for s in block {
@@ -404,6 +418,25 @@ impl Checker {
                     params: param_tys,
                     ret: Box::new(ret),
                 }
+            }
+            Expression::StructLiteral {
+                name, fields
+            } => {
+                if self.structs.get(name).is_none() {
+                    self.errors.push(TypeError::UnknownName(name.clone()));
+                    return Ty::Error
+                }
+
+                for f in fields {
+                    match self.infer(f.field_val.as_ref()) {
+                        Ty::Error => {
+                            return Ty::Error
+                        },
+                        _ => continue
+                    }
+                };
+
+                Ty::Struct(name.clone())
             }
             Expression::Field { object, name } => {
                 let obj_ty = self.infer(object.as_ref());

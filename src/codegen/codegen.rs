@@ -2,9 +2,10 @@ use crate::codegen::error::CodegenError;
 use crate::codegen::error::CodegenError::Unexpected;
 use crate::lexer::token::Token;
 use crate::parser::program::Program;
-use crate::parser::statement::{FunParam, IfStatement};
+use crate::parser::statement::{FunParam, IfStatement, StructParam};
 use crate::parser::{Expression, Statement};
-use crate::typechecker::checker::Checker;
+use crate::parser::expression::StructLiteralField;
+use crate::typechecker::checker::{Checker, TypeError};
 use crate::typechecker::env::Env;
 use crate::typechecker::types::Ty;
 
@@ -27,7 +28,7 @@ impl Codegen {
             Ty::Float => "double".to_string(),
             Ty::Bool => "bool".to_string(),
             Ty::String => "char*".to_string(),
-            Ty::Struct(s) => format!("struct {}", s),
+            Ty::Struct(s) => s.to_string(),
             Ty::Unit => "void".to_string(),
             Ty::Fn { .. } => todo!(),
             _ => "unknown".to_string(),
@@ -50,6 +51,8 @@ impl Codegen {
             "static void println_string(char* s) { printf(\"%s\\n\", s); }".to_string(),
             "static void println_bool(bool b)    { printf(\"%s\\n\", b ? \"true\" : \"false\"); }\n".to_string(),
         ];
+
+        self.checker.collect_signatures(&prg.declarations);
 
         self.env.push();
 
@@ -110,6 +113,20 @@ impl Codegen {
             },
             Expression::BoolLiteral(b) => b.to_string(),
             Expression::StringLiteral(s) => format!("\"{}\"", s),
+            Expression::StructLiteral {
+                name,
+                fields
+            } => {
+                let c_fields = fields.iter().map(|f| {
+                    let f_val = self.emit_expression(f.field_val.as_ref()).unwrap();
+
+                    Ok(format!("{} = {}", f.field_name, f_val))
+                })
+                    .collect::<Result<Vec<_>, _>>()?
+                    .join(", .");
+
+                format!("({}){{ .{} }}", name.clone(), c_fields)
+            }
             Expression::Prefix { operator, right } => {
                 format!(
                     "{}{}",
@@ -171,6 +188,10 @@ impl Codegen {
 
                 format!("{}({})", f, a)
             }
+            Expression::Field {
+                object,
+                name
+            } => format!("{}.{}", self.emit_expression(object.as_ref())?, name),
             _ => {
                 return Err(CodegenError::Unsupported(format!(
                     "this expression: {:?}",
@@ -245,6 +266,9 @@ impl Codegen {
                 ..
             } => self.emit_for(stmt)?,
             Statement::Fun { .. } => self.emit_function(stmt)?,
+            Statement::Struct {
+                ..
+            } => self.emit_struct(stmt)?,
             _ => return Err(CodegenError::Unsupported(format!("{:?}", stmt))),
         })
     }
@@ -335,6 +359,45 @@ impl Codegen {
             } else {
                 Ok(format!("{ret} {name}(void) {{\n{body_str}\n}}"))
             }
+        } else {
+            Err(Unexpected(format!("{:?}", stmt)))
+        }
+    }
+
+    pub fn emit_struct(&mut self, stmt: &Statement) -> Result<String, CodegenError> {
+
+        if let Statement::Struct {
+            name,
+            fields,
+        } = stmt {
+            self.env.push();
+
+            let field_tys: Vec<Ty> = fields
+                .iter()
+                .map(|p| self.checker.resolve(&p.param_type))
+                .collect();
+
+            for (f, field_ty) in fields.iter().zip(field_tys.iter()) {
+                self.env.define(f.name.clone(), field_ty.clone())
+            }
+
+            let mut c_fields = fields
+                .iter()
+                .map(| StructParam {
+                    name: n,
+                    param_type
+                } | {
+                    let ty = self.checker.resolve(param_type);
+                    format!("\t{} {}", self.c_type(&ty), n.clone())
+                })
+                .collect::<Vec<String>>()
+                .join(";\n");
+
+            c_fields.push_str(";\n");
+
+            self.env.pop();
+
+            Ok(format!("typedef struct {{\n{}}} {};", c_fields, name.clone()))
         } else {
             Err(Unexpected(format!("{:?}", stmt)))
         }
@@ -443,7 +506,37 @@ impl Codegen {
                     _ => Ty::Error,
                 }
             }
-            Expression::Field { object, name: _ } => self.infer_expr(object.as_ref()),
+            Expression::Field { object, name } => {
+                let obj_ty = self.infer_expr(object);
+
+                match obj_ty {
+                    Ty::Struct(s) => match self.checker.structs.get(&s) {
+                        Some(struct_sig) => {
+                            match struct_sig.iter().find(|(curr_name, _)| curr_name == name) {
+                                Some(field) => field.1.clone(),
+                                None => {
+                                    self.checker.errors.push(TypeError::UnknownField {
+                                        struct_name: s,
+                                        field: name.clone(),
+                                    });
+                                    Ty::Error
+                                }
+                            }
+                        }
+                        None => {
+                            self.checker.errors.push(TypeError::UnknownName(name.clone()));
+                            Ty::Error
+                        }
+                    },
+                    Ty::Error => Ty::Error,
+                    _ => {
+                        self.checker.errors.push(TypeError::NoFields(obj_ty));
+                        Ty::Error
+                    }
+                }
+
+            },
+            Expression::StructLiteral { name, .. } => Ty::Struct(name.clone()),
             Expression::MethodCall { .. } => Ty::Error,
             _ => Ty::Error,
         }

@@ -2,7 +2,7 @@ use crate::lexer::token::Token;
 use crate::parser::Expression::Infix;
 use crate::parser::Precedence::{Lowest, Prefix};
 use crate::parser::parser::{MAX_DEPTH, Parser};
-use crate::parser::statement::{FunParam, MatchArm};
+use crate::parser::statement::{FunParam, MatchArm, StructParam};
 use crate::parser::types::Type;
 use crate::parser::{ParseError, Precedence, Statement};
 
@@ -14,6 +14,11 @@ pub enum Expression {
     FloatLiteral(f64),
     BoolLiteral(bool),
     StringLiteral(String),
+
+    StructLiteral {
+        name: String,
+        fields: Vec<StructLiteralField>,
+    },
 
     Prefix {
         operator: Token,
@@ -68,6 +73,12 @@ pub enum Expression {
     },
 }
 
+#[derive(Debug, PartialEq, Clone)]
+pub struct StructLiteralField {
+    pub field_name: String,
+    pub field_val: Box<Expression>,
+}
+
 pub fn token_precedence(token: &Token) -> Precedence {
     match token {
         Token::Assign
@@ -119,7 +130,56 @@ impl Parser {
             Token::Int(v) => Expression::IntLiteral(*v),
             Token::Float32(v) => Expression::FloatLiteral(*v as f64),
             Token::Float64(v) => Expression::FloatLiteral(*v),
-            Token::Identifier(s) => Expression::Identifier(s.clone()),
+            Token::Identifier(s) => {
+                if self.allowed_struct_literal && matches!(self.peek_token.token, Token::LeftBrace) {
+                    let name = match self.current_token.token.clone() {
+                        Token::Identifier(n) => n,
+                        _ => return Err(self.unexpected(&self.current_token))
+                    };
+                    self.next_token();
+                    self.expect(Token::LeftBrace)?;
+                    self.skip_terminators();
+
+                    let mut fields = Vec::new();
+
+                    while !matches!(self.current_token.token, Token::RightBrace) {
+                        let field_name = match self.current_token.token.clone() {
+                            Token::Identifier(n) => n,
+                            _ => return Err(self.unexpected(&self.current_token))
+                        };
+
+                        self.next_token();
+                        self.expect(Token::Colon)?;
+
+                        let field_val = Box::new(self.parse_expression(Lowest)?);
+                        fields.push(StructLiteralField {
+                            field_name,
+                            field_val
+                        });
+
+                        self.next_token();
+                        self.skip_terminators();
+
+                        match self.current_token.token.clone() {
+                            Token::Comma => self.expect(Token::Comma),
+                            Token::RightBrace => break,
+                            _ => return Err(self.unexpected(&self.current_token)),
+                        }?;
+                        self.skip_terminators();
+
+                    }
+
+                    self.skip_terminators();
+
+                    Expression::StructLiteral {
+                        name,
+                        fields,
+                    }
+
+                } else {
+                    Expression::Identifier(s.clone())
+                }
+            },
             Token::Bool(b) => Expression::BoolLiteral(*b),
             Token::String(s) => Expression::StringLiteral(s.clone()),
             Token::LeftParen => {
@@ -276,7 +336,11 @@ impl Parser {
     pub fn parse_match_expression(&mut self) -> Result<Expression, ParseError> {
         self.expect(Token::Match)?;
 
+        let saved = self.allowed_struct_literal;
+        self.allowed_struct_literal = false;
         let target = self.parse_expression(Lowest)?;
+        self.allowed_struct_literal = saved;
+
         self.next_token();
 
         self.expect(Token::LeftBrace)?;
@@ -295,7 +359,12 @@ impl Parser {
 
                 Expression::Block { body: block_stmts }
             } else {
+                let saved = self.allowed_struct_literal;
+                self.allowed_struct_literal = false;
+
                 let e = self.parse_expression(Lowest)?;
+
+                self.allowed_struct_literal = saved;
                 self.next_token();
                 e
             };

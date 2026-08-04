@@ -163,7 +163,11 @@ impl Parser {
     pub fn parse_if_statement(&mut self) -> Result<Statement, ParseError> {
         self.expect(Token::If)?;
 
+        let saved = self.allowed_struct_literal;
+        self.allowed_struct_literal = false;
         let condition = self.parse_expression(Lowest)?;
+
+        self.allowed_struct_literal = saved;
 
         self.next_token();
 
@@ -202,7 +206,10 @@ impl Parser {
     pub fn parse_else_if_statement(&mut self) -> Result<ElseIf, ParseError> {
         self.expect(Token::If)?;
 
+        let saved = self.allowed_struct_literal;
+        self.allowed_struct_literal = false;
         let condition = self.parse_expression(Lowest)?;
+        self.allowed_struct_literal = saved;
 
         self.next_token();
         self.expect(Token::LeftBrace)?;
@@ -234,7 +241,10 @@ impl Parser {
     pub fn parse_for_range(&mut self, var: &str) -> Result<Statement, ParseError> {
         let variable = var.to_owned();
 
+        let saved = self.allowed_struct_literal;
+        self.allowed_struct_literal = false;
         let iterable = self.parse_expression(Lowest)?;
+        self.allowed_struct_literal = saved;
 
         self.next_token();
         self.skip_terminators();
@@ -257,10 +267,13 @@ impl Parser {
 
     pub fn parse_for_counter(&mut self, var: &str) -> Result<Statement, ParseError> {
         let name = var.to_owned();
-        self.expect(Token::Identifier("".to_string()))?;
+        self.next_token();
         self.expect(Token::Assign)?;
 
+        let saved = self.allowed_struct_literal;
+        self.allowed_struct_literal = false;
         let value = self.parse_expression(Lowest)?;
+        self.allowed_struct_literal = saved;
 
         let init = Box::new(Statement::Let { name, value });
 
@@ -272,7 +285,10 @@ impl Parser {
 
         self.expect(Token::Semicolon)?;
 
+        let saved = self.allowed_struct_literal;
+        self.allowed_struct_literal = false;
         let condition = self.parse_expression(Lowest)?;
+        self.allowed_struct_literal = saved;
 
         self.next_token();
 
@@ -282,7 +298,10 @@ impl Parser {
 
         self.expect(Token::Semicolon)?;
 
+        let saved = self.allowed_struct_literal;
+        self.allowed_struct_literal = false;
         let post = self.parse_expression(Lowest)?;
+        self.allowed_struct_literal = saved;
 
         self.next_token();
         self.skip_terminators();
@@ -303,7 +322,10 @@ impl Parser {
     }
 
     pub fn parse_for_condition(&mut self) -> Result<Statement, ParseError> {
+        let saved = self.allowed_struct_literal;
+        self.allowed_struct_literal = false;
         let condition = self.parse_expression(Lowest)?;
+        self.allowed_struct_literal = saved;
 
         self.next_token();
 
@@ -475,7 +497,11 @@ impl Parser {
     }
 
     pub fn parse_block(&mut self) -> Result<Vec<Statement>, ParseError> {
+        let saved = self.allowed_struct_literal;
+        self.allowed_struct_literal = true;
         let statements = self.parse_statements()?;
+
+        self.allowed_struct_literal = saved;
 
         if !matches!(self.current_token.token, Token::RightBrace) {
             return Err(ParseError::UnexpectedEof);

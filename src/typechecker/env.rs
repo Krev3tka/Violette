@@ -14,6 +14,11 @@ impl Env {
         self.scopes.pop();
     }
     pub fn define(&mut self, name: String, ty: Ty) {
+
+        if self.scopes.is_empty() {
+            self.push();
+        }
+
         self.scopes.last_mut().unwrap().insert(name, ty);
     }
 
