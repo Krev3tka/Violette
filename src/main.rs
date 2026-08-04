@@ -19,7 +19,7 @@ mod driver;
 fn main() {
     let args: Vec<String> = env::args().collect();
 
-    if args.len() < 2 {
+    if args.len() < 3 {
         println!("Error: Missing required arguments. Expected at least 2 arguments, but received {}\n\nUsage: violette <build|run> <file.vio>", args.len());
         return;
     }
