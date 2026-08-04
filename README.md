@@ -82,8 +82,8 @@ let сurrentTime = now()
 To build the compiler locally, you need a working Rust toolchain:
 
 ```Bash
-git clone [https://github.com/your-username/violette.git](https://github.com/your-username/violette.git)
-cd violette
+git clone https://github.com/Krev3tka/Violette
+cd Violette
 cargo build --release
 ```
 
