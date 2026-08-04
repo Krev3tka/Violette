@@ -87,6 +87,13 @@ cd Violette
 cargo build --release
 ```
 
+If you use Nix with flakes enabled, you can spawn a completely reproducible environment without installing Rust manually:
+```Bash
+git clone https://github.com/Krev3tka/Violette
+nix develop
+nix build
+```
+
 ---
 
 ## Support the Development
