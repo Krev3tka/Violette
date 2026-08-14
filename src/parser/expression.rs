@@ -131,10 +131,11 @@ impl Parser {
             Token::Float32(v) => Expression::FloatLiteral(*v as f64),
             Token::Float64(v) => Expression::FloatLiteral(*v),
             Token::Identifier(s) => {
-                if self.allowed_struct_literal && matches!(self.peek_token.token, Token::LeftBrace) {
+                if self.allowed_struct_literal && matches!(self.peek_token.token, Token::LeftBrace)
+                {
                     let name = match self.current_token.token.clone() {
                         Token::Identifier(n) => n,
-                        _ => return Err(self.unexpected(&self.current_token))
+                        _ => return Err(self.unexpected(&self.current_token)),
                     };
                     self.next_token();
                     self.expect(Token::LeftBrace)?;
@@ -145,7 +146,7 @@ impl Parser {
                     while !matches!(self.current_token.token, Token::RightBrace) {
                         let field_name = match self.current_token.token.clone() {
                             Token::Identifier(n) => n,
-                            _ => return Err(self.unexpected(&self.current_token))
+                            _ => return Err(self.unexpected(&self.current_token)),
                         };
 
                         self.next_token();
@@ -154,7 +155,7 @@ impl Parser {
                         let field_val = Box::new(self.parse_expression(Lowest)?);
                         fields.push(StructLiteralField {
                             field_name,
-                            field_val
+                            field_val,
                         });
 
                         self.next_token();
@@ -166,20 +167,15 @@ impl Parser {
                             _ => return Err(self.unexpected(&self.current_token)),
                         }?;
                         self.skip_terminators();
-
                     }
 
                     self.skip_terminators();
 
-                    Expression::StructLiteral {
-                        name,
-                        fields,
-                    }
-
+                    Expression::StructLiteral { name, fields }
                 } else {
                     Expression::Identifier(s.clone())
                 }
-            },
+            }
             Token::Bool(b) => Expression::BoolLiteral(*b),
             Token::String(s) => Expression::StringLiteral(s.clone()),
             Token::LeftParen => {

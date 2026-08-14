@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Build & Test Compiler
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.2'
+
+      - name: Setup Rust Cache
+        uses: swatinem/rust-cache@v2
+
+      - name: Install Rust Toolchain
+        run: rustup show
+
+      - name: Check Formatting
+        run: cargo fmt --check
+
+      - name: Run Clippy Linter
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Build Compiler
+        run: cargo build --verbose
+
+      - name: Run Unit & Integration Tests
+        run: cargo test --verbose
+
+      - name: Run Violette Test Suite
+        working-directory: tools/Viotestte
+        run: go run .

@@ -28,4 +28,5 @@ pub enum TypeError {
     Unsupported(String),
     DuplicateDefinition(String),
     ConflictingEntryPoint,
+    AlreadyDefined(String),
 }

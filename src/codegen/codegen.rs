@@ -4,21 +4,18 @@ use crate::lexer::token::Token;
 use crate::parser::program::Program;
 use crate::parser::statement::{FunParam, IfStatement, StructParam};
 use crate::parser::{Expression, Statement};
-use crate::parser::expression::StructLiteralField;
 use crate::typechecker::checker::{Checker, TypeError};
 use crate::typechecker::env::Env;
 use crate::typechecker::types::Ty;
 
 pub struct Codegen {
     checker: Checker,
-    env: Env,
 }
 
 impl Codegen {
     pub fn new() -> Self {
         Codegen {
             checker: Checker::default(),
-            env: Env::default(),
         }
     }
 
@@ -41,41 +38,66 @@ impl Codegen {
             "#include <math.h>".to_string(),
             "#include <stdbool.h>".to_string(),
             "#include <stdint.h>\n".to_string(),
+            "#include <string.h>\n".to_string(),
+            "#include <stdlib.h>\n".to_string(),
 
-            "static void print_int(int64_t x)  { printf(\"%lld\", (long long)x); }".to_string(),
-            "static void print_float(double x) { printf(\"%g\", x); }".to_string(),
-            "static void print_string(char* s)    { printf(\"%s\", s); }".to_string(),
-            "static void print_bool(bool b)    { printf(\"%s\", b ? \"true\" : \"false\"); }".to_string(),
-            "static void println_int(int64_t x)  { printf(\"%lld\\n\", (long long)x); }".to_string(),
-            "static void println_float(double x) { printf(\"%g\\n\", x); }".to_string(),
-            "static void println_string(char* s) { printf(\"%s\\n\", s); }".to_string(),
-            "static void println_bool(bool b)    { printf(\"%s\\n\", b ? \"true\" : \"false\"); }\n".to_string(),
+            "static void vio_print_int(int64_t x)  { printf(\"%lld\", (long long)x); }".to_string(),
+            "static void vio_print_float(double x) { printf(\"%g\", x); }".to_string(),
+            "static void vio_print_string(char* s)    { printf(\"%s\", s); }".to_string(),
+            "static void vio_print_bool(bool b)    { printf(\"%s\", b ? \"true\" : \"false\"); }".to_string(),
+            "static void vio_println_int(int64_t x)  { printf(\"%lld\\n\", (long long)x); }".to_string(),
+            "static void vio_println_float(double x) { printf(\"%g\\n\", x); }".to_string(),
+            "static void vio_println_string(char* s) { printf(\"%s\\n\", s); }".to_string(),
+            "static void vio_println_bool(bool b)    { printf(\"%s\\n\", b ? \"true\" : \"false\"); }\n".to_string(),
+            "const char* vio_str_concat(const char* s1, const char* s2) {
+    size_t len1 = strlen(s1);
+    size_t len2 = strlen(s2);
+    char* result = malloc(len1 + len2 + 1);
+
+    if (result == NULL) {
+        return NULL;
+    }
+
+    strcpy(result, s1);
+    strcat(result, s2);
+
+    return result;
+}\n".to_string()
         ];
 
         self.checker.collect_signatures(&prg.declarations);
 
-        self.env.push();
+        self.checker.env.push();
 
         for s in &prg.declarations {
-            if let Statement::Fun { name, params, return_type, .. } = s {
+            if let Statement::Fun {
+                name,
+                params,
+                return_type,
+                ..
+            } = s
+            {
                 let p: Vec<Ty> = params
                     .iter()
                     .map(|p| self.checker.resolve(&p.param_type))
                     .collect();
+
                 let ret = return_type
                     .as_ref()
                     .map_or(Ty::Unit, |t| self.checker.resolve(t));
-                self.env.define(
+
+                let fn_ty = Ty::Fn { params: p, ret: Box::new(ret) };
+
+                self.checker.defined(
                     name.clone(),
-                    Ty::Fn { params: p, ret: Box::new(ret) },
+                    fn_ty.clone(),
                 );
+                self.checker.env.define(name.clone(), fn_ty);
             }
         }
 
         for s in &prg.declarations {
-            if let Statement::Fun { name,
-                body, ..
-            } = s
+            if let Statement::Fun { name, body, .. } = s
                 && name == "main"
             {
                 lines.push("int main(void) {".to_string());
@@ -84,7 +106,7 @@ impl Codegen {
 
                 lines.push("}".to_string());
 
-                continue
+                continue;
             }
             let stmt = self.emit_statement(s)?;
             for line in stmt.lines() {
@@ -109,19 +131,22 @@ impl Codegen {
         Ok(match expr.clone() {
             Expression::IntLiteral(i) => i.to_string(),
             Expression::FloatLiteral(f) => {
-                if f.fract() == 0.0 { format!("{f:.1}") } else { f.to_string() }
-            },
+                if f.fract() == 0.0 {
+                    format!("{f:.1}")
+                } else {
+                    f.to_string()
+                }
+            }
             Expression::BoolLiteral(b) => b.to_string(),
             Expression::StringLiteral(s) => format!("\"{}\"", s),
-            Expression::StructLiteral {
-                name,
-                fields
-            } => {
-                let c_fields = fields.iter().map(|f| {
-                    let f_val = self.emit_expression(f.field_val.as_ref()).unwrap();
+            Expression::StructLiteral { name, fields } => {
+                let c_fields = fields
+                    .iter()
+                    .map(|f| {
+                        let f_val = self.emit_expression(f.field_val.as_ref()).unwrap();
 
-                    Ok(format!("{} = {}", f.field_name, f_val))
-                })
+                        Ok(format!("{} = {}", f.field_name, f_val))
+                    })
                     .collect::<Result<Vec<_>, _>>()?
                     .join(", .");
 
@@ -139,7 +164,18 @@ impl Codegen {
                 operator,
                 right,
             } => {
-                if operator == Token::Power {
+                if matches!(operator, Token::Add)
+                    && matches!(self.checker.infer(left.as_ref()), Ty::String)
+                    && matches!(self.checker.infer(right.as_ref()), Ty::String)
+                {
+                    return Ok(format!(
+                        "vio_str_concat({}, {})",
+                        self.emit_expression(left.as_ref())?,
+                        self.emit_expression(right.as_ref())?
+                    ));
+                }
+
+                if matches!(operator, Token::Power) {
                     return Ok(format!(
                         "pow({}, {})",
                         self.emit_expression(left.as_ref())?,
@@ -164,19 +200,25 @@ impl Codegen {
             Expression::Identifier(ident) => ident,
             Expression::Call { function, args } => {
                 if let Expression::Identifier(name) = function.as_ref()
-                    && (name == "print" || name == "println") && args.len() == 1 {
+                    && (name == "print" || name == "println")
+                    && args.len() == 1
+                {
                     let arg_ty = self.infer_expr(&args[0]);
                     let suffix = match arg_ty {
                         Ty::Int => "int",
                         Ty::Float => "float",
                         Ty::Bool => "bool",
                         Ty::String => "string",
-                        _ => return Err(CodegenError::Unsupported("print for this type".to_string()))
+                        _ => {
+                            return Err(CodegenError::Unsupported(
+                                "print for this type".to_string(),
+                            ));
+                        }
                     };
 
                     let a = self.emit_expression(&args[0])?;
 
-                    return Ok(format!("{name}_{suffix}({a})"))
+                    return Ok(format!("vio_{name}_{suffix}({a})"));
                 }
 
                 let f = self.emit_expression(function.as_ref())?;
@@ -188,10 +230,9 @@ impl Codegen {
 
                 format!("{}({})", f, a)
             }
-            Expression::Field {
-                object,
-                name
-            } => format!("{}.{}", self.emit_expression(object.as_ref())?, name),
+            Expression::Field { object, name } => {
+                format!("{}.{}", self.emit_expression(object.as_ref())?, name)
+            }
             _ => {
                 return Err(CodegenError::Unsupported(format!(
                     "this expression: {:?}",
@@ -208,18 +249,18 @@ impl Codegen {
 
                 let ty = self.infer_expr(value);
 
-                self.env.define(name.clone(), ty.clone());
+                self.checker.env.define(name.clone(), ty.clone());
+                self.checker.defined(name.clone(), ty.clone());
 
                 format!("{} {} = {};", self.c_type(&ty), name, val_str)
-            },
+            }
             Statement::If(IfStatement {
                 condition,
                 then_block,
                 else_if,
-                else_block
+                else_block,
             }) => {
-
-                self.env.push();
+                self.checker.env.push();
 
                 let mut res = String::new();
 
@@ -235,7 +276,9 @@ impl Codegen {
 
                         let some_block = self.emit_block(&if_s.block)?;
 
-                        res.push_str(format!("else if ({}) {{\n{}\n}}\n", cond, some_block).as_str());
+                        res.push_str(
+                            format!("else if ({}) {{\n{}\n}}\n", cond, some_block).as_str(),
+                        );
                     }
                 }
 
@@ -245,7 +288,7 @@ impl Codegen {
                     res.push_str(format!("else {{\n{}\n}}\n", el_block).as_str())
                 }
 
-                self.env.pop();
+                self.checker.env.pop();
 
                 res
             }
@@ -260,40 +303,32 @@ impl Codegen {
             Statement::Expression { expression } => {
                 format!("{};", self.emit_expression(expression)?)
             }
-            Statement::ForCondition {
-                ..
-            } | Statement::ForCounter {
-                ..
-            } => self.emit_for(stmt)?,
+            Statement::ForCondition { .. } | Statement::ForCounter { .. } => self.emit_for(stmt)?,
             Statement::Fun { .. } => self.emit_function(stmt)?,
-            Statement::Struct {
-                ..
-            } => self.emit_struct(stmt)?,
+            Statement::Struct { .. } => self.emit_struct(stmt)?,
             _ => return Err(CodegenError::Unsupported(format!("{:?}", stmt))),
         })
     }
 
-    pub fn emit_for(&mut self, stmt: &Statement) -> Result<String, CodegenError>{
-        if let Statement::ForCondition {
-            condition,
-            body
-        } = stmt {
-            self.env.push();
+    pub fn emit_for(&mut self, stmt: &Statement) -> Result<String, CodegenError> {
+        if let Statement::ForCondition { condition, body } = stmt {
+            self.checker.env.push();
 
             let cond = self.emit_expression(condition)?;
 
             let body = self.emit_block(body)?;
 
-            self.env.pop();
+            self.checker.env.pop();
 
             Ok(format!("while ({}) {{\n{}\n}}", cond, body))
         } else if let Statement::ForCounter {
             init,
             condition,
             post,
-            body
-        } = stmt {
-            self.env.push();
+            body,
+        } = stmt
+        {
+            self.checker.env.push();
 
             let initial = self.emit_statement(init.as_ref())?;
 
@@ -303,9 +338,12 @@ impl Codegen {
 
             let body = self.emit_block(body)?;
 
-            self.env.pop();
+            self.checker.env.pop();
 
-            Ok(format!("for ({} {}; {}) {{\n{}\n}}", initial, cond, postfix, body))
+            Ok(format!(
+                "for ({} {}; {}) {{\n{}\n}}",
+                initial, cond, postfix, body
+            ))
         } else {
             Err(Unexpected(self.emit_statement(stmt)?))
         }
@@ -319,7 +357,7 @@ impl Codegen {
             body,
         } = stmt
         {
-            self.env.push();
+            self.checker.env.push();
 
             let param_tys: Vec<Ty> = params
                 .iter()
@@ -327,7 +365,7 @@ impl Codegen {
                 .collect();
 
             for (p, param_ty) in params.iter().zip(param_tys.iter()) {
-                self.env.define(p.name.clone(), param_ty.clone())
+                self.checker.defined(p.name.clone(), param_ty.clone())
             }
 
             let mut ret = if name == "main" {
@@ -352,7 +390,7 @@ impl Codegen {
 
             let body_str = self.emit_block(body)?;
 
-            self.env.pop();
+            self.checker.env.pop();
 
             if !params.is_empty() {
                 Ok(format!("{ret} {name}({parameters}) {{\n{body_str}\n}}"))
@@ -365,12 +403,8 @@ impl Codegen {
     }
 
     pub fn emit_struct(&mut self, stmt: &Statement) -> Result<String, CodegenError> {
-
-        if let Statement::Struct {
-            name,
-            fields,
-        } = stmt {
-            self.env.push();
+        if let Statement::Struct { name, fields } = stmt {
+            self.checker.env.push();
 
             let field_tys: Vec<Ty> = fields
                 .iter()
@@ -378,26 +412,32 @@ impl Codegen {
                 .collect();
 
             for (f, field_ty) in fields.iter().zip(field_tys.iter()) {
-                self.env.define(f.name.clone(), field_ty.clone())
+                self.checker.defined(f.name.clone(), field_ty.clone())
             }
 
             let mut c_fields = fields
                 .iter()
-                .map(| StructParam {
-                    name: n,
-                    param_type
-                } | {
-                    let ty = self.checker.resolve(param_type);
-                    format!("\t{} {}", self.c_type(&ty), n.clone())
-                })
+                .map(
+                    |StructParam {
+                         name: n,
+                         param_type,
+                     }| {
+                        let ty = self.checker.resolve(param_type);
+                        format!("\t{} {}", self.c_type(&ty), n.clone())
+                    },
+                )
                 .collect::<Vec<String>>()
                 .join(";\n");
 
             c_fields.push_str(";\n");
 
-            self.env.pop();
+            self.checker.env.pop();
 
-            Ok(format!("typedef struct {{\n{}}} {};", c_fields, name.clone()))
+            Ok(format!(
+                "typedef struct {{\n{}}} {};",
+                c_fields,
+                name.clone()
+            ))
         } else {
             Err(Unexpected(format!("{:?}", stmt)))
         }
@@ -450,7 +490,7 @@ impl Codegen {
             Expression::FloatLiteral(_) => Ty::Float,
             Expression::BoolLiteral(_) => Ty::Bool,
             Expression::StringLiteral(_) => Ty::String,
-            Expression::Identifier(name) => self.env.lookup(name).unwrap_or(Ty::Error),
+            Expression::Identifier(name) => self.checker.env.lookup(name).unwrap_or(Ty::Error),
             Expression::Infix {
                 left,
                 operator,
@@ -524,7 +564,9 @@ impl Codegen {
                             }
                         }
                         None => {
-                            self.checker.errors.push(TypeError::UnknownName(name.clone()));
+                            self.checker
+                                .errors
+                                .push(TypeError::UnknownName(name.clone()));
                             Ty::Error
                         }
                     },
@@ -534,8 +576,7 @@ impl Codegen {
                         Ty::Error
                     }
                 }
-
-            },
+            }
             Expression::StructLiteral { name, .. } => Ty::Struct(name.clone()),
             Expression::MethodCall { .. } => Ty::Error,
             _ => Ty::Error,

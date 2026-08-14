@@ -39,7 +39,7 @@ impl Parser {
             current_token: curr_spanned_token,
             peek_token: peek_spanned_token,
             depth: 0,
-            allowed_struct_literal: true
+            allowed_struct_literal: true,
         }
     }
 

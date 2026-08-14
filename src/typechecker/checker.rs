@@ -19,7 +19,7 @@ pub type StructSig = Vec<(String, Ty)>;
 pub struct Checker {
     pub funcs: HashMap<String, FnSig>,
     pub structs: HashMap<String, StructSig>,
-    env: Env,
+    pub(crate) env: Env,
     current_ret: Ty,
     pub errors: Vec<TypeError>,
 }
@@ -119,7 +119,9 @@ impl Checker {
             self.current_ret = return_type.as_ref().map_or(Ty::Unit, |t| self.resolve(t));
             for p in params {
                 let ty = self.resolve(&p.param_type);
-                self.env.define(p.name.clone(), ty)
+                if let Err(e) = self.env.define(p.name.clone(), ty) {
+                    self.errors.push(e);
+                }
             }
 
             self.check_block(body);
@@ -132,8 +134,9 @@ impl Checker {
         self.env.push();
         if let Statement::ForCondition {
             condition: cond,
-            body
-        } = stmt {
+            body,
+        } = stmt
+        {
             let cond_ty = self.infer(cond);
 
             self.expect(&cond_ty, &Ty::Bool);
@@ -142,15 +145,17 @@ impl Checker {
         } else if let Statement::ForRange {
             variable,
             iterable,
-            body
-        } = stmt {
+            body,
+        } = stmt
+        {
             todo!();
         } else if let Statement::ForCounter {
             init,
             condition: cond,
             post,
-            body
-        } = stmt {
+            body,
+        } = stmt
+        {
             self.check_statement(init.as_ref());
 
             let cond_ty = self.infer(cond);
@@ -169,7 +174,7 @@ impl Checker {
             Statement::Let { name, value } | Statement::Const { name, value } => {
                 let ty = self.infer(value);
 
-                self.env.define(name.clone(), ty)
+                self.defined(name.clone(), ty)
             }
             Statement::If(if_stmt) => {
                 let cond_ty = self.infer(&if_stmt.condition);
@@ -190,13 +195,9 @@ impl Checker {
                     self.check_block(&if_stmt.else_block);
                 }
             }
-            Statement::ForCondition {
-                ..
-            } | Statement::ForCounter {
-                ..
-            } | Statement::ForRange {
-                ..
-            } => self.check_for_stmt(stmt),
+            Statement::ForCondition { .. }
+            | Statement::ForCounter { .. }
+            | Statement::ForRange { .. } => self.check_for_stmt(stmt),
             Statement::Return { value } => {
                 let ty = match value {
                     Some(v) => self.infer(v),
@@ -215,14 +216,11 @@ impl Checker {
     }
 
     pub fn check_struct(&mut self, stmt: &Statement) {
-        if let Statement::Struct {
-            name,
-            fields
-        } = stmt {
+        if let Statement::Struct { name, fields } = stmt {
             self.env.push();
             for f in fields {
                 let ty = self.resolve(&f.param_type);
-                self.env.define(f.name.clone(), ty)
+                self.defined(f.name.clone(), ty)
             }
             self.env.pop();
         }
@@ -306,19 +304,17 @@ impl Checker {
                                 Ty::Error
                             }
                         }
-                    },
-                    Token::Modulus => {
-                        match (&left_ty, &right_ty) {
-                            (Ty::Int, Ty::Int) => Ty::Int,
-                            (Ty::Error, _) | (_, Ty::Error) => Ty::Error,
-                            _ => {
-                                self.errors.push(TypeError::InvalidOperator {
-                                    operator: operator.clone(),
-                                    left: left_ty,
-                                    right: right_ty,
-                                });
-                                Ty::Error
-                            }
+                    }
+                    Token::Modulus => match (&left_ty, &right_ty) {
+                        (Ty::Int, Ty::Int) => Ty::Int,
+                        (Ty::Error, _) | (_, Ty::Error) => Ty::Error,
+                        _ => {
+                            self.errors.push(TypeError::InvalidOperator {
+                                operator: operator.clone(),
+                                left: left_ty,
+                                right: right_ty,
+                            });
+                            Ty::Error
                         }
                     },
                     Token::Less | Token::Greater | Token::LessOrEquals | Token::GreaterOrEquals => {
@@ -419,22 +415,18 @@ impl Checker {
                     ret: Box::new(ret),
                 }
             }
-            Expression::StructLiteral {
-                name, fields
-            } => {
+            Expression::StructLiteral { name, fields } => {
                 if self.structs.get(name).is_none() {
                     self.errors.push(TypeError::UnknownName(name.clone()));
-                    return Ty::Error
+                    return Ty::Error;
                 }
 
                 for f in fields {
                     match self.infer(f.field_val.as_ref()) {
-                        Ty::Error => {
-                            return Ty::Error
-                        },
-                        _ => continue
+                        Ty::Error => return Ty::Error,
+                        _ => continue,
                     }
-                };
+                }
 
                 Ty::Struct(name.clone())
             }
@@ -477,20 +469,26 @@ impl Checker {
     }
 
     pub fn define_builtins(&mut self) {
-        self.env.define(
+        self.defined(
             "print".to_string(),
             Ty::Fn {
                 params: vec![Ty::Union(vec![Ty::Int, Ty::Float, Ty::String, Ty::Bool])],
                 ret: Box::new(Ty::Unit),
             },
         );
-        self.env.define(
+        self.defined(
             "println".to_string(),
             Ty::Fn {
                 params: vec![Ty::Union(vec![Ty::Int, Ty::Float, Ty::String, Ty::Bool])],
                 ret: Box::new(Ty::Unit),
             },
         );
+    }
+
+    pub fn defined(&mut self, name: String, ty: Ty) {
+        if let Err(e) = self.env.define(name.clone(), ty) {
+            self.errors.push(e);
+        }
     }
 
     pub fn expect(&mut self, actual: &Ty, expected: &Ty) {
