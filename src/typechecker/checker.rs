@@ -418,7 +418,7 @@ impl Checker {
                 }
             }
             Expression::StructLiteral { name, fields } => {
-                if self.structs.get(name).is_none() {
+                if !self.structs.contains_key(name) {
                     self.errors.push(TypeError::UnknownName(name.clone()));
                     return Ty::Error;
                 }
