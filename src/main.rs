@@ -1,11 +1,7 @@
 #![allow(clippy::module_inception)]
 
 use std::env;
-use crate::codegen::codegen::Codegen;
 use crate::driver::compile;
-use crate::lexer::lexer::Lexer;
-use crate::parser::parser::Parser;
-use crate::typechecker::checker::{Checker, TypeError};
 
 mod codegen;
 mod lexer;
