@@ -41,7 +41,7 @@ mod lexing_tests {
     }
 
     #[test]
-    fn let_it_be() {
+    fn vio_let_te() {
         let input = "let x = 42.5_f64
         let y = 100_u32
         let z = 3.14_f32

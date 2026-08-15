@@ -5,7 +5,6 @@ use crate::parser::program::Program;
 use crate::parser::statement::{FunParam, IfStatement, StructParam};
 use crate::parser::{Expression, Statement};
 use crate::typechecker::checker::{Checker, TypeError};
-use crate::typechecker::env::Env;
 use crate::typechecker::types::Ty;
 
 pub struct Codegen {
@@ -92,7 +91,7 @@ impl Codegen {
                     name.clone(),
                     fn_ty.clone(),
                 );
-                self.checker.env.define(name.clone(), fn_ty);
+                self.checker.defined(name.clone(), fn_ty);
             }
         }
 
@@ -249,7 +248,6 @@ impl Codegen {
 
                 let ty = self.infer_expr(value);
 
-                self.checker.env.define(name.clone(), ty.clone());
                 self.checker.defined(name.clone(), ty.clone());
 
                 format!("{} {} = {};", self.c_type(&ty), name, val_str)

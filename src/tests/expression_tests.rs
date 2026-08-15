@@ -10,9 +10,7 @@ mod expressions_tests {
     use crate::parser::parser::Parser;
     use crate::parser::statement::MatchArm;
     use crate::parser::{Expression, Precedence};
-    use crate::tests::helpers::{
-        block, boolean, call, expr_stmt, ident, infix, int, let_stmt, match_expr, prefix, string,
-    };
+    use crate::tests::helpers::{assert_expr_tests, assert_stmt_tests, block, boolean, call, expr_stmt, ident, infix, int, let_stmt, match_expr, prefix, string};
 
     #[test]
     fn arithmetic_operations() {
@@ -53,12 +51,7 @@ mod expressions_tests {
                 ),
             ),
         ];
-        for (input, expected) in test_cases {
-            let lexer = Lexer::new(input);
-            let mut parser = Parser::new(lexer);
-            let actual = parser.parse_expression(Precedence::Lowest);
-            assert_eq!(actual.unwrap(), expected, "Failing case: {}", input);
-        }
+        assert_expr_tests(test_cases)
     }
     #[test]
     fn redshift_blueshift() {
@@ -79,12 +72,7 @@ mod expressions_tests {
                 ),
             ),
         ];
-        for (input, expected) in test_cases {
-            let lexer = Lexer::new(input);
-            let mut parser = Parser::new(lexer);
-            let actual = parser.parse_statement();
-            assert_eq!(actual.unwrap(), expected, "Failing case: {}", input);
-        }
+        assert_stmt_tests(test_cases)
     }
     #[test]
     fn matching_souls() {
@@ -157,12 +145,7 @@ mod expressions_tests {
                 )),
             ),
         ];
-        for (input, expected) in test_cases {
-            let lexer = Lexer::new(input);
-            let mut parser = Parser::new(lexer);
-            let actual = parser.parse_statement();
-            assert_eq!(actual.unwrap(), expected, "Failing case: {}", input);
-        }
+        assert_stmt_tests(test_cases)
     }
     #[test]
     fn logic() {
@@ -203,12 +186,7 @@ mod expressions_tests {
                 },
             ),
         ];
-        for (input, expected) in test_cases {
-            let lexer = Lexer::new(input);
-            let mut parser = Parser::new(lexer);
-            let actual = parser.parse_expression(Precedence::Lowest);
-            assert_eq!(actual.unwrap(), expected, "Failing case: {}", input);
-        }
+        assert_expr_tests(test_cases)
     }
     #[test]
     fn piper() {

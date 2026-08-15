@@ -14,13 +14,6 @@ macro_rules! primitive {
     }};
 }
 
-macro_rules! trace_before {
-    ($self:expr, $name:expr) => {{
-        let indent = " ".repeat($self.recursion_depth.get() as usize);
-        println!("{indent}-> {} (current: {:?})", $name, $self.current_token)
-    }};
-}
-
 pub struct Parser {
     lexer: Lexer,
     pub current_token: SpannedToken,
@@ -219,10 +212,6 @@ impl Parser {
         while matches!(self.current_token.token, Token::Newline | Token::Semicolon) {
             self.next_token();
         }
-    }
-
-    pub fn current_precedence(&self) -> Precedence {
-        token_precedence(&self.current_token.token)
     }
 
     pub fn peek_precedence(&self) -> Precedence {

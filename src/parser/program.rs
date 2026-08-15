@@ -2,6 +2,7 @@ use crate::lexer::token::Token;
 use crate::parser::parser::Parser;
 use crate::parser::{ParseError, Statement};
 
+#[allow(dead_code)]
 pub struct Program {
     pub package: String,
     pub imports: Vec<String>,

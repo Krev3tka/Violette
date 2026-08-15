@@ -10,7 +10,7 @@ pub mod statements_tests {
     use crate::parser::types::Type::{Primitive, Union};
     use crate::parser::types::{Type, TypePath};
     use crate::parser::{Expression, Statement};
-    use crate::tests::helpers::{ident, infix, int, let_stmt};
+    use crate::tests::helpers::{assert_stmt_tests, ident, infix, int, let_stmt};
 
     #[test]
     fn basic_statements() {
@@ -70,13 +70,7 @@ if a > 7 {
             ),
         ];
 
-        test_cases.into_iter().for_each(|(input, expected)| {
-            let lexer = Lexer::new(input);
-            let mut parser = Parser::new(lexer);
-            let actual = parser.parse_statement();
-
-            assert_eq!(actual.unwrap(), expected, "Failing case: {}", input);
-        });
+        assert_stmt_tests(test_cases)
     }
 
     #[test]
@@ -181,13 +175,7 @@ if a > 7 {
             ),
         ];
 
-        test_cases.into_iter().for_each(|(input, expected)| {
-            let lexer = Lexer::new(input);
-            let mut parser = Parser::new(lexer);
-            let actual = parser.parse_statement();
-
-            assert_eq!(actual.unwrap(), expected, "Failing case: {}", input)
-        })
+        assert_stmt_tests(test_cases);
     }
 
     #[test]
@@ -412,13 +400,7 @@ if a > 7 {
             ),
         ];
 
-        test_cases.into_iter().for_each(|(input, expected)| {
-            let lexer = Lexer::new(input);
-            let mut parser = Parser::new(lexer);
-            let actual = parser.parse_statement();
-
-            assert_eq!(actual.unwrap(), expected, "Failing case: {}", input)
-        })
+        assert_stmt_tests(test_cases);
     }
 
     #[test]
@@ -440,13 +422,7 @@ if a > 7 {
             },
         )];
 
-        test_cases.into_iter().for_each(|(input, expected)| {
-            let lexer = Lexer::new(input);
-            let mut parser = Parser::new(lexer);
-            let actual = parser.parse_statement();
-
-            assert_eq!(actual.unwrap(), expected, "Failing case: {}", input)
-        })
+        assert_stmt_tests(test_cases);
     }
 
     #[test]
@@ -476,13 +452,7 @@ if a > 7 {
             },
         )];
 
-        test_cases.into_iter().for_each(|(input, expected)| {
-            let lexer = Lexer::new(input);
-            let mut parser = Parser::new(lexer);
-            let actual = parser.parse_statement();
-
-            assert_eq!(actual.unwrap(), expected, "Failing case: {}", input)
-        })
+        assert_stmt_tests(test_cases);
     }
 
     #[test]

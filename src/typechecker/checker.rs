@@ -7,6 +7,7 @@ pub(crate) use crate::typechecker::error::TypeError;
 use crate::typechecker::types::Ty;
 use std::collections::HashMap;
 
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct FnSig {
     params: Vec<Ty>,
@@ -50,7 +51,7 @@ impl Checker {
                         continue;
                     }
 
-                    self.env.define(name.clone(), f);
+                    self.defined(name.clone(), f);
                     self.funcs.insert(name.clone(), FnSig { params, ret });
                 }
 
@@ -143,9 +144,9 @@ impl Checker {
 
             self.check_block(body);
         } else if let Statement::ForRange {
-            variable,
-            iterable,
-            body,
+            variable: _,
+            iterable: _,
+            body: _,
         } = stmt
         {
             todo!();
@@ -162,7 +163,7 @@ impl Checker {
 
             self.expect(&cond_ty, &Ty::Bool);
 
-            let post_ty = self.infer(post);
+            let _post_ty = self.infer(post);
 
             self.check_block(body);
         }
@@ -211,12 +212,15 @@ impl Checker {
             Statement::Expression { expression } => {
                 self.infer(expression);
             }
+            Statement::Struct {
+                ..
+            } => self.check_struct(stmt),
             _ => {}
         }
     }
 
     pub fn check_struct(&mut self, stmt: &Statement) {
-        if let Statement::Struct { name, fields } = stmt {
+        if let Statement::Struct { name: _, fields } = stmt {
             self.env.push();
             for f in fields {
                 let ty = self.resolve(&f.param_type);
@@ -400,7 +404,7 @@ impl Checker {
                 self.env.push();
 
                 for (p, ty) in params.iter().zip(param_tys.iter()) {
-                    self.env.define(p.name.clone(), ty.clone());
+                    self.defined(p.name.clone(), ty.clone());
                 }
 
                 for s in body {

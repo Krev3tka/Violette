@@ -1,8 +1,31 @@
+#![allow(dead_code)]
+
+pub fn assert_stmt_tests(test_cases: Vec<(&str, Statement)>) {
+    for (input, expected) in test_cases {
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
+        let actual = parser.parse_statement();
+        assert_eq!(actual.unwrap(), expected, "Failing case: {}", input);
+    }
+}
+use crate::lexer::lexer::Lexer;
 use crate::lexer::token::{PrimitiveType, Token};
 use crate::parser::Expression::{BoolLiteral, Identifier, IntLiteral, StringLiteral};
 use crate::parser::statement::{ElseIf, FunParam, IfStatement, MatchArm};
 use crate::parser::types::{Type, TypePath};
-use crate::parser::{Expression, Statement};
+use crate::parser::{Expression, Precedence, Statement};
+
+use crate::parser::parser::Parser;
+
+pub fn assert_expr_tests(test_cases: Vec<(&str, Expression)>) {
+    for (input, expected) in test_cases {
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
+        let actual = parser.parse_expression(Precedence::Lowest);
+        assert_eq!(actual.unwrap(), expected, "Failing case: {}", input);
+    }
+}
+
 
 pub fn ident(s: &str) -> Expression {
     Identifier(s.to_string())
@@ -31,6 +54,7 @@ pub fn infix(l: Expression, op: Token, r: Expression) -> Expression {
         right: Box::new(r),
     }
 }
+
 
 pub fn postfix(l: Expression, op: Token) -> Expression {
     Expression::Postfix {

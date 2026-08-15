@@ -2,7 +2,7 @@ use crate::lexer::token::Token;
 use crate::parser::Expression::Infix;
 use crate::parser::Precedence::{Lowest, Prefix};
 use crate::parser::parser::{MAX_DEPTH, Parser};
-use crate::parser::statement::{FunParam, MatchArm, StructParam};
+use crate::parser::statement::{FunParam, MatchArm};
 use crate::parser::types::Type;
 use crate::parser::{ParseError, Precedence, Statement};
 

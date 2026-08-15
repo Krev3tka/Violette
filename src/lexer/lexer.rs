@@ -4,7 +4,6 @@ use crate::lexer::token::{PrimitiveType, Token};
 pub struct Lexer {
     input: Vec<char>,
     current: char,
-    errors: String,
     position: usize,
     next_position: usize,
     line: usize,
@@ -16,7 +15,6 @@ impl Lexer {
         let mut lexer = Lexer {
             input: input.chars().collect(),
             current: '\0',
-            errors: String::new(),
             position: 0,
             next_position: 0,
             line: 1,

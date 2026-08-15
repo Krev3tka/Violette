@@ -1,6 +1,7 @@
 use crate::lexer::token::Token;
 use crate::typechecker::types::Ty;
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum TypeError {
     Mismatch {
