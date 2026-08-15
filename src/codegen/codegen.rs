@@ -85,13 +85,12 @@ impl Codegen {
                     .as_ref()
                     .map_or(Ty::Unit, |t| self.checker.resolve(t));
 
-                let fn_ty = Ty::Fn { params: p, ret: Box::new(ret) };
+                let fn_ty = Ty::Fn {
+                    params: p,
+                    ret: Box::new(ret),
+                };
 
-                self.checker.defined(
-                    name.clone(),
-                    fn_ty.clone(),
-                );
-                self.checker.defined(name.clone(), fn_ty);
+                self.checker.defined(name.clone(), fn_ty.clone());
             }
         }
 

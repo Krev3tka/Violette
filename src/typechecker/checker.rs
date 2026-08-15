@@ -212,9 +212,7 @@ impl Checker {
             Statement::Expression { expression } => {
                 self.infer(expression);
             }
-            Statement::Struct {
-                ..
-            } => self.check_struct(stmt),
+            Statement::Struct { .. } => self.check_struct(stmt),
             _ => {}
         }
     }

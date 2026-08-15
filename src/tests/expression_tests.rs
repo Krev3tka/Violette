@@ -10,7 +10,10 @@ mod expressions_tests {
     use crate::parser::parser::Parser;
     use crate::parser::statement::MatchArm;
     use crate::parser::{Expression, Precedence};
-    use crate::tests::helpers::{assert_expr_tests, assert_stmt_tests, block, boolean, call, expr_stmt, ident, infix, int, let_stmt, match_expr, prefix, string};
+    use crate::tests::helpers::{
+        assert_expr_tests, assert_stmt_tests, block, boolean, call, expr_stmt, ident, infix, int,
+        let_stmt, match_expr, prefix, string,
+    };
 
     #[test]
     fn arithmetic_operations() {

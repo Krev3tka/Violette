@@ -9,7 +9,7 @@ use std::process::Command;
 use std::{env, fs};
 
 pub fn find_cc() -> Option<String> {
-    if let Ok(cc) = std::env::var("CC") {
+    if let Ok(cc) = env::var("CC") {
         return Some(cc);
     }
 
@@ -52,12 +52,13 @@ pub fn compile(command: &str, file: &str) {
         Err(e) => return println!("Codegen error: {:?}", e),
     };
 
-    let c_path = env::temp_dir().join(format!("{}_vio_out.c", Path::new(file)
-        .file_stem()
-        .unwrap()
-        .to_string_lossy()));
+    let c_path = env::temp_dir().join(format!(
+        "{}_vio_out.c",
+        Path::new(file).file_stem().unwrap().to_string_lossy()
+    ));
 
-    let mut c_file = File::create(&c_path).unwrap_or_else(|_| panic!("Failed to create temporary C file, file_name: {c_path:?}"));
+    let mut c_file = File::create(&c_path)
+        .unwrap_or_else(|_| panic!("Failed to create temporary C file, file_name: {c_path:?}"));
 
     c_file
         .write_all(code.as_bytes())

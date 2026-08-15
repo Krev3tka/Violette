@@ -26,10 +26,10 @@ pub fn assert_expr_tests(test_cases: Vec<(&str, Expression)>) {
     }
 }
 
-
 pub fn ident(s: &str) -> Expression {
     Identifier(s.to_string())
 }
+
 pub fn int(n: isize) -> Expression {
     IntLiteral(n)
 }
@@ -54,7 +54,6 @@ pub fn infix(l: Expression, op: Token, r: Expression) -> Expression {
         right: Box::new(r),
     }
 }
-
 
 pub fn postfix(l: Expression, op: Token) -> Expression {
     Expression::Postfix {
