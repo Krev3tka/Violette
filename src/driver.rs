@@ -77,6 +77,7 @@ pub fn compile(command: &str, file: &str) {
             "-std=c99",
             "-O3",
             c_path.to_str().unwrap(),
+            "-lm",
             "-o",
             out.as_str(),
         ])
