@@ -14,18 +14,33 @@ const TestPaths = "../../examples/"
 var Errors = map[string]string{
 	"fail_user_struct.vio": "Type errors: [DuplicateDefinition(\"User\")]",
 }
+
+var ExpectedOutputs = map[string]string{
+	"bits.vio":          "15",
+	"fizzbuzz.vio":      "1\n2\nfizz\n4\nbuzz\nfizz\n7\n8\nfizz\nbuzz\n11\nfizz\n13\n14\nfizzbuzz",
+	"if_else.vio":       "36\n10.648\n361",
+	"point.vio":         "3.5",
+	"sprouting.vio":     "true",
+	"square.vio":        "36",
+	"string_concat.vio": "Hello, Violette!",
+}
+
 var testCases []TestCase
 
 type TestCase struct {
 	Path           string
 	ExpectedError  string
+	ExpectedOutput string
 	IsNegativeTest bool
 }
 
 func runCompiler(filePath string) (string, error) {
-	cmd := exec.Command("cargo", "run", "--", "run", filePath)
+	cmd := exec.Command("cargo", "run", "--quiet", "--", "run", filePath)
 
 	output, err := cmd.CombinedOutput()
+
+	output = []byte(strings.Trim(string(output), "\n"))
+
 	return string(output), err
 }
 
@@ -43,9 +58,17 @@ func WalkDirFunc(path string, d fs.DirEntry, err error) error {
 
 		isNegative := strings.Contains(path, "/invalid/") && strings.HasPrefix(filename, "fail_")
 
+		expectedOutput, ok := ExpectedOutputs[filename]
+		expectedErr, errOk := Errors[filename]
+
+		if !ok && !errOk {
+			return fmt.Errorf("failed to find right output or error for %s", filename)
+		}
+
 		testCases = append(testCases, TestCase{
 			Path:           path,
-			ExpectedError:  Errors[filename],
+			ExpectedOutput: expectedOutput,
+			ExpectedError:  expectedErr,
 			IsNegativeTest: isNegative,
 		})
 	}
@@ -54,6 +77,11 @@ func WalkDirFunc(path string, d fs.DirEntry, err error) error {
 }
 
 func main() {
+
+	x := (^(0b101 | 0b1011) & 0o53) ^ 0x1E4
+
+	fmt.Println(x)
+
 	err := filepath.WalkDir(TestPaths, WalkDirFunc)
 
 	if err != nil {
@@ -77,7 +105,13 @@ func main() {
 				log.Fatalf("[FAIL] Positive test %s failed to compile/run:\nErr: %v\nOutput:\n%s",
 					test.Path, err, output)
 			}
-			fmt.Printf("[PASS] Positive test %s succeeded.\n", test.Path)
+
+			if output != test.ExpectedOutput {
+				log.Fatalf("[FAIL] Positive test %s failed.\nExpected: %q, got: %q",
+					test.Path, test.ExpectedOutput, output)
+			} else {
+				fmt.Printf("[PASS] Positive test %s succeeded.\n", test.Path)
+			}
 		}
 	}
 }

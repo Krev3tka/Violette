@@ -182,7 +182,7 @@ impl Codegen {
                 }
 
                 format!(
-                    "{} {} {}",
+                    "({} {} {})",
                     self.emit_expression(left.as_ref())?,
                     self.correlate_operator(&operator)?,
                     self.emit_expression(right.as_ref())?
@@ -295,7 +295,7 @@ impl Codegen {
                     val_str = format!(" {}", self.emit_expression(expr)?);
                 }
 
-                format!("return{};", val_str)
+                format!("return {};", val_str)
             }
             Statement::Expression { expression } => {
                 format!("{};", self.emit_expression(expression)?)
@@ -477,6 +477,11 @@ impl Codegen {
             Token::DivAndAssign => "/=",
             Token::ModAndAssign => "%=",
 
+            Token::BitAnd => "&",
+            Token::BitOr => "|",
+            Token::BitXOR => "^",
+            Token::BitNot => "~",
+
             _ => return Err(Unexpected("Not an operator".to_string())),
         }))
     }
@@ -503,7 +508,13 @@ impl Codegen {
                         (Ty::Error, _) | (_, Ty::Error) => Ty::Error,
                         _ => Ty::Error,
                     },
-                    Token::Subtract | Token::Multiply | Token::Divide | Token::Modulus => Ty::Int,
+                    Token::Subtract
+                    | Token::Multiply
+                    | Token::Divide
+                    | Token::Modulus
+                    | Token::BitAnd
+                    | Token::BitOr
+                    | Token::BitXOR => Ty::Int,
                     Token::Less | Token::Greater | Token::LessOrEquals | Token::GreaterOrEquals => {
                         Ty::Bool
                     }
@@ -521,7 +532,10 @@ impl Codegen {
                 }
             }
             Expression::Prefix { operator, right: _ } => match operator {
-                Token::Subtract | Token::Increment | Token::Decrement => Ty::Int,
+                Token::Subtract
+                | Token::Increment
+                | Token::Decrement
+                | Token::BitNot => Ty::Int,
                 Token::LogicNot => Ty::Bool,
                 _ => Ty::Error,
             },

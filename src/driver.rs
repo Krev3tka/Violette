@@ -73,6 +73,7 @@ pub fn compile(command: &str, file: &str) {
 
     let status = Command::new(&compiler)
         .args([
+            "-w",
             "-std=c99",
             "-O3",
             c_path.to_str().unwrap(),

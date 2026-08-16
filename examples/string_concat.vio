@@ -2,7 +2,7 @@ package main
 
 fun main() {
     let s1 = "Hello, "
-    let s2 = "World!"
+    let s2 = "Violette!"
 
     let res = s1 + s2
 

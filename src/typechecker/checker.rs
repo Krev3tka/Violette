@@ -350,6 +350,11 @@ impl Checker {
                         self.expect(&right_ty, &Ty::Bool);
                         Ty::Bool
                     }
+                    Token::BitAnd | Token::BitOr | Token::BitNot | Token::BitXOR => {
+                        self.expect(&left_ty, &Ty::Int);
+                        self.expect(&right_ty, &Ty::Int);
+                        Ty::Int
+                    }
                     _ => Ty::Error,
                 }
             }
