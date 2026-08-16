@@ -532,10 +532,7 @@ impl Codegen {
                 }
             }
             Expression::Prefix { operator, right: _ } => match operator {
-                Token::Subtract
-                | Token::Increment
-                | Token::Decrement
-                | Token::BitNot => Ty::Int,
+                Token::Subtract | Token::Increment | Token::Decrement | Token::BitNot => Ty::Int,
                 Token::LogicNot => Ty::Bool,
                 _ => Ty::Error,
             },
