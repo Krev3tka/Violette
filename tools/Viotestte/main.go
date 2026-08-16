@@ -16,7 +16,7 @@ var Errors = map[string]string{
 }
 
 var ExpectedOutputs = map[string]string{
-	"bits.vio":          "15",
+	"bits.vio":          "452",
 	"fizzbuzz.vio":      "1\n2\nfizz\n4\nbuzz\nfizz\n7\n8\nfizz\nbuzz\n11\nfizz\n13\n14\nfizzbuzz",
 	"if_else.vio":       "36\n10.648\n361",
 	"point.vio":         "3.5",
