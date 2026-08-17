@@ -1,6 +1,19 @@
 use crate::lexer::token::Token;
 use crate::typechecker::types::Ty;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BindingKind {
+    Var,
+    Let,
+    Const,
+}
+
+impl BindingKind {
+    pub fn is_mutable(self) -> bool {
+        matches!(self, BindingKind::Var)
+    }
+}
+
 #[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum TypeError {
@@ -30,4 +43,8 @@ pub enum TypeError {
     DuplicateDefinition(String),
     ConflictingEntryPoint,
     AlreadyDefined(String),
+    AssignmentToImmutable {
+        name: String,
+        kind: BindingKind,
+    },
 }

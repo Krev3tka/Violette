@@ -3,7 +3,8 @@ use crate::parser::program::Program;
 use crate::parser::types::Type;
 use crate::parser::{Expression, Statement};
 use crate::typechecker::env::Env;
-pub(crate) use crate::typechecker::error::TypeError;
+use crate::typechecker::error::BindingKind;
+pub use crate::typechecker::error::TypeError;
 use crate::typechecker::types::Ty;
 use std::collections::HashMap;
 
@@ -29,6 +30,10 @@ impl Checker {
     pub fn collect_signatures(&mut self, program: &[Statement]) {
         for stmt in program {
             match stmt {
+                Statement::Const { name, value } => {
+                    let ty = self.infer(value);
+                    self.defined(name.clone(), ty, BindingKind::Const);
+                }
                 Statement::Fun {
                     name,
                     params,
@@ -51,7 +56,7 @@ impl Checker {
                         continue;
                     }
 
-                    self.defined(name.clone(), f);
+                    self.defined(name.clone(), f, BindingKind::Var);
                     self.funcs.insert(name.clone(), FnSig { params, ret });
                 }
 
@@ -120,7 +125,7 @@ impl Checker {
             self.current_ret = return_type.as_ref().map_or(Ty::Unit, |t| self.resolve(t));
             for p in params {
                 let ty = self.resolve(&p.param_type);
-                if let Err(e) = self.env.define(p.name.clone(), ty) {
+                if let Err(e) = self.env.define(p.name.clone(), ty, BindingKind::Var) {
                     self.errors.push(e);
                 }
             }
@@ -172,10 +177,20 @@ impl Checker {
 
     pub fn check_statement(&mut self, stmt: &Statement) {
         match stmt {
-            Statement::Let { name, value } | Statement::Const { name, value } => {
+            Statement::Var { name, value } => {
                 let ty = self.infer(value);
 
-                self.defined(name.clone(), ty)
+                self.defined(name.clone(), ty, BindingKind::Var)
+            }
+            Statement::Let { name, value } => {
+                let ty = self.infer(value);
+
+                self.defined(name.clone(), ty, BindingKind::Let)
+            }
+            Statement::Const { name, value } => {
+                let ty = self.infer(value);
+
+                self.defined(name.clone(), ty, BindingKind::Const)
             }
             Statement::If(if_stmt) => {
                 let cond_ty = self.infer(&if_stmt.condition);
@@ -210,6 +225,24 @@ impl Checker {
                 self.expect(&ty, cur_ref)
             }
             Statement::Expression { expression } => {
+                if let Expression::Infix {
+                    left,
+                    operator,
+                    right,
+                } = expression
+                    && matches!(
+                        operator,
+                        Token::Assign
+                            | Token::AddAndAssign
+                            | Token::SubAndAssign
+                            | Token::MulAndAssign
+                            | Token::DivAndAssign
+                            | Token::ModAndAssign
+                    )
+                    && let Expression::Identifier(name) = left.as_ref()
+                {
+                    self.check_assignment(name.as_str(), right.as_ref())
+                };
                 self.infer(expression);
             }
             Statement::Struct { .. } => self.check_struct(stmt),
@@ -222,10 +255,32 @@ impl Checker {
             self.env.push();
             for f in fields {
                 let ty = self.resolve(&f.param_type);
-                self.defined(f.name.clone(), ty)
+                self.defined(f.name.clone(), ty, BindingKind::Var)
             }
             self.env.pop();
         }
+    }
+
+    pub fn check_assignment(&mut self, name: &str, value_expr: &Expression) {
+        let entity = match self.env.lookup(name) {
+            Some(e) => e,
+            None => {
+                self.errors.push(TypeError::UnknownName(name.to_string()));
+                return;
+            }
+        };
+
+        if !entity.kind.is_mutable() {
+            self.errors.push(TypeError::AssignmentToImmutable {
+                name: name.to_string(),
+                kind: entity.kind,
+            });
+            return;
+        }
+
+        let value_ty = self.infer(value_expr);
+
+        self.expect(&value_ty, &entity.ty)
     }
 
     pub fn check_block(&mut self, block: &[Statement]) {
@@ -263,7 +318,7 @@ impl Checker {
             Expression::StringLiteral(_) => Ty::String,
             Expression::FloatLiteral(_) => Ty::Float,
             Expression::Identifier(name) => match self.env.lookup(name) {
-                Some(ty) => ty,
+                Some(entity) => entity.ty,
                 None => {
                     self.errors.push(TypeError::UnknownName(name.clone()));
                     Ty::Error
@@ -407,7 +462,7 @@ impl Checker {
                 self.env.push();
 
                 for (p, ty) in params.iter().zip(param_tys.iter()) {
-                    self.defined(p.name.clone(), ty.clone());
+                    self.defined(p.name.clone(), ty.clone(), BindingKind::Var);
                 }
 
                 for s in body {
@@ -482,6 +537,7 @@ impl Checker {
                 params: vec![Ty::Union(vec![Ty::Int, Ty::Float, Ty::String, Ty::Bool])],
                 ret: Box::new(Ty::Unit),
             },
+            BindingKind::Let,
         );
         self.defined(
             "println".to_string(),
@@ -489,11 +545,12 @@ impl Checker {
                 params: vec![Ty::Union(vec![Ty::Int, Ty::Float, Ty::String, Ty::Bool])],
                 ret: Box::new(Ty::Unit),
             },
+            BindingKind::Let,
         );
     }
 
-    pub fn defined(&mut self, name: String, ty: Ty) {
-        if let Err(e) = self.env.define(name.clone(), ty) {
+    pub fn defined(&mut self, name: String, ty: Ty, kind: BindingKind) {
+        if let Err(e) = self.env.define(name.clone(), ty, kind) {
             self.errors.push(e);
         }
     }

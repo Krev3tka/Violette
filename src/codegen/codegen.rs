@@ -5,6 +5,8 @@ use crate::parser::program::Program;
 use crate::parser::statement::{FunParam, IfStatement, StructParam};
 use crate::parser::{Expression, Statement};
 use crate::typechecker::checker::{Checker, TypeError};
+use crate::typechecker::env::EntityInfo;
+use crate::typechecker::error::BindingKind;
 use crate::typechecker::types::Ty;
 
 pub struct Codegen {
@@ -36,10 +38,58 @@ impl Codegen {
             "#include <stdio.h>".to_string(),
             "#include <math.h>".to_string(),
             "#include <stdbool.h>".to_string(),
-            "#include <stdint.h>\n".to_string(),
-            "#include <string.h>\n".to_string(),
+            "#include <stdint.h>".to_string(),
+            "#include <string.h>".to_string(),
             "#include <stdlib.h>\n".to_string(),
+        ];
 
+        let mut global_defines: Vec<String> = Vec::new();
+
+        self.checker.collect_signatures(&prg.declarations);
+
+        self.checker.env.push();
+
+        for s in &prg.declarations {
+            if let Statement::Const { name, value } = s {
+                let val_str = self.emit_expression(value)?;
+                let ty = self.infer_expr(value);
+
+                self.checker.defined(name.clone(), ty, BindingKind::Const);
+
+                global_defines.push(format!("#define {} {}", name, val_str))
+            }
+            if let Statement::Fun {
+                name,
+                params,
+                return_type,
+                ..
+            } = s
+            {
+                let p: Vec<Ty> = params
+                    .iter()
+                    .map(|p| self.checker.resolve(&p.param_type))
+                    .collect();
+
+                let ret = return_type
+                    .as_ref()
+                    .map_or(Ty::Unit, |t| self.checker.resolve(t));
+
+                let fn_ty = Ty::Fn {
+                    params: p,
+                    ret: Box::new(ret),
+                };
+
+                self.checker
+                    .defined(name.clone(), fn_ty.clone(), BindingKind::Var);
+            }
+        }
+
+        if !global_defines.is_empty() {
+            lines.extend(global_defines);
+            lines.push("\n".to_string());
+        }
+
+        lines.extend(vec![
             "static void vio_print_int(int64_t x)  { printf(\"%lld\", (long long)x); }".to_string(),
             "static void vio_print_float(double x) { printf(\"%g\", x); }".to_string(),
             "static void vio_print_string(char* s)    { printf(\"%s\", s); }".to_string(),
@@ -62,39 +112,12 @@ impl Codegen {
 
     return result;
 }\n".to_string()
-        ];
-
-        self.checker.collect_signatures(&prg.declarations);
-
-        self.checker.env.push();
+        ]);
 
         for s in &prg.declarations {
-            if let Statement::Fun {
-                name,
-                params,
-                return_type,
-                ..
-            } = s
-            {
-                let p: Vec<Ty> = params
-                    .iter()
-                    .map(|p| self.checker.resolve(&p.param_type))
-                    .collect();
-
-                let ret = return_type
-                    .as_ref()
-                    .map_or(Ty::Unit, |t| self.checker.resolve(t));
-
-                let fn_ty = Ty::Fn {
-                    params: p,
-                    ret: Box::new(ret),
-                };
-
-                self.checker.defined(name.clone(), fn_ty.clone());
+            if let Statement::Const { .. } = s {
+                continue;
             }
-        }
-
-        for s in &prg.declarations {
             if let Statement::Fun { name, body, .. } = s
                 && name == "main"
             {
@@ -247,9 +270,20 @@ impl Codegen {
 
                 let ty = self.infer_expr(value);
 
-                self.checker.defined(name.clone(), ty.clone());
+                let mut res = String::new();
 
-                format!("{} {} = {};", self.c_type(&ty), name, val_str)
+                if matches!(stmt, Statement::Const { .. }) {
+                    res.push_str("const ");
+                    self.checker
+                        .defined(name.clone(), ty.clone(), BindingKind::Const);
+                } else {
+                    self.checker
+                        .defined(name.clone(), ty.clone(), BindingKind::Let);
+                }
+
+                res.push_str(format!("{} {} = {};", self.c_type(&ty), name, val_str).as_str());
+
+                res
             }
             Statement::If(IfStatement {
                 condition,
@@ -362,7 +396,8 @@ impl Codegen {
                 .collect();
 
             for (p, param_ty) in params.iter().zip(param_tys.iter()) {
-                self.checker.defined(p.name.clone(), param_ty.clone())
+                self.checker
+                    .defined(p.name.clone(), param_ty.clone(), BindingKind::Var)
             }
 
             let mut ret = if name == "main" {
@@ -409,7 +444,8 @@ impl Codegen {
                 .collect();
 
             for (f, field_ty) in fields.iter().zip(field_tys.iter()) {
-                self.checker.defined(f.name.clone(), field_ty.clone())
+                self.checker
+                    .defined(f.name.clone(), field_ty.clone(), BindingKind::Var)
             }
 
             let mut c_fields = fields
@@ -492,7 +528,16 @@ impl Codegen {
             Expression::FloatLiteral(_) => Ty::Float,
             Expression::BoolLiteral(_) => Ty::Bool,
             Expression::StringLiteral(_) => Ty::String,
-            Expression::Identifier(name) => self.checker.env.lookup(name).unwrap_or(Ty::Error),
+            Expression::Identifier(name) => {
+                self.checker
+                    .env
+                    .lookup(name)
+                    .unwrap_or(EntityInfo {
+                        ty: Ty::Error,
+                        kind: BindingKind::Const,
+                    })
+                    .ty
+            }
             Expression::Infix {
                 left,
                 operator,

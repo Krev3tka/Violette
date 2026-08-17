@@ -13,6 +13,8 @@ const TestPaths = "../../examples/"
 
 var Errors = map[string]string{
 	"fail_user_struct.vio": "Type errors: [DuplicateDefinition(\"User\")]",
+	"fail_constatation.vio": "Type errors: [AssignmentToImmutable { name: \"THREE_HOURS_IN_SECONDS\", kind: Const }, " +
+		"AssignmentToImmutable { name: \"x\", kind: Let }]",
 }
 
 var ExpectedOutputs = map[string]string{
@@ -77,11 +79,6 @@ func WalkDirFunc(path string, d fs.DirEntry, err error) error {
 }
 
 func main() {
-
-	x := (^(0b101 | 0b1011) & 0o53) ^ 0x1E4
-
-	fmt.Println(x)
-
 	err := filepath.WalkDir(TestPaths, WalkDirFunc)
 
 	if err != nil {
@@ -96,7 +93,7 @@ func main() {
 
 		if test.IsNegativeTest {
 			if !strings.Contains(output, test.ExpectedError) {
-				log.Fatalf("[FAIL] Negative test %s failed.\nExpected error substring: %q\nGot output:\n%s",
+				log.Fatalf("[FAIL] Negative test %s failed.\nExpected error substring: %q\nGot output:\n%q",
 					test.Path, test.ExpectedError, output)
 			}
 			fmt.Printf("[PASS] Negative test %s correctly failed with expected message.\n", test.Path)

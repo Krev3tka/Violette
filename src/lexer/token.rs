@@ -6,6 +6,7 @@ pub enum Token {
 
     // flow
     Let,
+    Var,
     Const,
     If,
     Else,

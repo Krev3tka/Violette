@@ -286,6 +286,10 @@ impl Lexer {
                 let ident = self.read_identifier();
 
                 return match ident.as_str() {
+                    "var" => SpannedToken {
+                        token: Token::Var,
+                        span: start,
+                    },
                     "let" => SpannedToken {
                         token: Token::Let,
                         span: start,

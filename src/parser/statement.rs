@@ -11,6 +11,11 @@ pub enum Statement {
         expression: Expression,
     },
 
+    Var {
+        name: String,
+        value: Expression,
+    },
+
     Let {
         name: String,
         value: Expression,
@@ -102,8 +107,8 @@ impl Parser {
     }
     fn parse_statement_inner(&mut self) -> Result<Statement, ParseError> {
         match &self.current_token.token {
-            Token::Let | Token::Const => {
-                let is_const = matches!(self.current_token.token, Token::Const);
+            Token::Var | Token::Let | Token::Const => {
+                let kw_token = self.current_token.token.clone();
                 self.next_token();
                 let name = match &self.current_token.token {
                     Token::Identifier(var_name) => var_name.clone(),
@@ -119,10 +124,11 @@ impl Parser {
                 let value = self.parse_expression(Lowest)?;
                 self.next_token();
 
-                if is_const {
-                    Ok(Statement::Const { name, value })
-                } else {
-                    Ok(Statement::Let { name, value })
+                match kw_token {
+                    Token::Var => Ok(Statement::Var { name, value }),
+                    Token::Let => Ok(Statement::Let { name, value }),
+                    Token::Const => Ok(Statement::Const { name, value }),
+                    _ => unreachable!(),
                 }
             }
             Token::If => self.parse_if_statement(),
