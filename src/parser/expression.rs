@@ -75,8 +75,8 @@ pub enum Expression {
     Range {
         start: Option<Box<Expression>>,
         end: Option<Box<Expression>>,
-        range_kind: RangeKind
-    }
+        range_kind: RangeKind,
+    },
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -100,7 +100,6 @@ pub enum RangeKind {
     /// ```
     /// ## Output:
     /// `1, 2, 3, 4, 5, 6, 7, 8, 9,`
-
     Exclusive,
 
     /// # Inclusive range
@@ -116,8 +115,7 @@ pub enum RangeKind {
     /// ```
     /// ## Output:
     /// `1, 2, 3, 4, 5, 6, 7, 8, 9, 10,`
-
-    Inclusive
+    Inclusive,
 }
 
 pub fn token_precedence(token: &Token) -> Precedence {
@@ -526,7 +524,11 @@ impl Parser {
 
         let end = if matches!(
             self.peek_token.token,
-            Token::RightBracket | Token::RightParen | Token::Comma | Token::Semicolon | Token::Newline
+            Token::RightBracket
+                | Token::RightParen
+                | Token::Comma
+                | Token::Semicolon
+                | Token::Newline
         ) {
             None
         } else {
@@ -536,7 +538,7 @@ impl Parser {
         Ok(Expression::Range {
             start: Some(Box::new(left.clone())),
             end,
-            range_kind
+            range_kind,
         })
     }
 

@@ -56,7 +56,7 @@ impl Lexer {
                 } else {
                     Token::Dot
                 }
-            },
+            }
             ',' => Token::Comma,
 
             '"' => {

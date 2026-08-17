@@ -1,10 +1,10 @@
 use crate::codegen::error::CodegenError;
 use crate::codegen::error::CodegenError::Unexpected;
 use crate::lexer::token::Token;
+use crate::parser::expression::RangeKind;
 use crate::parser::program::Program;
 use crate::parser::statement::{FunParam, IfStatement, StructParam};
 use crate::parser::{Expression, Statement};
-use crate::parser::expression::RangeKind;
 use crate::typechecker::checker::Checker;
 use crate::typechecker::error::BindingKind;
 use crate::typechecker::types::Ty;
@@ -334,7 +334,9 @@ impl Codegen {
             Statement::Expression { expression } => {
                 format!("{};", self.emit_expression(expression)?)
             }
-            Statement::ForCondition { .. } | Statement::ForCounter { .. } | Statement::ForRange { .. }  => self.emit_for(stmt)?,
+            Statement::ForCondition { .. }
+            | Statement::ForCounter { .. }
+            | Statement::ForRange { .. } => self.emit_for(stmt)?,
             Statement::Fun { .. } => self.emit_function(stmt)?,
             Statement::Struct { .. } => self.emit_struct(stmt)?,
             _ => return Err(CodegenError::Unsupported(format!("{:?}", stmt))),
@@ -378,24 +380,39 @@ impl Codegen {
         } else if let Statement::ForRange {
             variable,
             iterable,
-            body
-        } = stmt {
+            body,
+        } = stmt
+        {
             self.checker.env.push();
 
             let (start, end, cmp) = match iterable {
                 Expression::Range {
                     start,
                     end,
-                    range_kind
+                    range_kind,
                 } => (
-                    start.as_ref().map_or(Ok("0".to_string()), |s| self.emit_expression(s))?,
-                    end.as_ref().map_or(Err(CodegenError::Unsupported("Open ranges".to_string())), |e| self.emit_expression(e))?,
-                    if matches!(range_kind, RangeKind::Inclusive) { "<=" } else { "<" }
-                    ),
-                _ => return Err(CodegenError::Unsupported("For-loop expects a range".to_string()))
+                    start
+                        .as_ref()
+                        .map_or(Ok("0".to_string()), |s| self.emit_expression(s))?,
+                    end.as_ref().map_or(
+                        Err(CodegenError::Unsupported("Open ranges".to_string())),
+                        |e| self.emit_expression(e),
+                    )?,
+                    if matches!(range_kind, RangeKind::Inclusive) {
+                        "<="
+                    } else {
+                        "<"
+                    },
+                ),
+                _ => {
+                    return Err(CodegenError::Unsupported(
+                        "For-loop expects a range".to_string(),
+                    ));
+                }
             };
 
-            self.checker.defined(variable.clone(), Ty::Int, BindingKind::Var);
+            self.checker
+                .defined(variable.clone(), Ty::Int, BindingKind::Var);
             let body_str = self.emit_block(body)?;
 
             self.checker.env.pop();
