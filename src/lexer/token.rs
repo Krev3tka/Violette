@@ -68,6 +68,7 @@ pub enum Token {
     Comma,           // ,
     Sprout,          // ~>
     FatArrow,        // =>
+    DoubleDot,       // ..
 
     Add,       // +
     Subtract,  // -

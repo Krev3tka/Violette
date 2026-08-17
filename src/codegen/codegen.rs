@@ -4,8 +4,8 @@ use crate::lexer::token::Token;
 use crate::parser::program::Program;
 use crate::parser::statement::{FunParam, IfStatement, StructParam};
 use crate::parser::{Expression, Statement};
-use crate::typechecker::checker::{Checker, TypeError};
-use crate::typechecker::env::EntityInfo;
+use crate::parser::expression::RangeKind;
+use crate::typechecker::checker::Checker;
 use crate::typechecker::error::BindingKind;
 use crate::typechecker::types::Ty;
 
@@ -52,7 +52,7 @@ impl Codegen {
         for s in &prg.declarations {
             if let Statement::Const { name, value } = s {
                 let val_str = self.emit_expression(value)?;
-                let ty = self.infer_expr(value);
+                let ty = self.checker.infer(value);
 
                 self.checker.defined(name.clone(), ty, BindingKind::Const);
 
@@ -224,7 +224,7 @@ impl Codegen {
                     && (name == "print" || name == "println")
                     && args.len() == 1
                 {
-                    let arg_ty = self.infer_expr(&args[0]);
+                    let arg_ty = self.checker.infer(&args[0]);
                     let suffix = match arg_ty {
                         Ty::Int => "int",
                         Ty::Float => "float",
@@ -268,7 +268,7 @@ impl Codegen {
             Statement::Let { name, value } | Statement::Const { name, value } => {
                 let val_str = self.emit_expression(value)?;
 
-                let ty = self.infer_expr(value);
+                let ty = self.checker.infer(value);
 
                 let mut res = String::new();
 
@@ -334,7 +334,7 @@ impl Codegen {
             Statement::Expression { expression } => {
                 format!("{};", self.emit_expression(expression)?)
             }
-            Statement::ForCondition { .. } | Statement::ForCounter { .. } => self.emit_for(stmt)?,
+            Statement::ForCondition { .. } | Statement::ForCounter { .. } | Statement::ForRange { .. }  => self.emit_for(stmt)?,
             Statement::Fun { .. } => self.emit_function(stmt)?,
             Statement::Struct { .. } => self.emit_struct(stmt)?,
             _ => return Err(CodegenError::Unsupported(format!("{:?}", stmt))),
@@ -375,8 +375,37 @@ impl Codegen {
                 "for ({} {}; {}) {{\n{}\n}}",
                 initial, cond, postfix, body
             ))
+        } else if let Statement::ForRange {
+            variable,
+            iterable,
+            body
+        } = stmt {
+            self.checker.env.push();
+
+            let (start, end, cmp) = match iterable {
+                Expression::Range {
+                    start,
+                    end,
+                    range_kind
+                } => (
+                    start.as_ref().map_or(Ok("0".to_string()), |s| self.emit_expression(s))?,
+                    end.as_ref().map_or(Err(CodegenError::Unsupported("Open ranges".to_string())), |e| self.emit_expression(e))?,
+                    if matches!(range_kind, RangeKind::Inclusive) { "<=" } else { "<" }
+                    ),
+                _ => return Err(CodegenError::Unsupported("For-loop expects a range".to_string()))
+            };
+
+            self.checker.defined(variable.clone(), Ty::Int, BindingKind::Var);
+            let body_str = self.emit_block(body)?;
+
+            self.checker.env.pop();
+
+            Ok(format!(
+                "for (int64_t {} = {}; {} {} {}; {}++) {{\n{}\n}}",
+                variable, start, variable, cmp, end, variable, body_str
+            ))
         } else {
-            Err(Unexpected(self.emit_statement(stmt)?))
+            unreachable!()
         }
     }
 
@@ -520,119 +549,5 @@ impl Codegen {
 
             _ => return Err(Unexpected("Not an operator".to_string())),
         }))
-    }
-
-    fn infer_expr(&mut self, expr: &Expression) -> Ty {
-        match expr {
-            Expression::IntLiteral(_) => Ty::Int,
-            Expression::FloatLiteral(_) => Ty::Float,
-            Expression::BoolLiteral(_) => Ty::Bool,
-            Expression::StringLiteral(_) => Ty::String,
-            Expression::Identifier(name) => {
-                self.checker
-                    .env
-                    .lookup(name)
-                    .unwrap_or(EntityInfo {
-                        ty: Ty::Error,
-                        kind: BindingKind::Const,
-                    })
-                    .ty
-            }
-            Expression::Infix {
-                left,
-                operator,
-                right,
-            } => {
-                let left_ty = self.infer_expr(left);
-                let right_ty = self.infer_expr(right);
-
-                match operator {
-                    Token::Add => match (&left_ty, &right_ty) {
-                        (Ty::Int, Ty::Int) => Ty::Int,
-                        (Ty::String, Ty::String) => Ty::String,
-                        (Ty::Error, _) | (_, Ty::Error) => Ty::Error,
-                        _ => Ty::Error,
-                    },
-                    Token::Subtract
-                    | Token::Multiply
-                    | Token::Divide
-                    | Token::Modulus
-                    | Token::BitAnd
-                    | Token::BitOr
-                    | Token::BitXOR => Ty::Int,
-                    Token::Less | Token::Greater | Token::LessOrEquals | Token::GreaterOrEquals => {
-                        Ty::Bool
-                    }
-                    Token::Equals | Token::NotEquals => match (&left_ty, &right_ty) {
-                        (Ty::Error, _) | (_, Ty::Error) => Ty::Error,
-                        _ => {
-                            if left_ty != right_ty {
-                                return Ty::Error;
-                            }
-                            Ty::Bool
-                        }
-                    },
-                    Token::LogicAnd | Token::LogicOr => Ty::Bool,
-                    _ => Ty::Error,
-                }
-            }
-            Expression::Prefix { operator, right: _ } => match operator {
-                Token::Subtract | Token::Increment | Token::Decrement | Token::BitNot => Ty::Int,
-                Token::LogicNot => Ty::Bool,
-                _ => Ty::Error,
-            },
-            Expression::Index { .. } => Ty::Error,
-            Expression::Call { function, args } => {
-                let callee = self.infer_expr(function);
-                match callee {
-                    Ty::Fn { params, ret } => {
-                        if args.len() != params.len() {
-                            return *ret;
-                        }
-
-                        for (arg, _param) in args.iter().zip(params.iter()) {
-                            let _a = self.infer_expr(arg);
-                        }
-                        *ret
-                    }
-                    Ty::Error => Ty::Error,
-                    _ => Ty::Error,
-                }
-            }
-            Expression::Field { object, name } => {
-                let obj_ty = self.infer_expr(object);
-
-                match obj_ty {
-                    Ty::Struct(s) => match self.checker.structs.get(&s) {
-                        Some(struct_sig) => {
-                            match struct_sig.iter().find(|(curr_name, _)| curr_name == name) {
-                                Some(field) => field.1.clone(),
-                                None => {
-                                    self.checker.errors.push(TypeError::UnknownField {
-                                        struct_name: s,
-                                        field: name.clone(),
-                                    });
-                                    Ty::Error
-                                }
-                            }
-                        }
-                        None => {
-                            self.checker
-                                .errors
-                                .push(TypeError::UnknownName(name.clone()));
-                            Ty::Error
-                        }
-                    },
-                    Ty::Error => Ty::Error,
-                    _ => {
-                        self.checker.errors.push(TypeError::NoFields(obj_ty));
-                        Ty::Error
-                    }
-                }
-            }
-            Expression::StructLiteral { name, .. } => Ty::Struct(name.clone()),
-            Expression::MethodCall { .. } => Ty::Error,
-            _ => Ty::Error,
-        }
     }
 }

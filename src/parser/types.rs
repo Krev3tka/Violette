@@ -13,6 +13,7 @@ pub enum Precedence {
     BitAnd,      // &
     Equals,      // == !=
     LessGreater, // < > <= >=
+    Range,       // : ..
     Sprout,      // ~>
     Shift,       // >> <<
     Sum,         // + -

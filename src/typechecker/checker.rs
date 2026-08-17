@@ -149,12 +149,24 @@ impl Checker {
 
             self.check_block(body);
         } else if let Statement::ForRange {
-            variable: _,
-            iterable: _,
-            body: _,
+            variable,
+            iterable,
+            body,
         } = stmt
         {
-            todo!();
+            let _iter_ty = self.infer(iterable);
+
+            if let Expression::Range { end, .. } = iterable
+                && end.is_none() {
+                    self.errors.push(TypeError::Unsupported(
+                        "Cannot iterate over an open-ended range in for-loop".to_string()
+                    ));
+            }
+
+            self.defined(variable.clone(), Ty::Int, BindingKind::Var);
+
+            self.check_block(body);
+
         } else if let Statement::ForCounter {
             init,
             condition: cond,
@@ -411,6 +423,22 @@ impl Checker {
                         Ty::Int
                     }
                     _ => Ty::Error,
+                }
+            }
+            Expression::Range {
+                start,
+                end,
+                ..
+            } => {
+                let start_ty = start.as_ref().map_or(Ty::Int, |s| self.infer(s));
+                let end_ty = end.as_ref().map_or(Ty::Int, |e| self.infer(e));
+
+                self.expect(&start_ty, &Ty::Int);
+                self.expect(&end_ty, &Ty::Int);
+
+                Ty::Generic {
+                    name: "Range".to_string(),
+                    param: Box::new(Ty::Int)
                 }
             }
             Expression::Index { .. } => {

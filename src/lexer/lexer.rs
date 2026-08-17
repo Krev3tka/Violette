@@ -49,7 +49,14 @@ impl Lexer {
                 }
             }
 
-            '.' => Token::Dot,
+            '.' => {
+                if self.peek_char() == '.' {
+                    self.read_char();
+                    Token::DoubleDot
+                } else {
+                    Token::Dot
+                }
+            },
             ',' => Token::Comma,
 
             '"' => {

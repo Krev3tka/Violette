@@ -1,6 +1,5 @@
 package main
 
-
 fun main() {
     const THREE_HOURS_IN_SECONDS = 2 * 60 * 60 // Const variable
     THREE_HOURS_IN_SECONDS += 60 * 60          // Error: trying to add and assign to constant variable

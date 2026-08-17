@@ -71,12 +71,53 @@ pub enum Expression {
         return_type: Option<Type>,
         body: Vec<Statement>,
     },
+
+    Range {
+        start: Option<Box<Expression>>,
+        end: Option<Box<Expression>>,
+        range_kind: RangeKind
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct StructLiteralField {
     pub field_name: String,
     pub field_val: Box<Expression>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum RangeKind {
+    /// # Exclusive range
+    /// **doesn't include right bound of the range**
+    ///
+    /// # Examples:
+    /// ```violette
+    /// fun main() {
+    ///     for i in 1:10 {
+    ///         print(i, ", ")
+    ///     }
+    /// }
+    /// ```
+    /// ## Output:
+    /// `1, 2, 3, 4, 5, 6, 7, 8, 9,`
+
+    Exclusive,
+
+    /// # Inclusive range
+    /// **include right bound of the range**
+    ///
+    /// # Examples:
+    /// ```violette
+    /// fun main() {
+    ///     for i in 1..10 {
+    ///         print(i, ", ")
+    ///     }
+    /// }
+    /// ```
+    /// ## Output:
+    /// `1, 2, 3, 4, 5, 6, 7, 8, 9, 10,`
+
+    Inclusive
 }
 
 pub fn token_precedence(token: &Token) -> Precedence {
@@ -98,6 +139,7 @@ pub fn token_precedence(token: &Token) -> Precedence {
         }
         Token::Sprout => Precedence::Sprout,
         Token::LeftShift | Token::RightShift => Precedence::Shift,
+        Token::Colon | Token::DoubleDot => Precedence::Range,
         Token::Add | Token::Subtract => Precedence::Sum,
         Token::Multiply | Token::Divide | Token::Modulus => Precedence::Product,
         Token::Power => Precedence::Power,
@@ -306,6 +348,10 @@ impl Parser {
                         right: Box::new(right),
                     }
                 }
+                Token::Colon | Token::DoubleDot => {
+                    self.next_token();
+                    left = self.parse_infix_range(left)?
+                }
                 _ => break,
             }
         }
@@ -467,6 +513,30 @@ impl Parser {
             params,
             return_type,
             body,
+        })
+    }
+
+    pub fn parse_infix_range(&mut self, left: Expression) -> Result<Expression, ParseError> {
+        let range_kind = match self.current_token.token {
+            Token::Colon => RangeKind::Exclusive,
+            Token::DoubleDot => RangeKind::Inclusive,
+            _ => unreachable!(),
+        };
+        self.next_token();
+
+        let end = if matches!(
+            self.peek_token.token,
+            Token::RightBracket | Token::RightParen | Token::Comma | Token::Semicolon | Token::Newline
+        ) {
+            None
+        } else {
+            Some(Box::new(self.parse_expression(Precedence::Range)?))
+        };
+
+        Ok(Expression::Range {
+            start: Some(Box::new(left.clone())),
+            end,
+            range_kind
         })
     }
 
