@@ -43,9 +43,6 @@ pub enum Token {
     /// Keyword `bloom`.
     Bloom,
 
-    /// Keyword `cherry`.
-    Cherry,
-
     /// Keyword `struct`.
     Struct,
 
@@ -60,9 +57,6 @@ pub enum Token {
 
     /// Keyword `local`.
     Local,
-
-    /// Keyword `cyclic`.
-    Cyclic,
 
     /// Primitive type kind.
     PrimitiveType(PrimitiveType),
