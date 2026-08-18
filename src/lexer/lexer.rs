@@ -346,10 +346,6 @@ impl Lexer {
                         token: Token::Bloom,
                         span: start,
                     },
-                    "cherry" => SpannedToken {
-                        token: Token::Cherry,
-                        span: start,
-                    },
 
                     "struct" => SpannedToken {
                         token: Token::Struct,
@@ -369,10 +365,6 @@ impl Lexer {
                     },
                     "local" => SpannedToken {
                         token: Token::Local,
-                        span: start,
-                    },
-                    "cyclic" => SpannedToken {
-                        token: Token::Cyclic,
                         span: start,
                     },
 
