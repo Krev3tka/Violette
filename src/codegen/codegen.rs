@@ -329,7 +329,7 @@ impl Codegen {
                     val_str = format!(" {}", self.emit_expression(expr)?);
                 }
 
-                format!("return {};", val_str)
+                format!("return{};", val_str)
             }
             Statement::Expression { expression } => {
                 format!("{};", self.emit_expression(expression)?)
@@ -471,9 +471,9 @@ impl Codegen {
             self.checker.env.pop();
 
             if !params.is_empty() {
-                Ok(format!("{ret} {name}({parameters}) {{\n{body_str}\n}}"))
+                Ok(format!("{ret} {name}({parameters}) {{\n{body_str}\n}}\n"))
             } else {
-                Ok(format!("{ret} {name}(void) {{\n{body_str}\n}}"))
+                Ok(format!("{ret} {name}(void) {{\n{body_str}\n}}\n"))
             }
         } else {
             Err(Unexpected(format!("{:?}", stmt)))

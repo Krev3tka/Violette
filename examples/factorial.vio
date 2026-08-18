@@ -1,0 +1,15 @@
+package main
+
+fun factorial(n: int) [int] {
+    if n <= 1 {
+        return 1
+    }
+
+    return n * factorial(n - 1)
+}
+
+fun main() {
+    println(factorial(5))
+    println(factorial(1))
+    println(factorial(0))
+}

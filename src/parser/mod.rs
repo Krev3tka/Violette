@@ -1,3 +1,9 @@
+//! Parser and AST builder for Violette.
+//!
+//! Takes `Vec<Token>` and builds an **A**bstract **S**yntax **T**ree, checking correctness of the written code.
+//!
+//! **AST** contains different [`Statement`]s and [`Expression`]s.
+
 #[macro_use]
 pub mod parser;
 pub mod expression;

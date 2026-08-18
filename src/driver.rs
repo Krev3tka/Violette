@@ -96,7 +96,11 @@ pub fn compile(command: &str, file: &str) {
             .expect("Failed to execute");
 
         if !status.success() {
-            println!("{} failed", compiler);
+            if let Some(code) = status.code() {
+                println!("Program exited with code {}", code)
+            } else {
+                println!("Program terminated by signal (probably stack overflow / segfault)")
+            }
         }
     }
 }
