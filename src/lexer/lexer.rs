@@ -1,4 +1,4 @@
-use crate::lexer::span::{Span, SpannedToken};
+use crate::lexer::span::{Position, Span, SpannedToken};
 use crate::lexer::token::{PrimitiveType, Token};
 
 pub struct Lexer {
@@ -29,162 +29,183 @@ impl Lexer {
     pub fn next_token(&mut self) -> SpannedToken {
         self.skip_whitespaces();
 
-        let start = Span::new(self.line, self.col);
+        let start = self.current_pos();
 
-        let token = match self.current {
-            ';' => Token::Semicolon,
-            ':' => Token::Colon,
-            '{' => Token::LeftBrace,
-            '}' => Token::RightBrace,
-            '(' => Token::LeftParen,
-            ')' => Token::RightParen,
-            '[' => Token::LeftBracket,
-            ']' => Token::RightBracket,
+        match self.current {
+            ';' => self.make_token(Token::Semicolon, start),
+            ':' => self.make_token(Token::Colon, start),
+            '{' => self.make_token(Token::LeftBrace, start),
+            '}' => self.make_token(Token::RightBrace, start),
+            '(' => self.make_token(Token::LeftParen, start),
+            ')' => self.make_token(Token::RightParen, start),
+            '[' => self.make_token(Token::LeftBracket, start),
+            ']' => self.make_token(Token::RightBracket, start),
+            ',' => self.make_token(Token::Comma, start),
+            '#' => self.make_token(Token::BitOr, start),
+            '^' => self.make_token(Token::BitXOR, start),
+            '%' => {
+                if self.peek_char() == '=' {
+                    self.read_char();
+                    self.make_token(Token::ModAndAssign, start)
+                } else {
+                    self.make_token(Token::Modulus, start)
+                }
+            }
+
             '|' => {
                 if self.peek_char() == '|' {
                     self.read_char();
-                    Token::LogicOr
+                    self.make_token(Token::LogicOr, start)
                 } else {
-                    Token::Pipe
+                    self.make_token(Token::Pipe, start)
                 }
             }
 
             '.' => {
                 if self.peek_char() == '.' {
                     self.read_char();
-                    Token::DoubleDot
+                    self.make_token(Token::DoubleDot, start)
                 } else {
-                    Token::Dot
+                    self.make_token(Token::Dot, start)
                 }
             }
-            ',' => Token::Comma,
 
             '"' => {
                 self.read_char();
                 let mut string_val = String::new();
                 while self.current != '"' && self.current != '\0' {
-                    string_val.push(self.current);
+                    if self.current == '\\' {
+                        self.read_char();
+                        match self.current {
+                            'n' => string_val.push('\n'),
+                            't' => string_val.push('\t'),
+                            'r' => string_val.push('\r'),
+                            '\\' => string_val.push('\\'),
+                            '"' => string_val.push('"'),
+                            '0' => string_val.push('\0'),
+                            _ => string_val.push(self.current),
+                        }
+                    } else {
+                        string_val.push(self.current);
+                    }
                     self.read_char();
                 }
 
                 if self.current == '\0' {
-                    Token::Illegal
+                    self.make_token(Token::Illegal, start)
                 } else {
-                    Token::String(string_val)
+                    self.make_token(Token::String(string_val), start)
                 }
             }
 
             '&' => {
                 if self.peek_char() == '&' {
                     self.read_char();
-                    Token::LogicAnd
+                    self.make_token(Token::LogicAnd, start)
                 } else {
-                    Token::BitAnd
+                    self.make_token(Token::BitAnd, start)
                 }
             }
 
-            '#' => Token::BitOr,
             '~' => {
                 if self.peek_char() == '>' {
                     self.read_char();
-                    Token::Sprout
+                    self.make_token(Token::Sprout, start)
                 } else {
-                    Token::BitNot
+                    self.make_token(Token::BitNot, start)
                 }
             }
-            '^' => Token::BitXOR,
 
             '<' => {
                 if self.peek_char() == '<' {
                     self.read_char();
-                    Token::LeftShift
+                    self.make_token(Token::LeftShift, start)
                 } else if self.peek_char() == '=' {
                     self.read_char();
-                    Token::LessOrEquals
+                    self.make_token(Token::LessOrEquals, start)
                 } else {
-                    Token::Less
+                    self.make_token(Token::Less, start)
                 }
             }
 
             '>' => {
                 if self.peek_char() == '>' {
                     self.read_char();
-                    Token::RightShift
+                    self.make_token(Token::RightShift, start)
                 } else if self.peek_char() == '=' {
                     self.read_char();
-                    Token::GreaterOrEquals
+                    self.make_token(Token::GreaterOrEquals, start)
                 } else {
-                    Token::Greater
+                    self.make_token(Token::Greater, start)
                 }
             }
 
             '=' => {
                 if self.peek_char() == '=' {
                     self.read_char();
-                    Token::Equals
+                    self.make_token(Token::Equals, start)
                 } else if self.peek_char() == '>' {
                     self.read_char();
-                    Token::FatArrow
+                    self.make_token(Token::FatArrow, start)
                 } else {
-                    Token::Assign
+                    self.make_token(Token::Assign, start)
                 }
             }
 
             '!' => {
                 if self.peek_char() == '=' {
                     self.read_char();
-                    Token::NotEquals
+                    self.make_token(Token::NotEquals, start)
                 } else {
-                    Token::LogicNot
+                    self.make_token(Token::LogicNot, start)
                 }
             }
 
             '+' => {
                 if self.peek_char() == '=' {
                     self.read_char();
-                    Token::AddAndAssign
+                    self.make_token(Token::AddAndAssign, start)
                 } else if self.peek_char() == '+' {
                     self.read_char();
-                    Token::Increment
+                    self.make_token(Token::Increment, start)
                 } else {
-                    Token::Add
+                    self.make_token(Token::Add, start)
                 }
             }
 
             '-' => {
                 if self.peek_char() == '=' {
                     self.read_char();
-                    Token::SubAndAssign
+                    self.make_token(Token::SubAndAssign, start)
                 } else if self.peek_char() == '-' {
                     self.read_char();
-                    Token::Decrement
+                    self.make_token(Token::Decrement, start)
                 } else {
-                    Token::Subtract
+                    self.make_token(Token::Subtract, start)
                 }
             }
 
             '*' => {
                 if self.peek_char() == '=' {
                     self.read_char();
-                    Token::MulAndAssign
+                    self.make_token(Token::MulAndAssign, start)
                 } else if self.peek_char() == '*' {
                     self.read_char();
-                    Token::Power
+                    self.make_token(Token::Power, start)
                 } else {
-                    Token::Multiply
+                    self.make_token(Token::Multiply, start)
                 }
             }
 
             '/' => {
                 if self.peek_char() == '=' {
                     self.read_char();
-                    Token::DivAndAssign
+                    self.make_token(Token::DivAndAssign, start)
                 } else if self.peek_char() == '/' {
                     while self.current != '\n' && self.current != '\r' && self.current != '\0' {
-                        self.read_char()
+                        self.read_char();
                     }
-
-                    return self.next_token();
+                    self.next_token()
                 } else if self.peek_char() == '*' {
                     self.read_char();
                     self.read_char();
@@ -206,38 +227,31 @@ impl Lexer {
                     }
 
                     if depth > 0 {
-                        return SpannedToken {
+                        SpannedToken {
                             token: Token::Illegal,
-                            span: start,
-                        };
+                            span: Span::new(start, self.current_pos()),
+                        }
+                    } else {
+                        self.next_token()
                     }
-
-                    return self.next_token();
                 } else {
-                    Token::Divide
+                    self.make_token(Token::Divide, start)
                 }
             }
 
-            '%' => {
-                if self.peek_char() == '=' {
-                    self.read_char();
-                    Token::ModAndAssign
-                } else {
-                    Token::Modulus
-                }
-            }
-
-            '\0' => Token::Eof,
+            '\0' => SpannedToken {
+                token: Token::Eof,
+                span: Span::new(start, start),
+            },
 
             '\n' | '\r' => {
                 while self.current == '\n' || self.current == '\r' {
                     self.read_char();
                 }
-
-                return SpannedToken {
+                SpannedToken {
                     token: Token::Newline,
-                    span: start,
-                };
+                    span: Span::new(start, self.current_pos()),
+                }
             }
 
             '0' => {
@@ -262,10 +276,10 @@ impl Lexer {
                     }
 
                     if digits.is_empty() {
-                        return SpannedToken {
+                        SpannedToken {
                             token: Token::Illegal,
-                            span: start,
-                        };
+                            span: Span::new(start, self.current_pos()),
+                        }
                     } else {
                         let radix = match prefix {
                             'b' => 2,
@@ -273,192 +287,70 @@ impl Lexer {
                             _ => 16,
                         };
 
-                        return SpannedToken {
+                        SpannedToken {
                             token: Token::Int(
                                 isize::from_str_radix(digits.as_str(), radix).unwrap_or(0),
                             ),
-                            span: start,
-                        };
+                            span: Span::new(start, self.current_pos()),
+                        }
                     }
                 } else {
-                    return self.read_number_literal();
+                    self.read_number_literal(start)
                 }
             }
 
-            ch if ch.is_ascii_digit() => {
-                return self.read_number_literal();
-            }
+            ch if ch.is_ascii_digit() => self.read_number_literal(start),
 
             ch if Self::is_letter(ch) => {
                 let ident = self.read_identifier();
-
-                return match ident.as_str() {
-                    "var" => SpannedToken {
-                        token: Token::Var,
-                        span: start,
-                    },
-                    "let" => SpannedToken {
-                        token: Token::Let,
-                        span: start,
-                    },
-                    "const" => SpannedToken {
-                        token: Token::Const,
-                        span: start,
-                    },
-                    "if" => SpannedToken {
-                        token: Token::If,
-                        span: start,
-                    },
-                    "else" => SpannedToken {
-                        token: Token::Else,
-                        span: start,
-                    },
-                    "for" => SpannedToken {
-                        token: Token::For,
-                        span: start,
-                    },
-                    "in" => SpannedToken {
-                        token: Token::In,
-                        span: start,
-                    },
-                    "continue" => SpannedToken {
-                        token: Token::Continue,
-                        span: start,
-                    },
-                    "break" => SpannedToken {
-                        token: Token::Break,
-                        span: start,
-                    },
-                    "match" => SpannedToken {
-                        token: Token::Match,
-                        span: start,
-                    },
-
-                    "fun" => SpannedToken {
-                        token: Token::Fun,
-                        span: start,
-                    },
-                    "return" => SpannedToken {
-                        token: Token::Return,
-                        span: start,
-                    },
-                    "bloom" => SpannedToken {
-                        token: Token::Bloom,
-                        span: start,
-                    },
-
-                    "struct" => SpannedToken {
-                        token: Token::Struct,
-                        span: start,
-                    },
-                    "interface" => SpannedToken {
-                        token: Token::Interface,
-                        span: start,
-                    },
-                    "type" => SpannedToken {
-                        token: Token::Type,
-                        span: start,
-                    },
-                    "open" => SpannedToken {
-                        token: Token::Open,
-                        span: start,
-                    },
-                    "local" => SpannedToken {
-                        token: Token::Local,
-                        span: start,
-                    },
-
-                    "import" => SpannedToken {
-                        token: Token::Import,
-                        span: start,
-                    },
-
-                    "package" => SpannedToken {
-                        token: Token::Package,
-                        span: start,
-                    },
-
-                    "int" => SpannedToken {
-                        token: Token::PrimitiveType(PrimitiveType::Int),
-                        span: start,
-                    },
-                    "int8" => SpannedToken {
-                        token: Token::PrimitiveType(PrimitiveType::Int8),
-                        span: start,
-                    },
-                    "int16" => SpannedToken {
-                        token: Token::PrimitiveType(PrimitiveType::Int16),
-                        span: start,
-                    },
-                    "int32" => SpannedToken {
-                        token: Token::PrimitiveType(PrimitiveType::Int32),
-                        span: start,
-                    },
-                    "int64" => SpannedToken {
-                        token: Token::PrimitiveType(PrimitiveType::Int64),
-                        span: start,
-                    },
-
-                    "uint" => SpannedToken {
-                        token: Token::PrimitiveType(PrimitiveType::Uint),
-                        span: start,
-                    },
-                    "uint8" => SpannedToken {
-                        token: Token::PrimitiveType(PrimitiveType::Uint8),
-                        span: start,
-                    },
-                    "uint16" => SpannedToken {
-                        token: Token::PrimitiveType(PrimitiveType::Uint16),
-                        span: start,
-                    },
-                    "uint32" => SpannedToken {
-                        token: Token::PrimitiveType(PrimitiveType::Uint32),
-                        span: start,
-                    },
-                    "uint64" => SpannedToken {
-                        token: Token::PrimitiveType(PrimitiveType::Uint64),
-                        span: start,
-                    },
-
-                    "float32" => SpannedToken {
-                        token: Token::PrimitiveType(PrimitiveType::Float32),
-                        span: start,
-                    },
-                    "float64" => SpannedToken {
-                        token: Token::PrimitiveType(PrimitiveType::Float64),
-                        span: start,
-                    },
-
-                    "bool" => SpannedToken {
-                        token: Token::PrimitiveType(PrimitiveType::Bool),
-                        span: start,
-                    },
-                    "string" => SpannedToken {
-                        token: Token::PrimitiveType(PrimitiveType::String),
-                        span: start,
-                    },
-                    "true" => SpannedToken {
-                        token: Token::Bool(true),
-                        span: start,
-                    },
-                    "false" => SpannedToken {
-                        token: Token::Bool(false),
-                        span: start,
-                    },
-
-                    _ => SpannedToken {
-                        token: Token::Identifier(ident),
-                        span: start,
-                    },
+                let token = match ident.as_str() {
+                    "var" => Token::Var,
+                    "let" => Token::Let,
+                    "const" => Token::Const,
+                    "if" => Token::If,
+                    "else" => Token::Else,
+                    "for" => Token::For,
+                    "in" => Token::In,
+                    "continue" => Token::Continue,
+                    "break" => Token::Break,
+                    "match" => Token::Match,
+                    "fun" => Token::Fun,
+                    "return" => Token::Return,
+                    "bloom" => Token::Bloom,
+                    "struct" => Token::Struct,
+                    "interface" => Token::Interface,
+                    "type" => Token::Type,
+                    "open" => Token::Open,
+                    "local" => Token::Local,
+                    "import" => Token::Import,
+                    "package" => Token::Package,
+                    "int" => Token::PrimitiveType(PrimitiveType::Int),
+                    "int8" => Token::PrimitiveType(PrimitiveType::Int8),
+                    "int16" => Token::PrimitiveType(PrimitiveType::Int16),
+                    "int32" => Token::PrimitiveType(PrimitiveType::Int32),
+                    "int64" => Token::PrimitiveType(PrimitiveType::Int64),
+                    "uint" => Token::PrimitiveType(PrimitiveType::Uint),
+                    "uint8" => Token::PrimitiveType(PrimitiveType::Uint8),
+                    "uint16" => Token::PrimitiveType(PrimitiveType::Uint16),
+                    "uint32" => Token::PrimitiveType(PrimitiveType::Uint32),
+                    "uint64" => Token::PrimitiveType(PrimitiveType::Uint64),
+                    "float32" => Token::PrimitiveType(PrimitiveType::Float32),
+                    "float64" => Token::PrimitiveType(PrimitiveType::Float64),
+                    "bool" => Token::PrimitiveType(PrimitiveType::Bool),
+                    "string" => Token::PrimitiveType(PrimitiveType::String),
+                    "true" => Token::Bool(true),
+                    "false" => Token::Bool(false),
+                    _ => Token::Identifier(ident),
                 };
+
+                SpannedToken {
+                    token,
+                    span: Span::new(start, self.current_pos()),
+                }
             }
 
-            _ => Token::Illegal,
-        };
-
-        self.read_char();
-
-        SpannedToken { token, span: start }
+            _ => self.make_token(Token::Illegal, start),
+        }
     }
 
     fn read_char(&mut self) {
@@ -518,8 +410,19 @@ impl Lexer {
         suffix
     }
 
-    fn read_number_literal(&mut self) -> SpannedToken {
-        let start = Span::new(self.line, self.col);
+    fn current_pos(&self) -> Position {
+        Position::new(self.line, self.col)
+    }
+
+    fn make_token(&mut self, token: Token, start: Position) -> SpannedToken {
+        self.read_char();
+        SpannedToken {
+            token,
+            span: Span::new(start, self.current_pos()),
+        }
+    }
+
+    fn read_number_literal(&mut self, start: Position) -> SpannedToken {
         let mut digits = String::new();
 
         while self.current.is_ascii_digit() || self.current == '_' {
@@ -588,29 +491,32 @@ impl Lexer {
                 _ => Token::Illegal,
             };
 
-            return SpannedToken { token, span: start };
+            return SpannedToken {
+                token,
+                span: Span::new(start, self.current_pos()),
+            };
         }
 
         if digits.contains('.') {
             match digits.replace('_', "").parse::<f64>() {
                 Ok(v) => SpannedToken {
                     token: Token::Float64(v),
-                    span: start,
+                    span: Span::new(start, self.current_pos()),
                 },
                 Err(_) => SpannedToken {
                     token: Token::Illegal,
-                    span: start,
+                    span: Span::new(start, self.current_pos()),
                 },
             }
         } else {
             match digits.replace('_', "").parse::<isize>() {
                 Ok(v) => SpannedToken {
                     token: Token::Int(v),
-                    span: start,
+                    span: Span::new(start, self.current_pos()),
                 },
                 Err(_) => SpannedToken {
                     token: Token::Illegal,
-                    span: start,
+                    span: Span::new(start, self.current_pos()),
                 },
             }
         }

@@ -571,6 +571,14 @@ impl Checker {
             },
             BindingKind::Let,
         );
+        self.defined(
+            "readln".to_string(),
+            Ty::Fn {
+                params: vec![],
+                ret: Box::new(Ty::String),
+            },
+            BindingKind::Var,
+        )
     }
 
     pub fn defined(&mut self, name: String, ty: Ty, kind: BindingKind) {

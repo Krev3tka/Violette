@@ -5,3 +5,7 @@
 ROADMAP.md
 
 /bin/
+
+cmake-build-debug/
+cmake-build-release/
+vio_helpers/cmake-build-debug/

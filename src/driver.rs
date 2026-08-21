@@ -2,8 +2,6 @@ use crate::codegen::codegen::Codegen;
 use crate::lexer::lexer::Lexer;
 use crate::parser::parser::Parser;
 use crate::typechecker::checker::Checker;
-use std::fs::File;
-use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 use std::{env, fs};
@@ -52,17 +50,42 @@ pub fn compile(command: &str, file: &str) {
         Err(e) => return println!("Codegen error: {:?}", e),
     };
 
+    let temp_dir = env::temp_dir().join("violette_runtime");
+    fs::create_dir_all(&temp_dir).expect("Failed to create temp runtime dir");
+
+    let runtime_header: &str = include_str!("../vio_helpers/vio_runtime/runtime.h");
+    let str_h: &str = include_str!("../vio_helpers/vio_string/vio_string.h");
+    let str_c: &str = include_str!("../vio_helpers/vio_string/vio_string.c");
+    let println_h: &str = include_str!("../vio_helpers/vio_io/vio_println.h");
+    let println_c: &str = include_str!("../vio_helpers/vio_io/vio_println.c");
+    let print_h: &str = include_str!("../vio_helpers/vio_io/vio_print.h");
+    let print_c: &str = include_str!("../vio_helpers/vio_io/vio_print.c");
+    let readln_h: &str = include_str!("../vio_helpers/vio_io/vio_readln.h");
+    let readln_c: &str = include_str!("../vio_helpers/vio_io/vio_readln.c");
+
+    let write_rt = |sub: &str, name: &str, content: &str| -> std::path::PathBuf {
+        let dir = temp_dir.join(sub);
+        fs::create_dir_all(&dir).ok();
+        let path = dir.join(name);
+        fs::write(&path, content).expect("Failed to write runtime file");
+        path
+    };
+
+    write_rt("", "vio_runtime.h", runtime_header);
+    write_rt("vio_string", "vio_string.h", str_h);
+    let str_c_path = write_rt("vio_string", "vio_string.c", str_c);
+    write_rt("vio_io", "vio_println.h", println_h);
+    let print_c_path = write_rt("vio_io", "vio_print.c", print_c);
+    write_rt("vio_io", "vio_print.h", print_h);
+    let println_c_path = write_rt("vio_io", "vio_println.c", println_c);
+    write_rt("vio_io", "vio_readln.h", readln_h);
+    let readln_c_path = write_rt("vio_io", "vio_readln.c", readln_c);
+
     let c_path = env::temp_dir().join(format!(
         "{}_vio_out.c",
         Path::new(file).file_stem().unwrap().to_string_lossy()
     ));
-
-    let mut c_file = File::create(&c_path)
-        .unwrap_or_else(|_| panic!("Failed to create temporary C file, file_name: {c_path:?}"));
-
-    c_file
-        .write_all(code.as_bytes())
-        .expect("Failed to write to temporary C file");
+    fs::write(&c_path, code).expect("Failed to write temporary C file");
 
     fs::create_dir_all("bin/").unwrap();
 
@@ -72,18 +95,19 @@ pub fn compile(command: &str, file: &str) {
     );
 
     let status = Command::new(&compiler)
-        .args([
-            "-w",
-            "-std=c99",
-            "-O3",
-            c_path.to_str().unwrap(),
-            "-lm",
-            "-o",
-            out.as_str(),
-        ])
+        .arg("-std=c99")
+        .arg("-O2")
+        .arg(&c_path)
+        .arg(&str_c_path)
+        .arg(&print_c_path)
+        .arg(&println_c_path)
+        .arg(&readln_c_path)
+        .arg("-I")
+        .arg(&temp_dir)
+        .arg("-o")
+        .arg(out.clone())
         .status()
-        .map_err(|e| e.to_string())
-        .expect("Failed to compile");
+        .expect("Failed to execute C compiler");
 
     if !status.success() {
         println!("{} failed", compiler);

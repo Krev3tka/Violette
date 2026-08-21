@@ -1,0 +1,6 @@
+package main
+
+fun main() {
+    println("Quotes: \"Hello, Violette!\"")
+    println("Backslash: \\")
+}

@@ -19,6 +19,7 @@ var Errors = map[string]string{
 
 var ExpectedOutputs = map[string]string{
 	"bits.vio":     "452",
+	"escape_analysis.vio": "Quotes: \"Hello, Violette!\"" + "\nBackslash: \\",
     "factorial.vio": "120\n1\n1",
     "fibonacci.vio": "55",
 	"fizzbuzz.vio": "1\n2\nfizz\n4\nbuzz\nfizz\n7\n8\nfizz\nbuzz\n11\nfizz\n13\n14\nfizzbuzz",
@@ -68,6 +69,10 @@ func WalkDirFunc(path string, d fs.DirEntry, err error) error {
 
 	if filepath.Ext(path) == ".vio" {
 		filename := filepath.Base(path)
+
+		if filename == "input.vio" {
+		    return nil
+		}
 
 		isNegative := strings.Contains(path, "/invalid/") && strings.HasPrefix(filename, "fail_")
 

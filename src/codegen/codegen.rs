@@ -15,9 +15,9 @@ pub struct Codegen {
 
 impl Codegen {
     pub fn new() -> Self {
-        Codegen {
-            checker: Checker::default(),
-        }
+        let mut checker = Checker::default();
+        checker.define_builtins();
+        Codegen { checker }
     }
 
     pub fn c_type(&mut self, ty: &Ty) -> String {
@@ -25,7 +25,7 @@ impl Codegen {
             Ty::Int => "int64_t".to_string(),
             Ty::Float => "double".to_string(),
             Ty::Bool => "bool".to_string(),
-            Ty::String => "char*".to_string(),
+            Ty::String => "VioString".to_string(),
             Ty::Struct(s) => s.to_string(),
             Ty::Unit => "void".to_string(),
             Ty::Fn { .. } => todo!(),
@@ -34,14 +34,7 @@ impl Codegen {
     }
 
     pub fn emit_program(&mut self, prg: Program) -> Result<String, CodegenError> {
-        let mut lines: Vec<String> = vec![
-            "#include <stdio.h>".to_string(),
-            "#include <math.h>".to_string(),
-            "#include <stdbool.h>".to_string(),
-            "#include <stdint.h>".to_string(),
-            "#include <string.h>".to_string(),
-            "#include <stdlib.h>\n".to_string(),
-        ];
+        let mut lines: Vec<String> = vec!["#include \"vio_runtime.h\"\n".to_string()];
 
         let mut global_defines: Vec<String> = Vec::new();
 
@@ -89,31 +82,6 @@ impl Codegen {
             lines.push("\n".to_string());
         }
 
-        lines.extend(vec![
-            "static void vio_print_int(int64_t x)  { printf(\"%lld\", (long long)x); }".to_string(),
-            "static void vio_print_float(double x) { printf(\"%g\", x); }".to_string(),
-            "static void vio_print_string(char* s)    { printf(\"%s\", s); }".to_string(),
-            "static void vio_print_bool(bool b)    { printf(\"%s\", b ? \"true\" : \"false\"); }".to_string(),
-            "static void vio_println_int(int64_t x)  { printf(\"%lld\\n\", (long long)x); }".to_string(),
-            "static void vio_println_float(double x) { printf(\"%g\\n\", x); }".to_string(),
-            "static void vio_println_string(char* s) { printf(\"%s\\n\", s); }".to_string(),
-            "static void vio_println_bool(bool b)    { printf(\"%s\\n\", b ? \"true\" : \"false\"); }\n".to_string(),
-            "const char* vio_str_concat(const char* s1, const char* s2) {
-    size_t len1 = strlen(s1);
-    size_t len2 = strlen(s2);
-    char* result = malloc(len1 + len2 + 1);
-
-    if (result == NULL) {
-        return NULL;
-    }
-
-    strcpy(result, s1);
-    strcat(result, s2);
-
-    return result;
-}\n".to_string()
-        ]);
-
         for s in &prg.declarations {
             if let Statement::Const { .. } = s {
                 continue;
@@ -159,7 +127,13 @@ impl Codegen {
                 }
             }
             Expression::BoolLiteral(b) => b.to_string(),
-            Expression::StringLiteral(s) => format!("\"{}\"", s),
+            Expression::StringLiteral(s) => {
+                let escaped = s.escape_default().to_string();
+
+                let byte_len = s.len();
+
+                format!("vio_str_from_literal(\"{}\", {})", escaped, byte_len)
+            }
             Expression::StructLiteral { name, fields } => {
                 let c_fields = fields
                     .iter()
@@ -242,6 +216,13 @@ impl Codegen {
                     return Ok(format!("vio_{name}_{suffix}({a})"));
                 }
 
+                if let Expression::Identifier(name) = function.as_ref()
+                    && name == "readln"
+                    && args.is_empty()
+                {
+                    return Ok(format!("vio_{name}()"));
+                }
+
                 let f = self.emit_expression(function.as_ref())?;
                 let a = args
                     .iter()
@@ -265,21 +246,24 @@ impl Codegen {
 
     pub fn emit_statement(&mut self, stmt: &Statement) -> Result<String, CodegenError> {
         Ok(match stmt {
-            Statement::Let { name, value } | Statement::Const { name, value } => {
+            Statement::Let { name, value }
+            | Statement::Const { name, value }
+            | Statement::Var { name, value } => {
                 let val_str = self.emit_expression(value)?;
 
                 let ty = self.checker.infer(value);
 
-                let mut res = String::new();
+                self.checker.defined(
+                    name.clone(),
+                    ty.clone(),
+                    if matches!(stmt, Statement::Const { .. }) {
+                        BindingKind::Const
+                    } else {
+                        BindingKind::Var
+                    },
+                );
 
-                if matches!(stmt, Statement::Const { .. }) {
-                    res.push_str("const ");
-                    self.checker
-                        .defined(name.clone(), ty.clone(), BindingKind::Const);
-                } else {
-                    self.checker
-                        .defined(name.clone(), ty.clone(), BindingKind::Let);
-                }
+                let mut res = String::new();
 
                 res.push_str(format!("{} {} = {};", self.c_type(&ty), name, val_str).as_str());
 
@@ -339,7 +323,6 @@ impl Codegen {
             | Statement::ForRange { .. } => self.emit_for(stmt)?,
             Statement::Fun { .. } => self.emit_function(stmt)?,
             Statement::Struct { .. } => self.emit_struct(stmt)?,
-            _ => return Err(CodegenError::Unsupported(format!("{:?}", stmt))),
         })
     }
 
@@ -524,12 +507,27 @@ impl Codegen {
 
     pub fn emit_block(&mut self, body: &[Statement]) -> Result<String, CodegenError> {
         let mut lines = Vec::new();
+        let mut string_vars: Vec<String> = Vec::new();
 
         for s in body {
+            if let Statement::Let { name, value }
+            | Statement::Const { name, value }
+            | Statement::Var { name, value } = s
+            {
+                let ty = self.checker.infer(value);
+
+                if matches!(ty, Ty::String) {
+                    string_vars.push(name.clone());
+                }
+            }
             let stmt = self.emit_statement(s)?;
             for line in stmt.lines() {
                 lines.push(format!("    {line}"));
             }
+        }
+
+        for name in string_vars.iter().rev() {
+            lines.push(format!("    vio_str_drop({});", name))
         }
 
         Ok(lines.join("\n"))

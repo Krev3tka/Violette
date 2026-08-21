@@ -1,0 +1,13 @@
+package main
+
+fun main() {
+    print("Enter your name: ")
+    let name = readln()
+
+    print("Enter your age:")
+    let age = readln()
+
+    println("Your name: " + name)
+
+    println("Your age: " + age)
+}

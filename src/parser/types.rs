@@ -46,7 +46,7 @@ impl std::fmt::Display for ParseError {
             ParseError::UnexpectedToken { token, span } => write!(
                 f,
                 "unexpected token: {:?} at {}:{}",
-                token, span.line, span.col
+                token, span.start.line, span.start.col
             ),
             ParseError::UnexpectedEof => write!(f, "unexpected end of file"),
             ParseError::Expected {
@@ -56,13 +56,13 @@ impl std::fmt::Display for ParseError {
             } => write!(
                 f,
                 "expected {:?}, found {:?} at {}:{}",
-                expected, found, span.line, span.col
+                expected, found, span.start.line, span.start.col
             ),
             ParseError::TooDeep { span } => {
                 write!(
                     f,
                     "nesting too deep (limit {}) at {}:{} — check for unbalanced delimiters",
-                    MAX_DEPTH, span.line, span.col
+                    MAX_DEPTH, span.start.line, span.start.col
                 )
             }
         }
