@@ -1,4 +1,3 @@
-use std::fmt::format;
 use colored::Colorize;
 use crate::diagnostics::labeling::{Label, LabelStyle};
 use crate::lexer::span::Span;

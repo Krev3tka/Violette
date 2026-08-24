@@ -546,7 +546,7 @@ impl Codegen {
         }
 
         for name in string_vars.iter().rev() {
-            lines.push(format!("    vio_str_drop({});", name))
+            lines.push(format!("    vio_str_release({});", name))
         }
 
         Ok(lines.join("\n"))

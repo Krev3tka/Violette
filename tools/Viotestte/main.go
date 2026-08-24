@@ -12,18 +12,17 @@ import (
 const TestPaths = "../../examples/"
 
 var Errors = map[string]string{
-	"fail_user_struct.vio": "Type errors: [DuplicateDefinition(\"User\")]",
-	"fail_constatation.vio": "Type errors: [AssignmentToImmutable { name: \"THREE_HOURS_IN_SECONDS\", kind: Const }, " +
-		"AssignmentToImmutable { name: \"x\", kind: Let }]",
+	"fail_user_struct.vio":  "error: couldn't re-define `User`\n  > ../../examples/invalid/fail_user_struct.vio:17:8\n     |\n  3  |  struct User {\n     |         ____ first definition of `User` is here\n     |\n     |\n 17  |  struct User {\n     |         ^^^^ second definition of `User` is here\n     |",
+	"fail_constatation.vio": "error: couldn't assign again to const variable `THREE_HOURS_IN_SECONDS`\n  > ../../examples/invalid/fail_constatation.vio:5:31\n    |\n 4  |      const THREE_HOURS_IN_SECONDS = 2 * 60 * 60 // Const variable\n    |            ______________________ first variable defined as const here\n    |\n    |\n 5  |      THREE_HOURS_IN_SECONDS += 60 * 60          // Error: trying to add and assign new value to constant variable\n    |                                ^^^^^^^ couldn't assign to this const variable\n    |\n\nerror: couldn't assign again to immutable variable `x`\n  > ../../examples/invalid/fail_constatation.vio:10:9\n     |\n  9  |      let x = 5\n     |          _ first variable defined as immutable here\n     |\n     |\n 10  |      x = 6 // Error: assigning new value to immutable variable\n     |          ^ couldn't assign to this immutable variable\n     |",
 }
 
 var ExpectedOutputs = map[string]string{
-	"bits.vio":     "452",
+	"bits.vio":            "452",
 	"escape_analysis.vio": "Quotes: \"Hello, Violette!\"" + "\nBackslash: \\",
-    "factorial.vio": "120\n1\n1",
-    "fibonacci.vio": "55",
-	"fizzbuzz.vio": "1\n2\nfizz\n4\nbuzz\nfizz\n7\n8\nfizz\nbuzz\n11\nfizz\n13\n14\nfizzbuzz",
-	"if_else.vio":  "36\n10.648\n361",
+	"factorial.vio":       "120\n1\n1",
+	"fibonacci.vio":       "55",
+	"fizzbuzz.vio":        "1\n2\nfizz\n4\nbuzz\nfizz\n7\n8\nfizz\nbuzz\n11\nfizz\n13\n14\nfizzbuzz",
+	"if_else.vio":         "36\n10.648\n361",
 	"multiplication_table_via_ranges.vio": "1 2 3 4 5 6 7 8 9 \n" +
 		"2 4 6 8 10 12 14 16 18 \n" +
 		"3 6 9 12 15 18 21 24 27 \n" +
@@ -71,7 +70,7 @@ func WalkDirFunc(path string, d fs.DirEntry, err error) error {
 		filename := filepath.Base(path)
 
 		if filename == "input.vio" {
-		    return nil
+			return nil
 		}
 
 		isNegative := strings.Contains(path, "/invalid/") && strings.HasPrefix(filename, "fail_")
