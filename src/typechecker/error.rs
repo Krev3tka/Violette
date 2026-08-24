@@ -72,7 +72,8 @@ pub enum TypeError {
 
     DuplicateDefinition {
         name: String,
-        span: Span,
+        first_span: Span,
+        second_span: Span,
     },
 
     ConflictingEntryPoint {

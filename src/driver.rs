@@ -1,3 +1,4 @@
+use crate::diagnostics::diagnostics::Diagnostics;
 use crate::codegen::codegen::Codegen;
 use crate::lexer::lexer::Lexer;
 use crate::parser::parser::Parser;
@@ -40,7 +41,10 @@ pub fn compile(command: &str, file: &str) {
     checker.check_program(&ast);
 
     if !checker.errors.is_empty() {
-        return println!("Type errors: {:?}", checker.errors);
+        for err in checker.errors {
+            println!("{}", err.message(file))
+        }
+        return
     }
 
     let mut codegen = Codegen::new();

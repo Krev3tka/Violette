@@ -31,10 +31,10 @@ impl Span {
     }
 
     #[allow(dead_code)]
-    pub fn merge(&self, other: &Span) -> Span {
+    pub fn merge(&self, with: &Span) -> Span {
         Self {
-            start: self.start.min(other.start),
-            end: self.end.max(other.end),
+            start: self.start.min(with.start),
+            end: self.end.max(with.end),
         }
     }
 }

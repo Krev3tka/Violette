@@ -120,7 +120,7 @@ impl Parser {
         result
     }
     fn parse_statement_inner(&mut self) -> Result<Statement, ParseError> {
-        let span = self.current_token.span;
+        let mut span = self.current_token.span;
         match &self.current_token.token {
             Token::Var | Token::Let | Token::Const => {
                 let kw_token = self.current_token.token.clone();
@@ -129,6 +129,8 @@ impl Parser {
                     Token::Identifier(var_name) => var_name.clone(),
                     _ => return Err(self.unexpected(&self.current_token)),
                 };
+
+                span = self.current_token.span;
 
                 self.next_token();
                 if !matches!(self.current_token.token, Token::Assign) {
@@ -422,9 +424,9 @@ impl Parser {
     }
 
     pub fn parse_struct(&mut self) -> Result<Statement, ParseError> {
-        let span = self.current_token.span;
-
         self.expect(Token::Struct)?;
+
+        let span = self.current_token.span;
 
         let name = match self.current_token.token.clone() {
             Token::Identifier(struct_name) => struct_name,

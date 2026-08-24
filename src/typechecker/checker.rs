@@ -15,9 +15,10 @@ use std::collections::HashMap;
 pub struct FnSig {
     params: Vec<Ty>,
     ret: Ty,
+    span: Span
 }
 
-pub type StructSig = Vec<(String, Ty)>;
+pub type StructSig = Vec<(String, Ty, Span)>;
 
 #[derive(Default)]
 pub struct Checker {
@@ -63,24 +64,32 @@ impl Checker {
                     if self.funcs.contains_key(name) {
                         self.errors.push(TypeError::DuplicateDefinition {
                             name: name.clone(),
-                            span: stmt.span(),
+                            first_span: match self.funcs.get(name) {
+                                Some(f) => f.span,
+                                None => unreachable!(),
+                            },
+                            second_span: stmt.span(),
                         });
                         continue;
                     }
 
                     self.defined(name.clone(), f, BindingKind::Var, *span);
-                    self.funcs.insert(name.clone(), FnSig { params, ret });
+                    self.funcs.insert(name.clone(), FnSig { params, ret, span: *span });
                 }
 
                 Statement::Struct { name, fields, .. } => {
                     let fields = fields
                         .iter()
-                        .map(|f| (f.name.clone(), self.resolve(&f.param_type)))
+                        .map(|f| (f.name.clone(), self.resolve(&f.param_type), f.span))
                         .collect();
                     if self.structs.contains_key(name) {
                         self.errors.push(TypeError::DuplicateDefinition {
                             name: name.clone(),
-                            span: stmt.span(),
+                            first_span: match self.structs.get(name) {
+                                Some(s) => s[0].2,
+                                None => unreachable!()
+                            },
+                            second_span: stmt.span(),
                         });
                         continue;
                     }
@@ -580,7 +589,7 @@ impl Checker {
                 match obj_ty {
                     Ty::Struct(s) => match self.structs.get(&s) {
                         Some(struct_sig) => {
-                            match struct_sig.iter().find(|(curr_name, _)| curr_name == name) {
+                            match struct_sig.iter().find(|(curr_name, _, _)| curr_name == name) {
                                 Some(field) => field.1.clone(),
                                 None => {
                                     self.errors.push(TypeError::UnknownField {

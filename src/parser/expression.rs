@@ -196,7 +196,7 @@ impl Parser {
         result
     }
     fn parse_expression_inner(&mut self, precedence: Precedence) -> Result<Expression, ParseError> {
-        let start_span = self.current_token.span;
+        let mut start_span = self.current_token.span;
 
         let mut left = match &self.current_token.token {
             Token::Int(v) => Expression::IntLiteral {
@@ -342,15 +342,16 @@ impl Parser {
                     let right = self.parse_expression(peek_prec)?;
 
                     left = Expression::Infix {
-                        left: Box::new(left),
+                        left: Box::new(left.clone()),
                         operator,
-                        right: Box::new(right),
-                        span: start_span,
+                        right: Box::new(right.clone()),
+                        span: left.span().merge(&right.span()),
                     };
                 }
                 Token::Decrement | Token::Increment | Token::Pipe => {
                     self.next_token();
                     let operator = self.current_token.token.clone();
+                    start_span = self.current_token.span;
 
                     left = Expression::Postfix {
                         left: Box::new(left),
