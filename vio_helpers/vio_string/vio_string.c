@@ -19,8 +19,6 @@ VioString vio_str_concat(VioString a, VioString b) {
   }
 
   hdr->ref_count = 1;
-  hdr->len = new_len;
-  hdr->cap = new_len + 1;
 
   memcpy(hdr->data, a.data, a.len);
   memcpy(hdr->data + a.len, b.data, b.len);
@@ -34,7 +32,8 @@ void vio_str_retain(VioString s) {
   if (s.cap == 0 || !s.data)
     return;
 
-  VioStringHeader *hdr = (VioStringHeader *)(s.data - sizeof(VioStringHeader));
+  VioStringHeader *hdr =
+      (VioStringHeader *)(s.data - offsetof(VioStringHeader, data));
 
   hdr->ref_count++;
 }
@@ -43,7 +42,8 @@ void vio_str_release(VioString s) {
   if (s.cap == 0 || !s.data)
     return;
 
-  VioStringHeader *hdr = (VioStringHeader *)(s.data - sizeof(VioStringHeader));
+  VioStringHeader *hdr =
+      (VioStringHeader *)(s.data - offsetof(VioStringHeader, data));
 
   hdr->ref_count--;
 

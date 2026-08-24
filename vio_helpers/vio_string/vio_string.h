@@ -5,14 +5,13 @@
 #ifndef VIO_HELPERS_VIO_STRINGS_H
 #define VIO_HELPERS_VIO_STRINGS_H
 
+#include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
 typedef struct {
   uint32_t ref_count;
-  size_t len;
-  size_t cap;
   char data[];
 } VioStringHeader;
 
