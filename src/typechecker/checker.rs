@@ -15,7 +15,7 @@ use std::collections::HashMap;
 pub struct FnSig {
     params: Vec<Ty>,
     ret: Ty,
-    span: Span
+    span: Span,
 }
 
 pub type StructSig = Vec<(String, Ty, Span)>;
@@ -74,7 +74,14 @@ impl Checker {
                     }
 
                     self.defined(name.clone(), f, BindingKind::Var, *span);
-                    self.funcs.insert(name.clone(), FnSig { params, ret, span: *span });
+                    self.funcs.insert(
+                        name.clone(),
+                        FnSig {
+                            params,
+                            ret,
+                            span: *span,
+                        },
+                    );
                 }
 
                 Statement::Struct { name, fields, .. } => {
@@ -87,7 +94,7 @@ impl Checker {
                             name: name.clone(),
                             first_span: match self.structs.get(name) {
                                 Some(s) => s[0].2,
-                                None => unreachable!()
+                                None => unreachable!(),
                             },
                             second_span: stmt.span(),
                         });
@@ -351,13 +358,13 @@ impl Checker {
             }
         }
 
-        if let Some(first_top_level_stmt) = program.main.first() {
-            if let Some(fn_span) = self.main_fn_span {
-                self.errors.push(ConflictingEntryPoint {
-                    first_decl_span: first_top_level_stmt.span(),
-                    second_decl_span: fn_span,
-                })
-            }
+        if let Some(first_top_level_stmt) = program.main.first()
+            && let Some(fn_span) = self.main_fn_span
+        {
+            self.errors.push(ConflictingEntryPoint {
+                first_decl_span: first_top_level_stmt.span(),
+                second_decl_span: fn_span,
+            });
         }
 
         self.current_ret = Ty::Unit;
@@ -401,7 +408,7 @@ impl Checker {
                         _ => {
                             self.errors.push(TypeError::InvalidBinaryOperator {
                                 operator: operator.clone(),
-                                left: left_ty,
+                                left: Box::new(left_ty),
                                 right: right_ty,
                                 span: *span,
                             });
@@ -416,7 +423,7 @@ impl Checker {
                             _ => {
                                 self.errors.push(TypeError::InvalidBinaryOperator {
                                     operator: operator.clone(),
-                                    left: left_ty,
+                                    left: Box::new(left_ty),
                                     right: right_ty,
                                     span: *span,
                                 });
@@ -430,7 +437,7 @@ impl Checker {
                         _ => {
                             self.errors.push(TypeError::InvalidBinaryOperator {
                                 operator: operator.clone(),
-                                left: left_ty,
+                                left: Box::new(left_ty),
                                 right: right_ty,
                                 span: *span,
                             });
@@ -443,7 +450,7 @@ impl Checker {
                             (Ty::Error, _) | (_, Ty::Error) => return Ty::Error,
                             _ => self.errors.push(TypeError::InvalidBinaryOperator {
                                 operator: operator.clone(),
-                                left: left_ty,
+                                left: Box::new(left_ty),
                                 right: right_ty,
                                 span: *span,
                             }),
@@ -456,7 +463,7 @@ impl Checker {
                             if left_ty != right_ty {
                                 self.errors.push(TypeError::InvalidBinaryOperator {
                                     operator: operator.clone(),
-                                    left: left_ty,
+                                    left: Box::new(left_ty),
                                     right: right_ty,
                                     span: *span,
                                 });
@@ -589,7 +596,10 @@ impl Checker {
                 match obj_ty {
                     Ty::Struct(s) => match self.structs.get(&s) {
                         Some(struct_sig) => {
-                            match struct_sig.iter().find(|(curr_name, _, _)| curr_name == name) {
+                            match struct_sig
+                                .iter()
+                                .find(|(curr_name, _, _)| curr_name == name)
+                            {
                                 Some(field) => field.1.clone(),
                                 None => {
                                     self.errors.push(TypeError::UnknownField {

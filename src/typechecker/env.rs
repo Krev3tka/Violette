@@ -33,7 +33,11 @@ impl Env {
         }
 
         if self.scopes.last_mut().unwrap().contains_key(&name) {
-            todo!()
+            return Err(TypeError::DuplicateDefinition {
+                name: name.clone(),
+                first_span: *span,
+                second_span: self.scopes.last_mut().unwrap().get(&name).unwrap().span,
+            });
         }
 
         self.scopes.last_mut().unwrap().insert(

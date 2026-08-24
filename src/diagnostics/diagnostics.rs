@@ -1,7 +1,7 @@
-use colored::Colorize;
 use crate::diagnostics::labeling::{Label, LabelStyle};
 use crate::lexer::span::Span;
 use crate::typechecker::error::{BindingKind, TypeError};
+use colored::Colorize;
 
 pub trait Diagnostics {
     fn message(&self, path: &str) -> String;
@@ -15,54 +15,57 @@ impl Diagnostics for TypeError {
                 name,
                 kind,
                 decl_span,
-                assign_span
+                assign_span,
             } => {
                 let kind_str = match kind {
                     BindingKind::Let => "immutable",
                     BindingKind::Const => "const",
-                    _ => unreachable!()
+                    _ => unreachable!(),
                 };
 
                 let labels = [
-                    Label::secondary(*decl_span, format!("first variable defined as {} here", kind_str)),
-                    Label::primary(*assign_span, format!("couldn't assign to this {} variable", kind_str))
+                    Label::secondary(
+                        *decl_span,
+                        format!("first variable defined as {} here", kind_str),
+                    ),
+                    Label::primary(
+                        *assign_span,
+                        format!("couldn't assign to this {} variable", kind_str),
+                    ),
                 ];
 
                 self.report(
                     path.to_string(),
                     *assign_span,
                     format!("couldn't assign again to {} variable `{}`", kind_str, name),
-                    &labels
+                    &labels,
                 )
             }
             TypeError::DuplicateDefinition {
                 name,
                 first_span,
-                second_span
+                second_span,
             } => {
-
                 let labels = [
                     Label::secondary(*first_span, format!("first definition of `{name}` is here")),
-                    Label::primary(*second_span, format!("second definition of `{name}` is here"))
+                    Label::primary(
+                        *second_span,
+                        format!("second definition of `{name}` is here"),
+                    ),
                 ];
 
                 self.report(
                     path.to_string(),
                     *second_span,
                     format!("couldn't re-define `{name}`"),
-                    &labels
+                    &labels,
                 )
             }
-            _ => format!("{:?}", self)
+            _ => format!("{:?}", self),
         }
     }
 
-    fn report(&self,
-              path: String,
-              main_span: Span,
-              message: String,
-              labels: &[Label]
-    ) -> String {
+    fn report(&self, path: String, main_span: Span, message: String, labels: &[Label]) -> String {
         let source = std::fs::read_to_string(&path).unwrap_or_default();
         let lines: Vec<&str> = source.lines().collect();
 
@@ -72,38 +75,29 @@ impl Diagnostics for TypeError {
         res.push_str(
             format!(
                 "\n  > {}:{}:{}\n",
-                path,
-                main_span.start.line,
-                main_span.start.col
+                path, main_span.start.line, main_span.start.col
             )
-                .as_str()
+            .as_str(),
         );
 
         let underline = |span: Span| {
             let len = span.end.col.saturating_sub(span.start.col).max(1);
-            format!(
-                "{}{}",
-                " ".repeat(span.start.col),
-                "^".repeat(len)
-            )
+            format!("{}{}", " ".repeat(span.start.col), "^".repeat(len))
         };
 
-        let max_line = match labels.iter().max_by_key(|l| {
-            l.span.start.line
-        }) {
+        let max_line = match labels.iter().max_by_key(|l| l.span.start.line) {
             Some(v) => v,
-            None => unreachable!()
+            None => unreachable!(),
         };
 
-        let width = max_line.span.start.line
-            .to_string()
-            .len();
+        let width = max_line.span.start.line.to_string().len();
 
         for label in labels {
-
             match label.style {
                 LabelStyle::Primary => {
-                    res.push_str(format!(" {empty:>width$}  |\n", empty = "", width = width).as_str());
+                    res.push_str(
+                        format!(" {empty:>width$}  |\n", empty = "", width = width).as_str(),
+                    );
                     res.push_str(
                         format!(
                             " {line:>width$}  |  {code_line}\n",
@@ -111,7 +105,7 @@ impl Diagnostics for TypeError {
                             width = width,
                             code_line = lines[label.span.start.line.saturating_sub(1)]
                         )
-                            .as_str()
+                        .as_str(),
                     );
                     let indent = format!("{:>width$}", "", width = width);
                     res.push_str(
@@ -120,12 +114,16 @@ impl Diagnostics for TypeError {
                             decl_mark = underline(label.span).red().bold(),
                             message = label.message.red().bold()
                         )
-                            .as_str()
+                        .as_str(),
                     );
-                    res.push_str(format!(" {empty:>width$}  |\n", empty = "", width = width).as_str());
-                },
+                    res.push_str(
+                        format!(" {empty:>width$}  |\n", empty = "", width = width).as_str(),
+                    );
+                }
                 LabelStyle::Secondary => {
-                    res.push_str(format!(" {empty:>width$}  |\n", empty = "", width = width).as_str());
+                    res.push_str(
+                        format!(" {empty:>width$}  |\n", empty = "", width = width).as_str(),
+                    );
                     res.push_str(
                         format!(
                             " {line:>width$}  |  {code_line}\n",
@@ -133,7 +131,7 @@ impl Diagnostics for TypeError {
                             width = width,
                             code_line = lines[label.span.start.line.saturating_sub(1)]
                         )
-                            .as_str()
+                        .as_str(),
                     );
                     let indent = format!("{:>width$}", "", width = width);
                     res.push_str(
@@ -142,12 +140,14 @@ impl Diagnostics for TypeError {
                             decl_mark = underline(label.span).replace("^", "_").blue().bold(),
                             message = label.message.blue().bold()
                         )
-                            .as_str()
+                        .as_str(),
                     );
-                    res.push_str(format!(" {empty:>width$}  |\n", empty = "", width = width).as_str());
+                    res.push_str(
+                        format!(" {empty:>width$}  |\n", empty = "", width = width).as_str(),
+                    );
                 }
             }
-    }
+        }
 
         res
     }

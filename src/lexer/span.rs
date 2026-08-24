@@ -60,7 +60,9 @@ impl ClearSpan for Expression {
             | Expression::BoolLiteral { span, .. }
             | Expression::StringLiteral { span, .. } => *span = Span::default(),
 
-            Expression::Infix { left, right, span, .. } => {
+            Expression::Infix {
+                left, right, span, ..
+            } => {
                 left.clear_span();
                 right.clear_span();
                 *span = Span::default();
@@ -76,13 +78,20 @@ impl ClearSpan for Expression {
                 *span = Span::default();
             }
 
-            Expression::Index { left, index, span, .. } => {
+            Expression::Index {
+                left, index, span, ..
+            } => {
                 left.clear_span();
                 index.clear_span();
                 *span = Span::default();
             }
 
-            Expression::Call { function, args, span, .. } => {
+            Expression::Call {
+                function,
+                args,
+                span,
+                ..
+            } => {
                 function.clear_span();
                 for arg in args {
                     arg.clear_span();
@@ -90,7 +99,9 @@ impl ClearSpan for Expression {
                 *span = Span::default();
             }
 
-            Expression::Match { target, arms, span, .. } => {
+            Expression::Match {
+                target, arms, span, ..
+            } => {
                 target.clear_span();
                 for arm in arms {
                     arm.clear_span();
@@ -117,7 +128,9 @@ impl ClearSpan for Expression {
                 *span = Span::default();
             }
 
-            Expression::MethodCall { object, args, span, .. } => {
+            Expression::MethodCall {
+                object, args, span, ..
+            } => {
                 object.clear_span();
                 for arg in args {
                     arg.clear_span();
@@ -132,9 +145,15 @@ impl ClearSpan for Expression {
                 *span = Span::default();
             }
 
-            Expression::Range { start, end, span, .. } => {
-                if let Some(s) = start { s.clear_span(); }
-                if let Some(e) = end { e.clear_span(); }
+            Expression::Range {
+                start, end, span, ..
+            } => {
+                if let Some(s) = start {
+                    s.clear_span();
+                }
+                if let Some(e) = end {
+                    e.clear_span();
+                }
                 *span = Span::default();
             }
         }
@@ -172,14 +191,26 @@ impl ClearSpan for Statement {
                 }
                 if_stmt.span = Span::default();
             }
-            Statement::ForCondition { condition, body, span, .. } => {
+            Statement::ForCondition {
+                condition,
+                body,
+                span,
+                ..
+            } => {
                 condition.clear_span();
                 for stmt in body {
                     stmt.clear_span();
                 }
                 *span = Span::default();
             }
-            Statement::ForCounter { init, condition, post, body, span, .. } => {
+            Statement::ForCounter {
+                init,
+                condition,
+                post,
+                body,
+                span,
+                ..
+            } => {
                 init.clear_span();
                 condition.clear_span();
                 post.clear_span();
@@ -188,7 +219,12 @@ impl ClearSpan for Statement {
                 }
                 *span = Span::default();
             }
-            Statement::ForRange { iterable, body, span, .. } => {
+            Statement::ForRange {
+                iterable,
+                body,
+                span,
+                ..
+            } => {
                 iterable.clear_span();
                 for stmt in body {
                     stmt.clear_span();
@@ -201,7 +237,9 @@ impl ClearSpan for Statement {
                 }
                 *span = Span::default();
             }
-            Statement::Fun { params, body, span, .. } => {
+            Statement::Fun {
+                params, body, span, ..
+            } => {
                 for param in params {
                     param.clear_span();
                 }

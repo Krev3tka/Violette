@@ -48,17 +48,17 @@ let y = x + 1",
             vec![
                 vec![InvalidBinaryOperator {
                     operator: Token::NotEquals,
-                    left: Ty::Bool,
+                    left: Box::new(Ty::Bool),
                     right: Ty::Int,
-                    span: Span::new(Position { line: 2, col: 9 }, Position { line: 2, col: 13 })
+                    span: Span::new(Position { line: 2, col: 9 }, Position { line: 2, col: 17 })
                 }],
                 vec![],
                 vec![],
                 vec![InvalidBinaryOperator {
                     operator: Token::NotEquals,
-                    left: Ty::Bool,
+                    left: Box::new(Ty::Bool),
                     right: Ty::Int,
-                    span: Span::new(Position { line: 2, col: 9 }, Position { line: 2, col: 13 })
+                    span: Span::new(Position { line: 2, col: 9 }, Position { line: 2, col: 18 })
                 }],
             ]
         );

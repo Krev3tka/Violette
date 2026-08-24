@@ -1,5 +1,5 @@
-use crate::diagnostics::diagnostics::Diagnostics;
 use crate::codegen::codegen::Codegen;
+use crate::diagnostics::diagnostics::Diagnostics;
 use crate::lexer::lexer::Lexer;
 use crate::parser::parser::Parser;
 use crate::typechecker::checker::Checker;
@@ -44,7 +44,7 @@ pub fn compile(command: &str, file: &str) {
         for err in checker.errors {
             println!("{}", err.message(file))
         }
-        return
+        return;
     }
 
     let mut codegen = Codegen::new();

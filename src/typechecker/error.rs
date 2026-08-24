@@ -49,7 +49,7 @@ pub enum TypeError {
 
     InvalidBinaryOperator {
         operator: Token,
-        left: Ty,
+        left: Box<Ty>,
         right: Ty,
         span: Span,
     },

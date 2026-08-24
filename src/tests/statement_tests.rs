@@ -119,8 +119,8 @@ if a > 7 {
     return count + 5
 }";
 
-        assert_stmt_tests(vec![
-            (input,
+        assert_stmt_tests(vec![(
+            input,
             fun(
                 "fetch_user",
                 vec![
@@ -133,12 +133,12 @@ if a > 7 {
                                 "psql".to_string(),
                             ],
                         }),
-                        span: Span::default()
+                        span: Span::default(),
                     },
                     FunParam {
                         name: "count".to_string(),
                         param_type: Type::Primitive(PrimitiveType::Int),
-                        span: Span::default()
+                        span: Span::default(),
                     },
                 ],
                 Some(Union(vec![
@@ -162,10 +162,8 @@ if a > 7 {
                     },
                 ])),
                 vec![ret(Some(infix(ident("count"), Token::Add, int(5))))],
-            )
-            )
-            ]
-        );
+            ),
+        )]);
     }
 
     #[test]

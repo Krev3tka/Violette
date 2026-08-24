@@ -6,9 +6,9 @@ mod expressions_tests {
         Add, Assign, Equals, Greater, LeftShift, LessOrEquals, LogicNot, Multiply, NotEquals,
         Power, RightShift, Subtract,
     };
+    use crate::parser::Expression;
     use crate::parser::Expression::{Call, Identifier, IntLiteral};
     use crate::parser::statement::MatchArm;
-    use crate::parser::Expression;
     use crate::tests::helpers::{
         assert_expr_tests, assert_stmt_tests, block, boolean, call, expr_stmt, ident, infix, int,
         let_stmt, match_expr, prefix, string,

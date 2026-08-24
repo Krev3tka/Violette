@@ -154,7 +154,7 @@ impl Codegen {
             } => {
                 format!(
                     "{}{}",
-                    self.correlate_operator(&operator)?,
+                    self.correlate_operator(operator)?,
                     self.emit_expression(right.as_ref())?
                 )
             }
@@ -186,7 +186,7 @@ impl Codegen {
                 format!(
                     "({} {} {})",
                     self.emit_expression(left.as_ref())?,
-                    self.correlate_operator(&operator)?,
+                    self.correlate_operator(operator)?,
                     self.emit_expression(right.as_ref())?
                 )
             }

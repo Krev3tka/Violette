@@ -10,7 +10,7 @@ pub struct Label {
 #[derive(Clone, Copy)]
 pub enum LabelStyle {
     Primary,
-    Secondary
+    Secondary,
 }
 
 impl Label {
@@ -18,7 +18,7 @@ impl Label {
         Self {
             span,
             message: message.into(),
-            style: LabelStyle::Primary
+            style: LabelStyle::Primary,
         }
     }
 
@@ -26,7 +26,7 @@ impl Label {
         Self {
             span,
             message: message.into(),
-            style: LabelStyle::Secondary
+            style: LabelStyle::Secondary,
         }
     }
 }
