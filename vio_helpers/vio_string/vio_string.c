@@ -10,7 +10,7 @@ VioString vio_str_from_literal(const char *s, size_t len) {
 
 VioString vio_str_concat(VioString a, VioString b) {
   size_t new_len = a.len + b.len;
-  size_t total_bytes = sizeof(VioStringHeader) + new_len + 1;
+  size_t total_bytes = offsetof(VioStringHeader, data) + new_len + 1;
 
   VioStringHeader *hdr = (VioStringHeader *)malloc(total_bytes);
 
