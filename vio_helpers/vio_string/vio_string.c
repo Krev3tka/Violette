@@ -9,6 +9,9 @@ VioString vio_str_from_literal(const char *s, size_t len) {
 }
 
 VioString vio_str_concat(VioString a, VioString b) {
+  if (SIZE_MAX - a.len < b.len) {
+    abort();
+  }
   size_t new_len = a.len + b.len;
   size_t total_bytes = offsetof(VioStringHeader, data) + new_len + 1;
 
@@ -20,8 +23,13 @@ VioString vio_str_concat(VioString a, VioString b) {
 
   hdr->ref_count = 1;
 
-  memcpy(hdr->data, a.data, a.len);
-  memcpy(hdr->data + a.len, b.data, b.len);
+  if (a.len > 0 && a.data) {
+    memcpy(hdr->data, a.data, a.len);
+  }
+
+  if (b.len > 0 && b.data) {
+    memcpy(hdr->data + a.len, b.data, b.len);
+  }
 
   hdr->data[new_len] = '\0';
 

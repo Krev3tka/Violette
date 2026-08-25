@@ -212,51 +212,8 @@ impl Parser {
                 span: start_span,
             },
             Token::Identifier(s) => {
-                if self.allowed_struct_literal && matches!(self.peek_token.token, Token::LeftBrace)
-                {
-                    let name = match &self.current_token.token {
-                        Token::Identifier(n) => n.clone(),
-                        _ => return Err(self.unexpected(&self.current_token)),
-                    };
-                    self.next_token();
-                    self.expect(Token::LeftBrace)?;
-                    self.skip_terminators();
-
-                    let mut fields = Vec::new();
-
-                    while !matches!(self.current_token.token, Token::RightBrace) {
-                        let field_name = match self.current_token.token.clone() {
-                            Token::Identifier(n) => n,
-                            _ => return Err(self.unexpected(&self.current_token)),
-                        };
-
-                        self.next_token();
-                        self.expect(Token::Colon)?;
-
-                        let field_val = Box::new(self.parse_expression(Lowest)?);
-                        fields.push(StructLiteralField {
-                            field_name,
-                            field_val,
-                        });
-
-                        self.next_token();
-                        self.skip_terminators();
-
-                        match self.current_token.token.clone() {
-                            Token::Comma => self.expect(Token::Comma),
-                            Token::RightBrace => break,
-                            _ => return Err(self.unexpected(&self.current_token)),
-                        }?;
-                        self.skip_terminators();
-                    }
-
-                    self.skip_terminators();
-
-                    Expression::StructLiteral {
-                        name,
-                        fields,
-                        span: start_span,
-                    }
+                if self.allowed_struct_literal && matches!(self.peek_token.token, Token::LeftBrace) {
+                    self.parse_struct_literal(start_span)?
                 } else {
                     Expression::Identifier {
                         name: s.clone(),
@@ -461,7 +418,7 @@ impl Parser {
 
             let body = if matches!(self.current_token.token, Token::LeftBrace) {
                 self.next_token();
-                let block_stmts = self.parse_block()?;
+                let (block_stmts, _) = self.parse_block()?;
 
                 Expression::Block {
                     body: block_stmts,
@@ -587,7 +544,7 @@ impl Parser {
         }
         self.expect(Token::LeftBrace)?;
 
-        let body = self.parse_block()?;
+        let (body, _) = self.parse_block()?;
         Ok(Expression::Lambda {
             params,
             return_type,
@@ -623,6 +580,52 @@ impl Parser {
             start: Some(Box::new(left.clone())),
             end,
             range_kind,
+            span: start_span,
+        })
+    }
+
+    pub fn parse_struct_literal(&mut self, start_span: Span) -> Result<Expression, ParseError> {
+        let name = match &self.current_token.token {
+            Token::Identifier(n) => n.clone(),
+            _ => return Err(self.unexpected(&self.current_token)),
+        };
+        self.next_token();
+        self.expect(Token::LeftBrace)?;
+        self.skip_terminators();
+
+        let mut fields = Vec::new();
+
+        while !matches!(self.current_token.token, Token::RightBrace) {
+            let field_name = match self.current_token.token.clone() {
+                Token::Identifier(n) => n,
+                _ => return Err(self.unexpected(&self.current_token)),
+            };
+
+            self.next_token();
+            self.expect(Token::Colon)?;
+
+            let field_val = Box::new(self.parse_expression(Lowest)?);
+            fields.push(StructLiteralField {
+                field_name,
+                field_val,
+            });
+
+            self.next_token();
+            self.skip_terminators();
+
+            match self.current_token.token.clone() {
+                Token::Comma => self.expect(Token::Comma),
+                Token::RightBrace => break,
+                _ => return Err(self.unexpected(&self.current_token)),
+            }?;
+            self.skip_terminators();
+        }
+
+        self.skip_terminators();
+
+        Ok(Expression::StructLiteral {
+            name,
+            fields,
             span: start_span,
         })
     }

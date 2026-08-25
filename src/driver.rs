@@ -100,7 +100,8 @@ pub fn compile(command: &str, file: &str) {
 
     let status = Command::new(&compiler)
         .arg("-std=c99")
-        .arg("-O2")
+        .arg("-O3")
+        .arg("-w")
         .arg(&c_path)
         .arg(&str_c_path)
         .arg(&print_c_path)

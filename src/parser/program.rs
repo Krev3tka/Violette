@@ -12,9 +12,13 @@ pub struct Program {
 
 impl Parser {
     pub fn parse_program(&mut self) -> Result<Program, ParseError> {
-        let package = self.parse_package()?;
+        let mut package = String::from("main");
 
-        self.next_token();
+        if matches!(self.current_token.token, Token::Package) {
+            package = self.parse_package()?;
+            self.next_token();
+        }
+
         self.skip_terminators();
 
         let imports = match self.current_token.token.clone() {

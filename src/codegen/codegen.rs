@@ -95,6 +95,8 @@ impl Codegen {
 
                 lines.push(self.emit_block(body)?);
 
+                lines.push("    return 0;".to_string());
+
                 lines.push("}".to_string());
 
                 continue;
@@ -137,6 +139,10 @@ impl Codegen {
                 format!("vio_str_from_literal(\"{}\", {})", escaped, byte_len)
             }
             Expression::StructLiteral { name, fields, .. } => {
+                if fields.is_empty() {
+                    return Ok(format!("({}){{0}}", name))
+                }
+
                 let c_fields = fields
                     .iter()
                     .map(|f| {
@@ -328,6 +334,8 @@ impl Codegen {
             Statement::ForCondition { .. }
             | Statement::ForCounter { .. }
             | Statement::ForRange { .. } => self.emit_for(stmt)?,
+            Statement::Break { .. } => "break;".to_string(),
+            Statement::Continue { .. } => "continue;".to_string(),
             Statement::Fun { .. } => self.emit_function(stmt)?,
             Statement::Struct { .. } => self.emit_struct(stmt)?,
         })
@@ -429,6 +437,7 @@ impl Codegen {
             return_type,
             body,
             span,
+            ..
         } = stmt
         {
             self.checker.env.push();

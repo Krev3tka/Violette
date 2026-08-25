@@ -15,6 +15,19 @@ impl BindingKind {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum DefinitionKind {
+    Var,
+    Fun,
+    Struct
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum LoopControlKind {
+    Break,
+    Continue
+}
+
 #[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum TypeError {
@@ -50,7 +63,7 @@ pub enum TypeError {
     InvalidBinaryOperator {
         operator: Token,
         left: Box<Ty>,
-        right: Ty,
+        right: Box<Ty>,
         span: Span,
     },
 
@@ -74,6 +87,7 @@ pub enum TypeError {
         name: String,
         first_span: Span,
         second_span: Span,
+        def_kind: DefinitionKind
     },
 
     ConflictingEntryPoint {
@@ -87,4 +101,15 @@ pub enum TypeError {
         decl_span: Span,
         assign_span: Span,
     },
+
+    MissingReturn {
+        name: String,
+        fun_span: Span,
+        close_brace_span: Span
+    },
+
+    OutsideLoop {
+        kind: LoopControlKind,
+        span: Span
+    }
 }

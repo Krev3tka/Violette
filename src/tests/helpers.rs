@@ -212,6 +212,7 @@ pub fn fun(
         return_type: ret,
         body,
         span: dummy_span(),
+        ending_span: dummy_span()
     }
 }
 

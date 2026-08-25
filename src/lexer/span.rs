@@ -231,6 +231,16 @@ impl ClearSpan for Statement {
                 }
                 *span = Span::default();
             }
+            Statement::Break {
+                span
+            } => {
+                *span = Span::default()
+            },
+            Statement::Continue {
+                span
+            } => {
+                *span = Span::default()
+            },
             Statement::Return { value, span } => {
                 if let Some(val) = value {
                     val.clear_span();

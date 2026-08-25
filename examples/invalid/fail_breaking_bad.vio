@@ -1,0 +1,23 @@
+fun continuation(x: int) {
+    for i in 0..x {
+        if i == 5 {
+            continue
+        }
+    }
+
+    break
+}
+
+fun main() {
+    continuation(10)
+}
+
+fun breaking(x: int) {
+    for i in 0:x {
+        if i == 7 {
+            break
+        }
+    }
+
+    continue
+}

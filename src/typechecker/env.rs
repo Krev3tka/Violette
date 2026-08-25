@@ -1,5 +1,5 @@
 use crate::lexer::span::Span;
-use crate::typechecker::error::{BindingKind, TypeError};
+use crate::typechecker::error::{BindingKind, DefinitionKind, TypeError};
 use crate::typechecker::types::Ty;
 use std::collections::HashMap;
 
@@ -35,8 +35,9 @@ impl Env {
         if self.scopes.last_mut().unwrap().contains_key(&name) {
             return Err(TypeError::DuplicateDefinition {
                 name: name.clone(),
-                first_span: *span,
-                second_span: self.scopes.last_mut().unwrap().get(&name).unwrap().span,
+                first_span: self.scopes.last_mut().unwrap().get(&name).unwrap().span,
+                second_span: *span,
+                def_kind: DefinitionKind::Var
             });
         }
 

@@ -1,0 +1,13 @@
+fun is_negative(x: int) [bool] {
+    if x < 0 {
+        return true
+    }
+
+    // Missing return
+}
+
+fun main() {
+    let a = is_negative(7)
+
+    let b = is_negative(-5)
+}

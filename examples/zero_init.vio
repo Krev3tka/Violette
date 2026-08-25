@@ -1,0 +1,12 @@
+struct Profile {
+    bio: string
+    age: int
+}
+
+fun main() {
+    let profile = Profile{}
+
+    println(profile.bio)
+
+    let msg = "Bio: " + profile.bio
+}

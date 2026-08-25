@@ -13,7 +13,7 @@ void vio_print_float(double x) {
 }
 
 void vio_print_string(VioString s) {
-    printf("%s", s.data);
+    printf("%s", s.data ? s.data : "");
 }
 
 void vio_print_bool(bool b) {

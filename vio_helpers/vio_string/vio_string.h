@@ -16,7 +16,7 @@ typedef struct {
 } VioStringHeader;
 
 typedef struct {
-  char *data;
+  const char *data;
   size_t len;
   size_t cap;
 } VioString;

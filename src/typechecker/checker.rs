@@ -4,11 +4,12 @@ use crate::parser::program::Program;
 use crate::parser::types::Type;
 use crate::parser::{Expression, Statement};
 use crate::typechecker::env::Env;
-use crate::typechecker::error::BindingKind;
+use crate::typechecker::error::{BindingKind, DefinitionKind, LoopControlKind};
 pub use crate::typechecker::error::TypeError;
 use crate::typechecker::error::TypeError::ConflictingEntryPoint;
 use crate::typechecker::types::Ty;
 use std::collections::HashMap;
+use crate::parser::statement::IfStatement;
 
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
@@ -24,10 +25,11 @@ pub type StructSig = Vec<(String, Ty, Span)>;
 pub struct Checker {
     pub funcs: HashMap<String, FnSig>,
     pub structs: HashMap<String, StructSig>,
-    pub(crate) env: Env,
+    pub env: Env,
     current_ret: Ty,
     pub errors: Vec<TypeError>,
     pub main_fn_span: Option<Span>,
+    pub in_loop: bool
 }
 
 impl Checker {
@@ -69,6 +71,7 @@ impl Checker {
                                 None => unreachable!(),
                             },
                             second_span: stmt.span(),
+                            def_kind: DefinitionKind::Fun
                         });
                         continue;
                     }
@@ -97,6 +100,7 @@ impl Checker {
                                 None => unreachable!(),
                             },
                             second_span: stmt.span(),
+                            def_kind: DefinitionKind::Struct
                         });
                         continue;
                     }
@@ -164,6 +168,8 @@ impl Checker {
             }
 
             self.check_block(body);
+
+            self.check_returns(stmt);
         }
 
         self.env.pop();
@@ -171,6 +177,9 @@ impl Checker {
 
     pub fn check_for_stmt(&mut self, stmt: &Statement) {
         self.env.push();
+
+        self.in_loop = true;
+
         if let Statement::ForCondition {
             condition: cond,
             body,
@@ -221,7 +230,9 @@ impl Checker {
 
             self.check_block(body);
         }
-        self.env.pop()
+        self.env.pop();
+
+        self.in_loop = false;
     }
 
     pub fn check_statement(&mut self, stmt: &Statement) {
@@ -263,6 +274,21 @@ impl Checker {
             Statement::ForCondition { .. }
             | Statement::ForCounter { .. }
             | Statement::ForRange { .. } => self.check_for_stmt(stmt),
+            Statement::Break { .. }
+            | Statement::Continue { .. } => {
+                if !self.in_loop {
+                    self.errors.push(
+                        TypeError::OutsideLoop {
+                            kind: match stmt {
+                                Statement::Break { .. } => LoopControlKind::Break,
+                                Statement::Continue { .. } => LoopControlKind::Continue,
+                                _ => unreachable!()
+                            },
+                            span: stmt.span()
+                        }
+                    )
+                }
+            }
             Statement::Return { value, .. } => {
                 let ty = match value {
                     Some(v) => self.infer(v),
@@ -409,7 +435,7 @@ impl Checker {
                             self.errors.push(TypeError::InvalidBinaryOperator {
                                 operator: operator.clone(),
                                 left: Box::new(left_ty),
-                                right: right_ty,
+                                right: Box::new(right_ty),
                                 span: *span,
                             });
                             Ty::Error
@@ -424,7 +450,7 @@ impl Checker {
                                 self.errors.push(TypeError::InvalidBinaryOperator {
                                     operator: operator.clone(),
                                     left: Box::new(left_ty),
-                                    right: right_ty,
+                                    right: Box::new(right_ty),
                                     span: *span,
                                 });
                                 Ty::Error
@@ -438,7 +464,7 @@ impl Checker {
                             self.errors.push(TypeError::InvalidBinaryOperator {
                                 operator: operator.clone(),
                                 left: Box::new(left_ty),
-                                right: right_ty,
+                                right: Box::new(right_ty),
                                 span: *span,
                             });
                             Ty::Error
@@ -451,7 +477,7 @@ impl Checker {
                             _ => self.errors.push(TypeError::InvalidBinaryOperator {
                                 operator: operator.clone(),
                                 left: Box::new(left_ty),
-                                right: right_ty,
+                                right: Box::new(right_ty),
                                 span: *span,
                             }),
                         };
@@ -464,7 +490,7 @@ impl Checker {
                                 self.errors.push(TypeError::InvalidBinaryOperator {
                                     operator: operator.clone(),
                                     left: Box::new(left_ty),
-                                    right: right_ty,
+                                    right: Box::new(right_ty),
                                     span: *span,
                                 });
                                 return Ty::Error;
@@ -581,6 +607,10 @@ impl Checker {
                     return Ty::Error;
                 }
 
+                if fields.is_empty() {
+                    return Ty::Struct(name.clone())
+                }
+
                 for f in fields {
                     match self.infer(f.field_val.as_ref()) {
                         Ty::Error => return Ty::Error,
@@ -690,5 +720,93 @@ impl Checker {
                 span,
             })
         }
+    }
+
+    pub fn check_returns(&mut self, stmt: &Statement) {
+        if let Statement::Fun {
+            name,
+            body,
+            span,
+            ending_span,
+            ..
+        } = stmt {
+            if self.ret_type_is_unit(stmt) {
+                return
+            }
+
+            let guarantee_returns = self.does_block_return(body);
+
+            if !guarantee_returns {
+                self.errors.push(
+                    TypeError::MissingReturn {
+                        name: name.clone(),
+                        fun_span: *span,
+                        close_brace_span: *ending_span
+                    }
+                )
+            }
+        }
+    }
+
+    fn does_block_return(&mut self, body: &[Statement]) -> bool {
+        for stmt in body {
+            match stmt {
+                Statement::Var { .. }
+                | Statement::Let { .. }
+                | Statement::Const { .. }
+                | Statement::Expression { .. }
+                | Statement::ForCondition { .. }
+                | Statement::ForRange { .. }
+                | Statement::ForCounter { .. }
+                | Statement::Fun { .. }
+                | Statement::Struct { .. }
+                | Statement::Break { .. }
+                | Statement::Continue { .. } => continue,
+                Statement::If( IfStatement {
+                    then_block,
+                    else_if,
+                    else_block,
+                    ..
+                }) => {
+                    let does_return_if = self.does_block_return(then_block);
+                    let mut do_return_elifs = Vec::new();
+
+                    for elif in else_if {
+                        do_return_elifs.push(self.does_block_return(&elif.block))
+                    };
+
+                    let does_return_else = self.does_block_return(else_block);
+
+                    if does_return_if
+                        && do_return_elifs.iter().all(|elif| {
+                        *elif
+                    })
+                        && does_return_else {
+                        return true
+                    }
+                },
+                Statement::Return {
+                    ..
+                } => {
+                    return true
+                }
+            }
+        }
+
+        false
+    }
+
+    fn ret_type_is_unit(&mut self, stmt: &Statement) -> bool {
+        if let Statement::Fun {
+            return_type,
+            ..
+        } = stmt {
+            if let None = return_type {
+                return true
+            }
+            return false
+        }
+
+        true
     }
 }

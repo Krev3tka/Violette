@@ -1,0 +1,17 @@
+fun main () {
+    for i in 0:10 {
+        if i == 5 {
+            continue
+        }
+
+        println(i)
+    }
+
+    for i in 10..19 {
+        if i == 17 {
+            break
+        }
+
+        println(i)
+    }
+}

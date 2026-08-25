@@ -1,13 +1,9 @@
-package main
+print("Enter your name: ")
+let name = scanln()
 
-fun main() {
-    print("Enter your name: ")
-    let name = scanln()
+print("Enter your age: ")
+let age = scanln()
 
-    print("Enter your age: ")
-    let age = scanln()
+println("Your name: " + name)
 
-    println("Your name: " + name)
-
-    println("Your age: " + age)
-}
+println("Your age: " + age)

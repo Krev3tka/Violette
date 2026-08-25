@@ -53,6 +53,14 @@ pub enum Statement {
         span: Span,
     },
 
+    Break {
+        span: Span
+    },
+
+    Continue {
+        span: Span
+    },
+
     Return {
         value: Option<Expression>,
         span: Span,
@@ -64,6 +72,7 @@ pub enum Statement {
         return_type: Option<Type>,
         body: Vec<Statement>,
         span: Span,
+        ending_span: Span,
     },
 
     Struct {
@@ -153,6 +162,16 @@ impl Parser {
             Token::Fun if matches!(self.peek_token.token, Token::Identifier(_)) => {
                 self.parse_function()
             }
+            Token::Break => {
+                self.next_token();
+
+                Ok(Statement::Break { span })
+            }
+            Token::Continue => {
+                self.next_token();
+
+                Ok(Statement::Continue { span })
+            }
             Token::Return => {
                 self.next_token();
                 let value = match self.parse_expression(Lowest) {
@@ -203,7 +222,7 @@ impl Parser {
 
         self.expect(Token::LeftBrace)?;
 
-        let then_block = self.parse_block()?;
+        let (then_block, _) = self.parse_block()?;
 
         let mut else_if = Vec::new();
         let mut else_block = vec![];
@@ -217,7 +236,7 @@ impl Parser {
                 else_if.push(else_if_stmt);
             } else if matches!(self.current_token.token, Token::LeftBrace) {
                 self.next_token();
-                else_block = self.parse_block()?;
+                (else_block, _) = self.parse_block()?;
 
                 break;
             } else {
@@ -247,7 +266,7 @@ impl Parser {
         self.next_token();
         self.expect(Token::LeftBrace)?;
 
-        let block = self.parse_block()?;
+        let (block, _) = self.parse_block()?;
 
         Ok(ElseIf {
             condition,
@@ -295,7 +314,7 @@ impl Parser {
         self.expect(Token::LeftBrace)?;
         self.skip_terminators();
 
-        let body = self.parse_block()?;
+        let (body, _) = self.parse_block()?;
 
         Ok(Statement::ForRange {
             variable,
@@ -353,7 +372,7 @@ impl Parser {
         }
         self.next_token();
 
-        let body = self.parse_block()?;
+        let (body, _) = self.parse_block()?;
 
         Ok(Statement::ForCounter {
             init,
@@ -379,7 +398,7 @@ impl Parser {
         }
 
         self.next_token();
-        let body = self.parse_block()?;
+        let (body, _) = self.parse_block()?;
 
         Ok(Statement::ForCondition {
             condition,
@@ -389,7 +408,7 @@ impl Parser {
     }
 
     pub fn parse_function(&mut self) -> Result<Statement, ParseError> {
-        let span = self.current_token.span;
+        let mut span = self.current_token.span;
 
         self.expect(Token::Fun)?;
 
@@ -402,6 +421,7 @@ impl Parser {
         self.expect(Token::LeftParen)?;
         let params = self.parse_fun_params()?;
 
+        span = span.merge(&self.current_token.span);
         self.expect(Token::RightParen)?;
 
         let return_type = match self.current_token.token {
@@ -410,9 +430,12 @@ impl Parser {
             _ => return Err(self.unexpected(&self.current_token)),
         };
 
+
         self.expect(Token::LeftBrace)?;
 
-        let body = self.parse_block()?;
+        let (body, ending_span) = self.parse_block()?;
+        let ending_span = ending_span.unwrap();
+
 
         Ok(Statement::Fun {
             name,
@@ -420,6 +443,7 @@ impl Parser {
             return_type,
             body,
             span,
+            ending_span
         })
     }
 
@@ -551,7 +575,7 @@ impl Parser {
         Ok(statements)
     }
 
-    pub fn parse_block(&mut self) -> Result<Vec<Statement>, ParseError> {
+    pub fn parse_block(&mut self) -> Result<(Vec<Statement>, Option<Span>), ParseError> {
         let saved = self.allowed_struct_literal;
         self.allowed_struct_literal = true;
         let statements = self.parse_statements()?;
@@ -561,9 +585,10 @@ impl Parser {
         if !matches!(self.current_token.token, Token::RightBrace) {
             return Err(ParseError::UnexpectedEof);
         }
+        let end_span = self.current_token.span;
         self.next_token();
 
-        Ok(statements)
+        Ok((statements, Some(end_span)))
     }
 
     pub fn parse_top_level(&mut self) -> Result<Vec<Statement>, ParseError> {
@@ -585,6 +610,12 @@ impl Statement {
             Statement::Return { span, .. } => *span,
             Statement::Fun { span, .. } => *span,
             Statement::Struct { span, .. } => *span,
+            Statement::Break {
+                span
+            } => *span,
+            Statement::Continue {
+                span
+            } => *span,
         }
     }
 }
