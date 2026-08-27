@@ -25,5 +25,6 @@ VioString vio_str_from_literal(const char *s, size_t len);
 VioString vio_str_concat(VioString a, VioString b);
 void vio_str_retain(VioString s);
 void vio_str_release(VioString s);
+size_t vio_str_len(VioString s);
 
 #endif // VIO_HELPERS_VIO_STRINGS_H

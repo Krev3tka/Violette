@@ -1,0 +1,16 @@
+extern fun fabs(x: float64) [float64]
+extern fun sqrt(x: float64) [float64]
+extern fun floor(x: float64) [float64]
+
+fun main() {
+    let negative = -64.0
+
+    let positive = fabs(negative)
+    println(positive)
+
+    let root = sqrt(positive)
+    println(root)
+
+    let pi = 3.14
+    println(floor(pi))
+}

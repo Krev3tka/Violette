@@ -460,6 +460,7 @@ impl Parser {
             _ => return Err(self.unexpected(&self.current_token)),
         };
         if matches!(self.peek_token.token, Token::LeftParen) {
+            let span = self.current_token.span;
             self.next_token();
             let args = self.parse_call_args()?;
             Ok(Expression::MethodCall {
@@ -472,7 +473,7 @@ impl Parser {
             Ok(Expression::Field {
                 object: Box::new(left),
                 name,
-                span,
+                span: span.merge(&self.current_token.span),
             })
         }
     }

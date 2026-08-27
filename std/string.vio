@@ -1,0 +1,11 @@
+package std
+
+extern fun vio_str_len(s: string) [int]
+
+fun len(s: string) [int] {
+    return vio_str_len(s)
+}
+
+fun is_empty(s: string) [bool] {
+    return s.len() == 0
+}

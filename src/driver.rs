@@ -22,6 +22,16 @@ pub fn find_cc() -> Option<String> {
 }
 
 pub fn compile(command: &str, file: &str) {
+    let file_path = Path::new(file);
+
+    let default_package = file_path
+        .parent()
+        .and_then(|f| f.file_name())
+        .and_then(|n| n.to_str())
+        .filter(|&name| !name.is_empty() && name != ".")
+        .unwrap_or("main")
+        .to_string();
+
     let Some(compiler) = find_cc() else {
         return println!("Didn't find any C compilers");
     };
@@ -31,7 +41,7 @@ pub fn compile(command: &str, file: &str) {
     let lexer = Lexer::new(&input);
     let mut parser = Parser::new(lexer);
 
-    let ast = match parser.parse_program() {
+    let ast = match parser.parse_program(&default_package) {
         Ok(prg) => prg,
         Err(e) => return println!("Parse error: {}", e),
     };

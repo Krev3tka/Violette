@@ -87,6 +87,25 @@ impl Checker {
                     );
                 }
 
+                Statement::ExternFun { name, params, return_type, span} => {
+                    let params: Vec<_> = params.iter().map(|p| self.resolve(&p.param_type)).collect();
+                    let ret = return_type.as_ref().map_or(Ty::Unit, |t| self.resolve(t));
+
+                    self.defined(name.clone(), Ty::Fn {
+                        params: params.clone(),
+                        ret: Box::new(ret.clone())
+                    }, BindingKind::Var, *span);
+
+                    self.funcs.insert(
+                        name.clone(),
+                        FnSig {
+                            params,
+                            ret,
+                            span: *span,
+                        },
+                    );
+                }
+
                 Statement::Struct { name, fields, .. } => {
                     let fields = fields
                         .iter()
@@ -299,6 +318,21 @@ impl Checker {
 
                 self.expect(&ty, cur_ref, stmt.span())
             }
+            Statement::ExternFun { name, params,  span, .. } => {
+                let sig = FnSig {
+                    params: params
+                        .iter()
+                        .map(|p| self.resolve(&p.param_type))
+                        .collect(),
+                    ret: Ty::Unit,
+                    span: *span,
+                };
+
+                self.funcs.insert(
+                    name.clone(),
+                    sig
+                );
+            }
             Statement::Expression { expression, .. } => {
                 if let Expression::Infix {
                     left,
@@ -315,9 +349,27 @@ impl Checker {
                             | Token::DivAndAssign
                             | Token::ModAndAssign
                     )
-                    && let Expression::Identifier { name, .. } = left.as_ref()
                 {
-                    self.check_assignment(name.as_str(), right.as_ref())
+                    match left.as_ref() {
+                        Expression::Identifier { name, .. } => {
+                            self.check_assignment(name.as_str(), right.as_ref());
+                        }
+                        Expression::Field { object, name: field_name, span } => {
+                            self.check_field_assignment(
+                                object.as_ref(),
+                                field_name,
+                                right.as_ref(),
+                                *span
+                            )
+                        }
+                        _ => {
+                            self.errors.push(TypeError::Unsupported {
+                                desc: "Invalid assignment target (non as l-value)".to_string(),
+                                span: left.span()
+                            })
+                        }
+                    }
+
                 } else {
                     self.infer(expression);
                 }
@@ -364,6 +416,54 @@ impl Checker {
         let value_ty = self.infer(value_expr);
 
         self.expect(&value_ty, &entity.ty, value_expr.span())
+    }
+
+    pub fn check_field_assignment(
+        &mut self,
+        object: &Expression,
+        field_name: &str,
+        value_expr: &Expression,
+        span: Span
+    ) {
+        if let Expression::Identifier { name: obj_name, .. } = object &&
+            let Some(entity) = self.env.lookup(obj_name)
+                && !entity.kind.is_mutable() {
+                    self.errors.push(TypeError::AssignmentToImmutable {
+                        name: format!("{}.{}", obj_name, field_name),
+                        kind: entity.kind,
+                        decl_span: entity.span,
+                        assign_span: span
+                    });
+        }
+
+        let obj_ty = self.infer(object);
+        
+        match obj_ty {
+            Ty::Struct(struct_name) => {
+                let field_ty = self.structs.get(&struct_name)
+                    .and_then(|fields| fields.iter().find(|(n, _, _)| n == field_name))
+                    .map(|(_, ty, _)| ty.clone());
+
+                if let Some(field_ty) = field_ty {
+                    let val_ty = self.infer(value_expr);
+
+                    self.expect(&val_ty, &field_ty, value_expr.span());
+                } else {
+                    self.errors.push(TypeError::UnknownField {
+                        struct_name,
+                        field: field_name.to_string(),
+                        span,
+                    })
+                }
+            }
+            Ty::Error => {}
+            _ => {
+                self.errors.push(TypeError::NoFields {
+                    ty: obj_ty,
+                    span
+                })
+            }
+        }
     }
 
     pub fn check_block(&mut self, block: &[Statement]) {
@@ -510,7 +610,44 @@ impl Checker {
                     }
                     _ => Ty::Error,
                 }
-            }
+            },
+            Expression::Prefix {
+                operator,
+                right,
+                span
+            } => {
+                let right_ty = self.infer(right.as_ref());
+
+                match operator {
+                    Token::LogicNot => {
+                        self.expect(&right_ty, &Ty::Bool, expr.span());
+
+                        Ty::Bool
+                    }
+                    Token::Subtract => {
+                        match right_ty {
+                            Ty::Int => Ty::Int,
+                            Ty::Float => Ty::Float,
+                            _ => {
+                                self.errors.push(TypeError::InvalidUnaryOperator {
+                                    operator: operator.clone(),
+                                    operand: right_ty,
+                                    span: *span
+                                });
+
+                                Ty::Error
+                            }
+                        }
+                    }
+                    Token::BitNot => {
+                        self.expect(&right_ty, &Ty::Int, expr.span());
+
+                        Ty::Int
+                    }
+                    _ => Ty::Error,
+                }
+
+            },
             Expression::Range { start, end, .. } => {
                 let start_ty = start.as_ref().map_or(Ty::Int, |s| self.infer(s));
                 let end_ty = end.as_ref().map_or(Ty::Int, |e| self.infer(e));
@@ -659,12 +796,75 @@ impl Checker {
                     }
                 }
             }
-            Expression::MethodCall { span, .. } => {
-                self.errors.push(TypeError::Unsupported {
-                    desc: "Method calls".to_string(),
-                    span: *span,
-                });
-                Ty::Error
+            Expression::MethodCall { object, name, args, span } => {
+                let obj_ty = self.infer(object.as_ref());
+
+                match &obj_ty {
+                    Ty::Struct(struct_name) => {
+                        if !self.structs.contains_key(struct_name) {
+                            self.errors.push(TypeError::UnknownName {
+                                name: name.clone(),
+                                span: *span,
+                            });
+                            return Ty::Error;
+                        }
+                    },
+                    Ty::String
+                    | Ty::Int
+                    | Ty::Float
+                    | Ty:: Bool => {}
+                    _ => {
+                        self.errors.push(TypeError::NoSuchMethod {
+                            ty: obj_ty,
+                            method: name.clone(),
+                            span: *span,
+                        });
+
+                        return Ty::Error
+                    }
+                };
+
+                let sig = self.funcs.get(name).cloned();
+
+                if let Some(sig) = sig {
+                    if sig.params.is_empty() {
+                        self.errors.push(TypeError::ArityMismatch {
+                            name: name.clone(),
+                            expected: 1,
+                            found: 0,
+                            span: *span,
+                        });
+                        return Ty::Error
+                    }
+
+                    self.expect(&obj_ty, &sig.params[0], object.span());
+
+                    let rest_params = &sig.params[1..];
+                    if args.len() != rest_params.len() {
+                        self.errors.push(TypeError::ArityMismatch {
+                            name: name.clone(),
+                            expected: rest_params.len(),
+                            found: args.len(),
+                            span: *span
+                        });
+
+                        return sig.ret.clone()
+                    }
+
+                    for (arg, param_ty) in args.iter().zip(rest_params.iter()) {
+                        let a_ty = self.infer(arg);
+                        self.expect(&a_ty, param_ty, arg.span());
+                    }
+
+                    sig.ret.clone()
+                } else {
+                    self.errors.push(TypeError::UnknownName {
+                        name: name.clone(),
+                        span: *span,
+                    });
+
+                    Ty::Error
+                }
             }
             _ => Ty::Error,
         }
@@ -761,7 +961,8 @@ impl Checker {
                 | Statement::Fun { .. }
                 | Statement::Struct { .. }
                 | Statement::Break { .. }
-                | Statement::Continue { .. } => continue,
+                | Statement::Continue { .. }
+                | Statement::ExternFun { .. } => continue,
                 Statement::If( IfStatement {
                     then_block,
                     else_if,
@@ -801,7 +1002,7 @@ impl Checker {
             return_type,
             ..
         } = stmt {
-            if let None = return_type {
+            if return_type.is_none() {
                 return true
             }
             return false

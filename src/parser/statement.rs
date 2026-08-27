@@ -66,6 +66,13 @@ pub enum Statement {
         span: Span,
     },
 
+    ExternFun {
+        name: String,
+        params: Vec<FunParam>,
+        return_type: Option<Type>,
+        span: Span,
+    },
+
     Fun {
         name: String,
         params: Vec<FunParam>,
@@ -172,6 +179,7 @@ impl Parser {
 
                 Ok(Statement::Continue { span })
             }
+            Token::Extern => self.parse_extern(),
             Token::Return => {
                 self.next_token();
                 let value = match self.parse_expression(Lowest) {
@@ -447,6 +455,42 @@ impl Parser {
         })
     }
 
+    pub fn parse_extern(&mut self) -> Result<Statement, ParseError> {
+        let mut span = self.current_token.span;
+
+        self.expect(Token::Extern)?;
+        self.expect(Token::Fun)?;
+
+        let name = match self.current_token.token.clone() {
+            Token::Identifier(fun_name) => fun_name.clone(),
+            _ => return Err(self.unexpected(&self.current_token)),
+        };
+
+        self.next_token();
+        self.expect(Token::LeftParen)?;
+        let params = self.parse_fun_params()?;
+
+        span = span.merge(&self.current_token.span);
+        self.expect(Token::RightParen)?;
+
+        let return_type = match self.current_token.token {
+            Token::LeftBracket => {
+                self.next_token();
+                let ty = self.parse_type()?;
+                self.expect(Token::RightBracket)?;
+                Some(ty)
+            },
+            _ => None,
+        };
+
+        Ok(Statement::ExternFun {
+            name,
+            params,
+            return_type,
+            span
+        })
+    }
+
     pub fn parse_struct(&mut self) -> Result<Statement, ParseError> {
         self.expect(Token::Struct)?;
 
@@ -608,6 +652,7 @@ impl Statement {
             Statement::ForRange { span, .. } => *span,
             Statement::ForCounter { span, .. } => *span,
             Statement::Return { span, .. } => *span,
+            Statement::ExternFun { span, ..} => *span,
             Statement::Fun { span, .. } => *span,
             Statement::Struct { span, .. } => *span,
             Statement::Break {

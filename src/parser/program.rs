@@ -11,8 +11,8 @@ pub struct Program {
 }
 
 impl Parser {
-    pub fn parse_program(&mut self) -> Result<Program, ParseError> {
-        let mut package = String::from("main");
+    pub fn parse_program(&mut self, default_package: &str) -> Result<Program, ParseError> {
+        let mut package = default_package.to_string();
 
         if matches!(self.current_token.token, Token::Package) {
             package = self.parse_package()?;
@@ -37,7 +37,7 @@ impl Parser {
 
         while matches!(
             self.current_token.token,
-            Token::Fun | Token::Struct | Token::Const
+            Token::Fun | Token::Struct | Token::Const | Token::Extern
         ) {
             declarations.push(self.parse_statement()?);
             self.skip_terminators();

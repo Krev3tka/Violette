@@ -242,6 +242,21 @@ impl Codegen {
                     .join(", ");
 
                 format!("{}({})", f, a)
+            },
+            Expression::MethodCall { object, name, args, .. } => {
+                let obj_str = self.emit_expression(object.as_ref())?;
+
+                let mut all_args = vec![obj_str];
+
+                for a in args {
+                    all_args.push(self.emit_expression(a)?)
+                }
+
+                format!(
+                    "{}({})",
+                    name,
+                    all_args.join(", ")
+                )
             }
             Expression::Field { object, name, .. } => {
                 format!("{}.{}", self.emit_expression(object.as_ref())?, name)
@@ -327,6 +342,48 @@ impl Codegen {
                 }
 
                 format!("return{};", val_str)
+            }
+            Statement::ExternFun {
+                name,
+                params,
+                return_type,
+                span
+            } => {
+                let param_tys: Vec<Ty> = params
+                    .iter()
+                    .map(|p| self.checker.resolve(&p.param_type))
+                    .collect();
+
+                for (p, param_ty) in params.iter().zip(param_tys.iter()) {
+                    self.checker
+                        .defined(p.name.clone(), param_ty.clone(), BindingKind::Var, *span)
+                }
+
+                let mut ret = Ty::Unit;
+
+                if let Some(ty) = return_type {
+                    ret = self.checker.resolve(ty);
+                }
+
+                let parameters = params
+                    .iter()
+                    .map(
+                        |FunParam {
+                             name, param_type, ..
+                         }| {
+                            let ty = self.checker.resolve(param_type);
+                            format!("{} {}", self.c_type(&ty), name.clone())
+                        },
+                    )
+                    .collect::<Vec<String>>()
+                    .join(", ");
+
+                format!(
+                    "extern {} {}({});",
+                    self.c_type(&ret),
+                    name,
+                    parameters
+                )
             }
             Statement::Expression { expression, .. } => {
                 format!("{};", self.emit_expression(expression)?)
@@ -584,6 +641,10 @@ impl Codegen {
             Token::MulAndAssign => "*=",
             Token::DivAndAssign => "/=",
             Token::ModAndAssign => "%=",
+
+            Token::LogicAnd => "&&",
+            Token::LogicOr => "||",
+            Token::LogicNot => "!",
 
             Token::BitAnd => "&",
             Token::BitOr => "|",

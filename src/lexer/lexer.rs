@@ -314,6 +314,7 @@ impl Lexer {
                     "continue" => Token::Continue,
                     "break" => Token::Break,
                     "match" => Token::Match,
+                    "extern" => Token::Extern,
                     "fun" => Token::Fun,
                     "return" => Token::Return,
                     "bloom" => Token::Bloom,

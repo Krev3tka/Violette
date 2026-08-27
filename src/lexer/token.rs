@@ -37,6 +37,9 @@ pub enum Token {
     /// Keyword `fun`.
     Fun,
 
+    /// Keyword `extern`
+    Extern,
+
     /// Keyword `return`.
     Return,
 

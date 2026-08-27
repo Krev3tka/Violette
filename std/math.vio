@@ -1,0 +1,58 @@
+package math
+
+fun abs(x: float64) [float64] {
+    if x >= 0.0 {
+        return x
+    }
+
+    return -x
+}
+
+fun root(x: float64) [float64] {
+    if x < 0.0 {
+        return -1.0
+    }
+
+    if x == 0.0 || x == 1.0 {
+        return x
+    }
+
+    var guess = x / 2.0
+    let epsilon = 0.000_0001
+
+    for true {
+        let next_guess = 0.5 * (guess + x / guess)
+        if (next_guess - guess).abs() < epsilon {
+            return next_guess
+        }
+        guess = next_guess
+    }
+}
+
+fun min(a: int, b: int) [int] {
+    if a < b {
+        return a
+    }
+
+    return b
+}
+
+fun max(a: int, b: int) [int] {
+    if a >= b {
+        return a
+    }
+
+    return b
+}
+
+fun clamp(val: int, min: int, max: int) [int] {
+    if val < min {
+        return min
+    }
+
+    if val > max {
+        return max
+    }
+
+    return val
+}

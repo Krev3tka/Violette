@@ -111,5 +111,11 @@ pub enum TypeError {
     OutsideLoop {
         kind: LoopControlKind,
         span: Span
-    }
+    },
+
+    NoSuchMethod {
+        ty: Ty,
+        method: String,
+        span: Span,
+    },
 }

@@ -36,6 +36,10 @@ VioString vio_str_concat(VioString a, VioString b) {
   return (VioString){.data = hdr->data, .len = new_len, .cap = new_len + 1};
 }
 
+size_t vio_str_len(VioString s) {
+    return s.len
+}
+
 void vio_str_retain(VioString s) {
   if (s.cap == 0 || !s.data)
     return;

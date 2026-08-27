@@ -247,6 +247,13 @@ impl ClearSpan for Statement {
                 }
                 *span = Span::default();
             }
+            Statement::ExternFun { params, span, ..} => {
+                for param in params {
+                    param.clear_span();
+                }
+
+                *span = Span::default();
+            }
             Statement::Fun {
                 params, body, span, ..
             } => {

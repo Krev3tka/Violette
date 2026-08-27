@@ -34,7 +34,7 @@ let y = x + 1",
 
             let mut parser = Parser::new(lexer);
 
-            let ast = parser.parse_program().unwrap();
+            let ast = parser.parse_program("main").unwrap();
 
             let mut checker = Checker::default();
 
@@ -98,7 +98,7 @@ print()
 
             let mut parser = Parser::new(lexer);
 
-            let ast = parser.parse_program().unwrap();
+            let ast = parser.parse_program("double").unwrap();
 
             let mut checker = Checker::default();
 
