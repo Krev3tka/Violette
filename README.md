@@ -1,106 +1,158 @@
 # Violette Programming Language
 
-> **Violette** is a compiled language using Perceus reference counting and static typing.
+> **Violette** — a statically typed compiled programming language combining the of Go/Kotlin/Swift with the speed of C/Rust.
 
-[![Status](https://img.shields.io/badge/status-active_development-blue.svg)](#)
+[![Language](https://img.shields.io/badge/language-Rust-orange.svg)](https://www.rust-lang.org/)
+[![Backend](https://img.shields.io/badge/backend-C99%20%2F%20GNU99-blue.svg)](#)
+[![Version](https://img.shields.io/badge/version-v0.4.0--alpha-purple.svg)](Violettech_v0.4.md)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 ---
 
-## Features
+## Key Features
 
-* **Memory Management:** Violette uses RC with *Perceus Algorithm*
-* **Null-Safety:** Violette doesn't have implicit `null`
-* **Syntax:** Violette syntax is similar with Go with some features from Swift
-* **Type System** Static, strict type system with algebraic types
+* Deterministic Memory Model: Fast reference counting (Perceus-style). *(not ready yet)*
+* Null-Safety & Zero-Values: No hidden `null` references.
+* UFCS Methods: Any function taking a struct or primitive as its first parameter behaves as a method (`p.distance()`, `"Violette".len()`).
+* Sprout Pipelines (`~>`): Functional dataflow operator for conveyor-style transformations.
+* Modular Standard Library: Embedded zero-cost prelude (`prelude.vio`)
+* Modern Terminal Diagnostics: Card-based error reporting like in Gleam
 
 ---
 
 ## Code Examples
 
+### 1. Methods & Pipeline Chaining
 ```violette
-package main
+import math.{sqrt}
+
+struct Point {
+    x: float64,
+    y: float64,
+}
+
+fun distance(p: Point, other: Point) [float64] {
+    let dx = p.x - other.x
+    let dy = p.y - other.y
+    return sqrt((dx * dx) + (dy * dy))
+}
 
 fun main() {
-    let message: string = "Hello, Violette!" // type annotations are not necessary
-    print(message)
+    let p1 = Point { x: 0.0, y: 0.0 }
+    let p2 = Point { x: 3.0, y: 4.0 }
+
+    // Uniform Function Call Syntax:
+    println(p1.distance(p2)) // 5.0
+
+    // Multi-line fluent chaining:
+    let result = (-64.0)
+        .abs()
+        .sqrt()
+    
+    println(result) // 8.0
 }
 ```
 
+### 2. Sprout Operator (`~>`)
 ```violette
-package main
-fun apply(f: fun (int) [int], x: int) [int | string | bool] {
-    return f(x)
+fun fetch(url: string) [string] {
+    return "payload"
+}
+
+fun parse(data: string) [string] {
+    return "json"
+}
+
+fun validate(data: string) [bool] {
+    return true
 }
 
 fun main() {
-    apply(print, 5)
+    // this string is the same as validate(parse(fetch("https://example.com")))
+    let is_valid = "https://example.com" ~> fetch ~> parse ~> validate
+    println(is_valid) // true
 }
 ```
 
+### 3. Strings & Prelude
 ```violette
-package main
+fun main() {
+    let text = "Violette"
+    
+    if !text.is_empty() {
+        println("Length: " + text.len().to_string())
+    }
 
-import (
-    os,
-    strings,
-    time,
-    math
-)
-
-fun now() [time.Time] {
-    return time.Now()
+    let clamped = clamp(150, 0, 100)
+    println(clamped) // 100
 }
-
-// all instructions are permitted at top-level in main package, like in Swift
-
-let content = os.ReadFile("log.txt")
-
-let сurrentTime = now()
 ```
 
 ---
 
 ## Roadmap
 
-  - [x] Language syntax and lexer
-
-  - [x] AST parser (almost)
-
-  - [x] Base typechecker
-
-  - [ ] C-codegen for MVP phase (in progress)
-
-  - [ ] Perceus Reference Counting IR Transformations
-
-  - [ ] Codegen Pass
+- [x] **Lexer & Tokenizer**
+- [x] **Pratt Parser**
+- [x] **Typechecker & Semantic Analysis** with immutability by default
+- [x] **Flow Control Analysis**
+- [x] **C-Transpiler Codegen** with FFI
+- [ ] **Embedded Standard Library**
+- [x] **Selective & Dotted Imports** (`import math.{abs, sqrt}`, `import math.hypot`)
+- [ ] **Card-based Terminal Diagnostics** with ANSI styling and helpful hints
+- [ ] **Tagged Unions** & Pattern Matching expressions (`match` + `Win/Fail`)
+- [ ] **Error propagation** postfix operator (`|`)
+- [ ] **Perceus In-Place Buffer Reuse (FBIP)** optimization
+- [ ] **Native LLVM Backend** (Target v1.0)
 
 ---
 
-## Building from Source
+## Building and Running
 
-To build the compiler locally, you need a working Rust toolchain:
+### Prerequisites
+* Rust toolchain (Rust 1.80+)
+* A standard C compiler (`clang` or `gcc`)
 
-```Bash
-git clone https://github.com/Krev3tka/Violette
+### Build from Source
+```bash
+git clone https://github.com/Krev3tka/Violette.git
 cd Violette
 cargo build --release
 ```
 
-If you use Nix with flakes enabled, you can spawn a completely reproducible environment without installing Rust manually:
-```Bash
-git clone https://github.com/Krev3tka/Violette
+### Run an Example
+```bash
+# Run any .vio file directly:
+./target/release/violette run examples/demo_showcase.vio
+```
+
+### Nix Environment (Reproducible)
+```bash
 nix develop
 nix build
 ```
 
 ---
 
+## Running Tests
+
+Integration and snapshot tests are managed via the built-in test suite:
+
+```bash
+# Run Rust unit tests:
+cargo test
+
+# Run full integration test suite:
+cd tools/Viotestte && go run main.go
+```
+
+---
+
 ## Support the Development
 
-Violette is an open-source project. If you'd like to support the language design and compiler development:
+Violette is an independent open-source project. If you'd like to support the language design and compiler development:
 
-  - **ERC:** 0x7ecc5C0a8A24dfCB885966a98aEc60fC8D736422
+* **ERC-20 / ETH:** `0x7ecc5C0a8A24dfCB885966a98aEc60fC8D736422`
 
 ---
 
