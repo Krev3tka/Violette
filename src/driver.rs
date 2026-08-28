@@ -210,7 +210,7 @@ pub fn compile(command: &str, file: &str) {
     );
 
     let status = Command::new(&compiler)
-        .arg("-std=c99")
+        .arg("-std=gnu99")
         .arg("-O3")
         .arg("-w")
         .arg(&c_path)
@@ -222,6 +222,7 @@ pub fn compile(command: &str, file: &str) {
         .arg("-I")
         .arg(&temp_dir)
         .arg("-o")
+        .arg("-lm")
         .arg(out.clone())
         .status()
         .expect("Failed to execute C compiler");

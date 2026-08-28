@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include "../vio_string/vio_string.h"
 
 void vio_print_int(int64_t x);
