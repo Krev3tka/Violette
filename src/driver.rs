@@ -120,7 +120,7 @@ pub fn compile(command: &str, file: &str) {
         for stmt in decls {
             match &stmt {
                 Statement::Fun { name, .. }
-                | Statement::ExternFun { name, ..}
+                | Statement::ExternFun { name, .. }
                 | Statement::Const { name, .. }
                 | Statement::Struct { name, .. } => {
                     if imported_symbols.insert(name.clone()) {

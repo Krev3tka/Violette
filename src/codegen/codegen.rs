@@ -11,14 +11,17 @@ use crate::typechecker::types::Ty;
 
 pub struct Codegen {
     checker: Checker,
-    extern_funcs: std::collections::HashSet<String>
+    extern_funcs: std::collections::HashSet<String>,
 }
 
 impl Codegen {
     pub fn new() -> Self {
         let mut checker = Checker::default();
         checker.define_builtins();
-        Codegen { checker, extern_funcs: std::collections::HashSet::new() }
+        Codegen {
+            checker,
+            extern_funcs: std::collections::HashSet::new(),
+        }
     }
 
     pub fn c_type(&mut self, ty: &Ty) -> String {
@@ -67,9 +70,7 @@ impl Codegen {
         }
 
         for s in &prg.declarations {
-            if let Statement::Struct {
-                ..
-            } = s {
+            if let Statement::Struct { .. } = s {
                 let struct_str = self.emit_struct(s)?;
 
                 lines.push(struct_str)
@@ -302,11 +303,12 @@ impl Codegen {
 
                 let f = self.emit_expression(function.as_ref())?;
 
-                let c_fn_name = if f == "main" || f.starts_with("vio_") || self.extern_funcs.contains(&f) {
-                    f.clone()
-                } else {
-                    format!("vio_user_{}", f)
-                };
+                let c_fn_name =
+                    if f == "main" || f.starts_with("vio_") || self.extern_funcs.contains(&f) {
+                        f.clone()
+                    } else {
+                        format!("vio_user_{}", f)
+                    };
 
                 let a = args
                     .iter()
@@ -319,7 +321,10 @@ impl Codegen {
             Expression::MethodCall {
                 object, name, args, ..
             } => {
-                let c_fn_name = if name == "main" || name.starts_with("vio_") || self.extern_funcs.contains(name) {
+                let c_fn_name = if name == "main"
+                    || name.starts_with("vio_")
+                    || self.extern_funcs.contains(name)
+                {
                     name.clone()
                 } else {
                     format!("vio_user_{}", name)
