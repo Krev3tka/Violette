@@ -6,7 +6,10 @@ struct Profile {
 fun main() {
     let profile = Profile{}
 
-    println(profile.bio)
-
     let msg = "Bio: " + profile.bio
+
+    println(msg)
+
+    println(profile.age)
+
 }

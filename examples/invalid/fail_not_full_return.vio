@@ -1,5 +1,5 @@
-fun is_negative(x: int) [bool] {
-    if x < 0 {
+fun is_cool(x: int) [bool] {
+    if x > 10 {
         return true
     }
 
@@ -7,7 +7,7 @@ fun is_negative(x: int) [bool] {
 }
 
 fun main() {
-    let a = is_negative(7)
+    let a = is_cool(7)
 
-    let b = is_negative(-5)
+    let b = is_cool(-5)
 }

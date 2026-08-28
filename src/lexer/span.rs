@@ -191,7 +191,7 @@ impl ClearSpan for Statement {
                 }
                 if_stmt.span = Span::default();
             }
-            Statement::ForCondition {
+            Statement::While {
                 condition,
                 body,
                 span,
@@ -231,23 +231,15 @@ impl ClearSpan for Statement {
                 }
                 *span = Span::default();
             }
-            Statement::Break {
-                span
-            } => {
-                *span = Span::default()
-            },
-            Statement::Continue {
-                span
-            } => {
-                *span = Span::default()
-            },
+            Statement::Break { span } => *span = Span::default(),
+            Statement::Continue { span } => *span = Span::default(),
             Statement::Return { value, span } => {
                 if let Some(val) = value {
                     val.clear_span();
                 }
                 *span = Span::default();
             }
-            Statement::ExternFun { params, span, ..} => {
+            Statement::ExternFun { params, span, .. } => {
                 for param in params {
                     param.clear_span();
                 }
@@ -255,7 +247,11 @@ impl ClearSpan for Statement {
                 *span = Span::default();
             }
             Statement::Fun {
-                params, body, span, ..
+                params,
+                body,
+                span,
+                ending_span,
+                ..
             } => {
                 for param in params {
                     param.clear_span();
@@ -264,6 +260,7 @@ impl ClearSpan for Statement {
                     stmt.clear_span();
                 }
                 *span = Span::default();
+                *ending_span = Span::default()
             }
             Statement::Struct { fields, span, .. } => {
                 for field in fields {

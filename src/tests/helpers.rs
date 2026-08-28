@@ -161,8 +161,8 @@ pub fn if_stmt(
     })
 }
 
-pub fn for_cond(condition: Expression, body: Vec<Statement>) -> Statement {
-    Statement::ForCondition {
+pub fn while_loop(condition: Expression, body: Vec<Statement>) -> Statement {
+    Statement::While {
         condition,
         body,
         span: dummy_span(),
@@ -212,7 +212,7 @@ pub fn fun(
         return_type: ret,
         body,
         span: dummy_span(),
-        ending_span: dummy_span()
+        ending_span: dummy_span(),
     }
 }
 

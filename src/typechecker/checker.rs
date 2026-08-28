@@ -1,15 +1,15 @@
 use crate::lexer::span::Span;
 use crate::lexer::token::{PrimitiveType, Token};
 use crate::parser::program::Program;
+use crate::parser::statement::IfStatement;
 use crate::parser::types::Type;
 use crate::parser::{Expression, Statement};
 use crate::typechecker::env::Env;
-use crate::typechecker::error::{BindingKind, DefinitionKind, LoopControlKind};
 pub use crate::typechecker::error::TypeError;
 use crate::typechecker::error::TypeError::ConflictingEntryPoint;
+use crate::typechecker::error::{BindingKind, DefinitionKind, LoopControlKind};
 use crate::typechecker::types::Ty;
 use std::collections::HashMap;
-use crate::parser::statement::IfStatement;
 
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
@@ -29,7 +29,7 @@ pub struct Checker {
     current_ret: Ty,
     pub errors: Vec<TypeError>,
     pub main_fn_span: Option<Span>,
-    pub in_loop: bool
+    pub in_loop: bool,
 }
 
 impl Checker {
@@ -71,7 +71,7 @@ impl Checker {
                                 None => unreachable!(),
                             },
                             second_span: stmt.span(),
-                            def_kind: DefinitionKind::Fun
+                            def_kind: DefinitionKind::Fun,
                         });
                         continue;
                     }
@@ -87,14 +87,25 @@ impl Checker {
                     );
                 }
 
-                Statement::ExternFun { name, params, return_type, span} => {
-                    let params: Vec<_> = params.iter().map(|p| self.resolve(&p.param_type)).collect();
+                Statement::ExternFun {
+                    name,
+                    params,
+                    return_type,
+                    span,
+                } => {
+                    let params: Vec<_> =
+                        params.iter().map(|p| self.resolve(&p.param_type)).collect();
                     let ret = return_type.as_ref().map_or(Ty::Unit, |t| self.resolve(t));
 
-                    self.defined(name.clone(), Ty::Fn {
-                        params: params.clone(),
-                        ret: Box::new(ret.clone())
-                    }, BindingKind::Var, *span);
+                    self.defined(
+                        name.clone(),
+                        Ty::Fn {
+                            params: params.clone(),
+                            ret: Box::new(ret.clone()),
+                        },
+                        BindingKind::Var,
+                        *span,
+                    );
 
                     self.funcs.insert(
                         name.clone(),
@@ -119,7 +130,7 @@ impl Checker {
                                 None => unreachable!(),
                             },
                             second_span: stmt.span(),
-                            def_kind: DefinitionKind::Struct
+                            def_kind: DefinitionKind::Struct,
                         });
                         continue;
                     }
@@ -199,7 +210,7 @@ impl Checker {
 
         self.in_loop = true;
 
-        if let Statement::ForCondition {
+        if let Statement::While {
             condition: cond,
             body,
             ..
@@ -290,22 +301,19 @@ impl Checker {
                     self.check_block(&if_stmt.else_block);
                 }
             }
-            Statement::ForCondition { .. }
-            | Statement::ForCounter { .. }
-            | Statement::ForRange { .. } => self.check_for_stmt(stmt),
-            Statement::Break { .. }
-            | Statement::Continue { .. } => {
+            Statement::While { .. } | Statement::ForCounter { .. } | Statement::ForRange { .. } => {
+                self.check_for_stmt(stmt)
+            }
+            Statement::Break { .. } | Statement::Continue { .. } => {
                 if !self.in_loop {
-                    self.errors.push(
-                        TypeError::OutsideLoop {
-                            kind: match stmt {
-                                Statement::Break { .. } => LoopControlKind::Break,
-                                Statement::Continue { .. } => LoopControlKind::Continue,
-                                _ => unreachable!()
-                            },
-                            span: stmt.span()
-                        }
-                    )
+                    self.errors.push(TypeError::OutsideLoop {
+                        kind: match stmt {
+                            Statement::Break { .. } => LoopControlKind::Break,
+                            Statement::Continue { .. } => LoopControlKind::Continue,
+                            _ => unreachable!(),
+                        },
+                        span: stmt.span(),
+                    })
                 }
             }
             Statement::Return { value, .. } => {
@@ -318,20 +326,16 @@ impl Checker {
 
                 self.expect(&ty, cur_ref, stmt.span())
             }
-            Statement::ExternFun { name, params,  span, .. } => {
+            Statement::ExternFun {
+                name, params, span, ..
+            } => {
                 let sig = FnSig {
-                    params: params
-                        .iter()
-                        .map(|p| self.resolve(&p.param_type))
-                        .collect(),
+                    params: params.iter().map(|p| self.resolve(&p.param_type)).collect(),
                     ret: Ty::Unit,
                     span: *span,
                 };
 
-                self.funcs.insert(
-                    name.clone(),
-                    sig
-                );
+                self.funcs.insert(name.clone(), sig);
             }
             Statement::Expression { expression, .. } => {
                 if let Expression::Infix {
@@ -354,22 +358,21 @@ impl Checker {
                         Expression::Identifier { name, .. } => {
                             self.check_assignment(name.as_str(), right.as_ref());
                         }
-                        Expression::Field { object, name: field_name, span } => {
-                            self.check_field_assignment(
-                                object.as_ref(),
-                                field_name,
-                                right.as_ref(),
-                                *span
-                            )
-                        }
-                        _ => {
-                            self.errors.push(TypeError::Unsupported {
-                                desc: "Invalid assignment target (non as l-value)".to_string(),
-                                span: left.span()
-                            })
-                        }
+                        Expression::Field {
+                            object,
+                            name: field_name,
+                            span,
+                        } => self.check_field_assignment(
+                            object.as_ref(),
+                            field_name,
+                            right.as_ref(),
+                            *span,
+                        ),
+                        _ => self.errors.push(TypeError::Unsupported {
+                            desc: "Invalid assignment target (non as l-value)".to_string(),
+                            span: left.span(),
+                        }),
                     }
-
                 } else {
                     self.infer(expression);
                 }
@@ -423,24 +426,27 @@ impl Checker {
         object: &Expression,
         field_name: &str,
         value_expr: &Expression,
-        span: Span
+        span: Span,
     ) {
-        if let Expression::Identifier { name: obj_name, .. } = object &&
-            let Some(entity) = self.env.lookup(obj_name)
-                && !entity.kind.is_mutable() {
-                    self.errors.push(TypeError::AssignmentToImmutable {
-                        name: format!("{}.{}", obj_name, field_name),
-                        kind: entity.kind,
-                        decl_span: entity.span,
-                        assign_span: span
-                    });
+        if let Expression::Identifier { name: obj_name, .. } = object
+            && let Some(entity) = self.env.lookup(obj_name)
+            && !entity.kind.is_mutable()
+        {
+            self.errors.push(TypeError::AssignmentToImmutable {
+                name: format!("{}.{}", obj_name, field_name),
+                kind: entity.kind,
+                decl_span: entity.span,
+                assign_span: span,
+            });
         }
 
         let obj_ty = self.infer(object);
-        
+
         match obj_ty {
             Ty::Struct(struct_name) => {
-                let field_ty = self.structs.get(&struct_name)
+                let field_ty = self
+                    .structs
+                    .get(&struct_name)
                     .and_then(|fields| fields.iter().find(|(n, _, _)| n == field_name))
                     .map(|(_, ty, _)| ty.clone());
 
@@ -457,12 +463,7 @@ impl Checker {
                 }
             }
             Ty::Error => {}
-            _ => {
-                self.errors.push(TypeError::NoFields {
-                    ty: obj_ty,
-                    span
-                })
-            }
+            _ => self.errors.push(TypeError::NoFields { ty: obj_ty, span }),
         }
     }
 
@@ -610,11 +611,11 @@ impl Checker {
                     }
                     _ => Ty::Error,
                 }
-            },
+            }
             Expression::Prefix {
                 operator,
                 right,
-                span
+                span,
             } => {
                 let right_ty = self.infer(right.as_ref());
 
@@ -624,21 +625,19 @@ impl Checker {
 
                         Ty::Bool
                     }
-                    Token::Subtract => {
-                        match right_ty {
-                            Ty::Int => Ty::Int,
-                            Ty::Float => Ty::Float,
-                            _ => {
-                                self.errors.push(TypeError::InvalidUnaryOperator {
-                                    operator: operator.clone(),
-                                    operand: right_ty,
-                                    span: *span
-                                });
+                    Token::Subtract => match right_ty {
+                        Ty::Int => Ty::Int,
+                        Ty::Float => Ty::Float,
+                        _ => {
+                            self.errors.push(TypeError::InvalidUnaryOperator {
+                                operator: operator.clone(),
+                                operand: right_ty,
+                                span: *span,
+                            });
 
-                                Ty::Error
-                            }
+                            Ty::Error
                         }
-                    }
+                    },
                     Token::BitNot => {
                         self.expect(&right_ty, &Ty::Int, expr.span());
 
@@ -646,8 +645,7 @@ impl Checker {
                     }
                     _ => Ty::Error,
                 }
-
-            },
+            }
             Expression::Range { start, end, .. } => {
                 let start_ty = start.as_ref().map_or(Ty::Int, |s| self.infer(s));
                 let end_ty = end.as_ref().map_or(Ty::Int, |e| self.infer(e));
@@ -745,7 +743,7 @@ impl Checker {
                 }
 
                 if fields.is_empty() {
-                    return Ty::Struct(name.clone())
+                    return Ty::Struct(name.clone());
                 }
 
                 for f in fields {
@@ -796,7 +794,12 @@ impl Checker {
                     }
                 }
             }
-            Expression::MethodCall { object, name, args, span } => {
+            Expression::MethodCall {
+                object,
+                name,
+                args,
+                span,
+            } => {
                 let obj_ty = self.infer(object.as_ref());
 
                 match &obj_ty {
@@ -808,11 +811,8 @@ impl Checker {
                             });
                             return Ty::Error;
                         }
-                    },
-                    Ty::String
-                    | Ty::Int
-                    | Ty::Float
-                    | Ty:: Bool => {}
+                    }
+                    Ty::String | Ty::Int | Ty::Float | Ty::Bool => {}
                     _ => {
                         self.errors.push(TypeError::NoSuchMethod {
                             ty: obj_ty,
@@ -820,7 +820,7 @@ impl Checker {
                             span: *span,
                         });
 
-                        return Ty::Error
+                        return Ty::Error;
                     }
                 };
 
@@ -834,7 +834,7 @@ impl Checker {
                             found: 0,
                             span: *span,
                         });
-                        return Ty::Error
+                        return Ty::Error;
                     }
 
                     self.expect(&obj_ty, &sig.params[0], object.span());
@@ -845,10 +845,10 @@ impl Checker {
                             name: name.clone(),
                             expected: rest_params.len(),
                             found: args.len(),
-                            span: *span
+                            span: *span,
                         });
 
-                        return sig.ret.clone()
+                        return sig.ret.clone();
                     }
 
                     for (arg, param_ty) in args.iter().zip(rest_params.iter()) {
@@ -929,21 +929,20 @@ impl Checker {
             span,
             ending_span,
             ..
-        } = stmt {
+        } = stmt
+        {
             if self.ret_type_is_unit(stmt) {
-                return
+                return;
             }
 
             let guarantee_returns = self.does_block_return(body);
 
             if !guarantee_returns {
-                self.errors.push(
-                    TypeError::MissingReturn {
-                        name: name.clone(),
-                        fun_span: *span,
-                        close_brace_span: *ending_span
-                    }
-                )
+                self.errors.push(TypeError::MissingReturn {
+                    name: name.clone(),
+                    fun_span: *span,
+                    close_brace_span: *ending_span,
+                })
             }
         }
     }
@@ -955,7 +954,7 @@ impl Checker {
                 | Statement::Let { .. }
                 | Statement::Const { .. }
                 | Statement::Expression { .. }
-                | Statement::ForCondition { .. }
+                | Statement::While { .. }
                 | Statement::ForRange { .. }
                 | Statement::ForCounter { .. }
                 | Statement::Fun { .. }
@@ -963,7 +962,7 @@ impl Checker {
                 | Statement::Break { .. }
                 | Statement::Continue { .. }
                 | Statement::ExternFun { .. } => continue,
-                Statement::If( IfStatement {
+                Statement::If(IfStatement {
                     then_block,
                     else_if,
                     else_block,
@@ -974,23 +973,18 @@ impl Checker {
 
                     for elif in else_if {
                         do_return_elifs.push(self.does_block_return(&elif.block))
-                    };
+                    }
 
                     let does_return_else = self.does_block_return(else_block);
 
                     if does_return_if
-                        && do_return_elifs.iter().all(|elif| {
-                        *elif
-                    })
-                        && does_return_else {
-                        return true
+                        && do_return_elifs.iter().all(|elif| *elif)
+                        && does_return_else
+                    {
+                        return true;
                     }
-                },
-                Statement::Return {
-                    ..
-                } => {
-                    return true
                 }
+                Statement::Return { .. } => return true,
             }
         }
 
@@ -998,14 +992,11 @@ impl Checker {
     }
 
     fn ret_type_is_unit(&mut self, stmt: &Statement) -> bool {
-        if let Statement::Fun {
-            return_type,
-            ..
-        } = stmt {
+        if let Statement::Fun { return_type, .. } = stmt {
             if return_type.is_none() {
-                return true
+                return true;
             }
-            return false
+            return false;
         }
 
         true

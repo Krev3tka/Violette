@@ -10,7 +10,7 @@ fun sqrt(n: float64) [float64] {
     var x = n / 2.0
     var last_x = 0.0
 
-    for x != last_x {
+    while x != last_x {
         last_x = x
         x = 0.5 * (x + (n / x))
     }

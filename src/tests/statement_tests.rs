@@ -10,8 +10,8 @@ pub mod statements_tests {
     use crate::parser::types::Type::{Primitive, Union};
     use crate::parser::types::{Type, TypePath};
     use crate::tests::helpers::{
-        assert_stmt_tests, call, const_stmt, expr_stmt, for_cond, for_counter, for_range, fun,
-        ident, if_stmt, index, infix, int, let_stmt, postfix, ret, struct_def,
+        assert_stmt_tests, call, const_stmt, expr_stmt, for_counter, for_range, fun, ident,
+        if_stmt, index, infix, int, let_stmt, postfix, ret, struct_def, while_loop,
     };
 
     #[test]
@@ -96,11 +96,11 @@ if a > 7 {
                 ),
             ),
             (
-                "for left < right {
+                "while left < right {
     left++
     right--
 }",
-                for_cond(
+                while_loop(
                     infix(ident("left"), Token::Less, ident("right")),
                     vec![
                         expr_stmt(postfix(ident("left"), Token::Increment)),
@@ -181,7 +181,7 @@ if a > 7 {
     let left = 0
     let right = len(arr)
 
-    for left < right {
+    while left < right {
         let mid = left + (right - left) / 2
 
         if arr[mid] < target {
@@ -226,7 +226,7 @@ if a > 7 {
                     vec![
                         let_stmt("left", int(0)),
                         let_stmt("right", call(ident("len"), vec![ident("arr")])),
-                        for_cond(
+                        while_loop(
                             infix(ident("left"), Token::Less, ident("right")),
                             vec![
                                 let_stmt(

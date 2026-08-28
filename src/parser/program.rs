@@ -1,3 +1,4 @@
+use crate::lexer::span::Span;
 use crate::lexer::token::Token;
 use crate::parser::parser::Parser;
 use crate::parser::{ParseError, Statement};
@@ -5,9 +6,16 @@ use crate::parser::{ParseError, Statement};
 #[allow(dead_code)]
 pub struct Program {
     pub package: String,
-    pub imports: Vec<String>,
+    pub imports: Vec<ImportItem>,
     pub declarations: Vec<Statement>,
     pub main: Vec<Statement>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct ImportItem {
+    pub module: String,
+    pub symbols: Vec<String>,
+    pub span: Span,
 }
 
 impl Parser {
@@ -21,15 +29,13 @@ impl Parser {
 
         self.skip_terminators();
 
-        let imports = match self.current_token.token.clone() {
-            Token::Import => {
-                let res = self.parse_imports()?;
-                self.next_token();
+        let mut imports = Vec::new();
 
-                res
-            }
-            _ => vec![],
-        };
+        while matches!(self.current_token.token, Token::Import) {
+            let res = self.parse_imports()?;
+            imports.extend(res);
+            self.skip_terminators();
+        }
 
         self.skip_terminators();
 

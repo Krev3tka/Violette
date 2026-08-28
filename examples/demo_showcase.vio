@@ -1,0 +1,14 @@
+import math.sqrt
+
+fun main() {
+    let num = 42
+    if num.is_even() {
+        println(clamp(num, 0, 10).to_float().sqrt())
+    }
+
+    let text = "Violette"
+    println(text.len())
+
+    print("Is `" + text + "` empty?: ")
+    println(text.is_empty())
+}

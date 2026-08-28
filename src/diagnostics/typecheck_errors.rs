@@ -1,10 +1,10 @@
-use colored::Colorize;
 use crate::diagnostics::diagnostics::Diagnostics;
 use crate::diagnostics::labeling::{Label, LabelStyle};
 use crate::lexer::span::Span;
 use crate::typechecker::checker::TypeError;
 use crate::typechecker::error::{BindingKind, DefinitionKind, LoopControlKind};
 use crate::typechecker::types::Ty;
+use colored::Colorize;
 
 impl Diagnostics for TypeError {
     fn message(&self, path: &str) -> String {
@@ -25,10 +25,12 @@ impl Diagnostics for TypeError {
                     Label::secondary(
                         *decl_span,
                         format!("first variable defined as {} here", kind_str),
+                        path.to_string(),
                     ),
                     Label::primary(
                         *assign_span,
                         format!("couldn't assign to this {} variable", kind_str),
+                        path.to_string(),
                     ),
                 ];
 
@@ -37,18 +39,24 @@ impl Diagnostics for TypeError {
                     *assign_span,
                     format!("couldn't assign again to {} variable `{}`", kind_str, name),
                     &labels,
-                    Some(format!("try to use `var` instead of `{}`", match kind {
-                        BindingKind::Let => "let",
-                        BindingKind::Const => "const",
-                        _ => unreachable!(),
-                    }).as_str())
+                    Some(
+                        format!(
+                            "try to use `var` instead of `{}`",
+                            match kind {
+                                BindingKind::Let => "let",
+                                BindingKind::Const => "const",
+                                _ => unreachable!(),
+                            }
+                        )
+                        .as_str(),
+                    ),
                 )
             }
             TypeError::DuplicateDefinition {
                 name,
                 first_span,
                 second_span,
-                def_kind
+                def_kind,
             } => {
                 let kind_str = match def_kind {
                     DefinitionKind::Var => "variable",
@@ -56,10 +64,15 @@ impl Diagnostics for TypeError {
                     DefinitionKind::Struct => "struct",
                 };
                 let labels = [
-                    Label::secondary(*first_span, format!("first definition of {kind_str} `{name}` is here")),
+                    Label::secondary(
+                        *first_span,
+                        format!("first definition of {kind_str} `{name}` is here"),
+                        path.to_string(),
+                    ),
                     Label::primary(
                         *second_span,
                         format!("second definition of {kind_str} `{name}` is here"),
+                        path.to_string(),
                     ),
                 ];
 
@@ -68,38 +81,47 @@ impl Diagnostics for TypeError {
                     *second_span,
                     format!("couldn't re-define {kind_str} `{name}`"),
                     &labels,
-                    Some(format!("try to change {kind_str} name pls").as_str())
+                    Some(format!("try to change {kind_str} name pls").as_str()),
                 )
             }
-            TypeError::OutsideLoop {
-                kind,
-                span
-            } => {
+            TypeError::OutsideLoop { kind, span } => {
                 let kind_str = match kind {
                     LoopControlKind::Break => "break",
-                    LoopControlKind::Continue => "continue"
+                    LoopControlKind::Continue => "continue",
                 };
 
-                let labels = [
-                    Label::primary(*span, format!("couldn't `{}` word outside of a loop", kind_str))
-                ];
+                let labels = [Label::primary(
+                    *span,
+                    format!("couldn't `{}` word outside of a loop", kind_str),
+                    path.to_string(),
+                )];
 
                 self.report(
                     path.to_string(),
                     *span,
                     format!("found `{}` outside of a loop", kind_str),
                     &labels,
-                    Some(format!("try to remove `{}` or move it into a loop pls", kind_str).as_str())
+                    Some(
+                        format!("try to remove `{}` or move it into a loop pls", kind_str).as_str(),
+                    ),
                 )
             }
             TypeError::MissingReturn {
                 name,
                 fun_span,
-                close_brace_span
+                close_brace_span,
             } => {
                 let labels = [
-                    Label::secondary(*fun_span, format!("there is a definition of `{name}` function")),
-                    Label::primary(*close_brace_span, format!("missing return at the `{name}` function"))
+                    Label::secondary(
+                        *fun_span,
+                        format!("there is a definition of `{name}` function"),
+                        path.to_string(),
+                    ),
+                    Label::primary(
+                        *close_brace_span,
+                        format!("missing return at the `{name}` function"),
+                        path.to_string(),
+                    ),
                 ];
 
                 self.report(
@@ -107,34 +129,39 @@ impl Diagnostics for TypeError {
                     *fun_span,
                     format!("there's no `return` in every path in `{name}` function"),
                     &labels,
-                    Some("try to add `return` keyword with an expression at the end of function pls")
+                    Some(
+                        "try to add `return` keyword with an expression at the end of function pls",
+                    ),
                 )
             }
             TypeError::Mismatch {
                 expected,
                 found,
-                span
+                span,
             } => {
-                let labels = [
-                    Label::primary(*span, format!("there's a type mismatch, expected `{:?}`, got `{:?}`", expected, found),)
-                ];
+                let labels = [Label::primary(
+                    *span,
+                    format!(
+                        "there's a type mismatch, expected `{:?}`, got `{:?}`",
+                        expected, found
+                    ),
+                    path.to_string(),
+                )];
 
                 self.report(
                     path.to_string(),
                     *span,
                     "found mismatched types".to_string(),
                     &labels,
-                    None
+                    None,
                 )
-            },
-            TypeError::NoSuchMethod {
-                ty,
-                method,
-                span
-            } => {
-                let labels = [
-                    Label::primary(*span, format!("method not found on type `{:?}`", ty))
-                ];
+            }
+            TypeError::NoSuchMethod { ty, method, span } => {
+                let labels = [Label::primary(
+                    *span,
+                    format!("method not found on type `{:?}`", ty),
+                    path.to_string(),
+                )];
 
                 self.report(
                     path.to_string(),
@@ -142,22 +169,25 @@ impl Diagnostics for TypeError {
                     format!("no method named `{}` found for type `{:?}`", method, ty),
                     &labels,
                     match ty {
-                        Ty::Int
-                        | Ty::Float
-                        | Ty::Bool
-                        | Ty::String => Some("primitive types cannot have custom methods in Violette"),
-                        _ => None
-                    }
+                        Ty::Int | Ty::Float | Ty::Bool | Ty::String => {
+                            Some("primitive types cannot have custom methods in Violette")
+                        }
+                        _ => None,
+                    },
                 )
             }
             _ => format!("{:?}", self),
         }
     }
 
-    fn report(&self, path: String, main_span: Span, message: String, labels: &[Label], help: Option<&str>) -> String {
-        let source = std::fs::read_to_string(&path).unwrap_or_default();
-        let lines: Vec<&str> = source.lines().collect();
-
+    fn report(
+        &self,
+        path: String,
+        main_span: Span,
+        message: String,
+        labels: &[Label],
+        help: Option<&str>,
+    ) -> String {
         let mut res = "error: ".magenta().bold().to_string();
 
         res.push_str(message.as_str());
@@ -166,7 +196,7 @@ impl Diagnostics for TypeError {
                 "\n  > {}:{}:{}\n",
                 path, main_span.start.line, main_span.start.col
             )
-                .as_str(),
+            .as_str(),
         );
 
         let underline = |span: Span| {
@@ -187,17 +217,24 @@ impl Diagnostics for TypeError {
 
         res.push_str(
             format!(
-                " {empty:>width$}  ╭─{line}\n", empty = "", width = width, line = "─".repeat(line_len)
-            ).as_str()
-
+                " {empty:>width$}  ╭─{line}\n",
+                empty = "",
+                width = width,
+                line = "─".repeat(line_len)
+            )
+            .as_str(),
         );
 
         for label in labels {
+            let file_content = std::fs::read_to_string(&label.file_path).unwrap_or_default();
+            let file_lines: Vec<&str> = file_content.lines().collect();
+
             match label.style {
                 LabelStyle::Primary => {
                     if !message.contains("outside of a loop") {
                         res.push_str(
-                            format!(" {empty:>width$}  \u{2502}\n", empty = "", width = width).as_str(),
+                            format!(" {empty:>width$}  \u{2502}\n", empty = "", width = width)
+                                .as_str(),
                         );
                     }
                     res.push_str(
@@ -205,9 +242,12 @@ impl Diagnostics for TypeError {
                             " {line:>width$}  \u{2502}  {code_line}\n",
                             line = label.span.start.line,
                             width = width,
-                            code_line = lines[label.span.start.line.saturating_sub(1)]
+                            code_line = file_lines
+                                .get(label.span.start.line.saturating_sub(1))
+                                .copied()
+                                .unwrap_or("<source unavailable>")
                         )
-                            .as_str(),
+                        .as_str(),
                     );
                     let indent = format!("{:>width$}", "", width = width);
                     res.push_str(
@@ -216,18 +256,20 @@ impl Diagnostics for TypeError {
                             decl_mark = underline(label.span).magenta().bold(),
                             message = label.message.magenta().bold()
                         )
-                            .as_str(),
+                        .as_str(),
                     );
                     if !message.contains("outside of a loop") {
                         res.push_str(
-                            format!(" {empty:>width$}  \u{2502}\n", empty = "", width = width).as_str(),
+                            format!(" {empty:>width$}  \u{2502}\n", empty = "", width = width)
+                                .as_str(),
                         );
                     }
                 }
                 LabelStyle::Secondary => {
                     if !message.contains("outside of a loop") {
                         res.push_str(
-                            format!(" {empty:>width$}  \u{2502}\n", empty = "", width = width).as_str(),
+                            format!(" {empty:>width$}  \u{2502}\n", empty = "", width = width)
+                                .as_str(),
                         );
                     }
                     res.push_str(
@@ -235,9 +277,12 @@ impl Diagnostics for TypeError {
                             " {line:>width$}  \u{2502}  {code_line}\n",
                             line = label.span.start.line,
                             width = width,
-                            code_line = lines[label.span.start.line.saturating_sub(1)]
+                            code_line = file_lines
+                                .get(label.span.start.line.saturating_sub(1))
+                                .copied()
+                                .unwrap_or("<source unavailable>")
                         )
-                            .as_str(),
+                        .as_str(),
                     );
                     let indent = format!("{:>width$}", "", width = width);
                     res.push_str(
@@ -246,11 +291,12 @@ impl Diagnostics for TypeError {
                             decl_mark = underline(label.span).replace("~", "_").yellow().bold(),
                             message = label.message.yellow().bold()
                         )
-                            .as_str(),
+                        .as_str(),
                     );
                     if !message.contains("outside of a loop") {
                         res.push_str(
-                            format!(" {empty:>width$}  \u{2502}\n", empty = "", width = width).as_str(),
+                            format!(" {empty:>width$}  \u{2502}\n", empty = "", width = width)
+                                .as_str(),
                         );
                     }
                 }
@@ -259,18 +305,24 @@ impl Diagnostics for TypeError {
 
         res.push_str(
             format!(
-                " {empty:>width$}  ╰─{line}\n", empty = "", width = width, line = "─".repeat(line_len)
-            ).as_str()
+                " {empty:>width$}  ╰─{line}\n",
+                empty = "",
+                width = width,
+                line = "─".repeat(line_len)
+            )
+            .as_str(),
         );
 
-        if let Some(message) = help { res.push_str(
-            format!(
-                "{help_text} {message}\n",
-                help_text = "help:".green().bold(),
-                message = message.green().bold()
+        if let Some(message) = help {
+            res.push_str(
+                format!(
+                    "{help_text} {message}\n",
+                    help_text = "help:".green().bold(),
+                    message = message.green().bold()
+                )
+                .as_str(),
             )
-                .as_str()
-        ) }
+        }
 
         res
     }

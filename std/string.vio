@@ -1,4 +1,4 @@
-package std
+package string
 
 extern fun vio_str_len(s: string) [int]
 
@@ -8,4 +8,14 @@ fun len(s: string) [int] {
 
 fun is_empty(s: string) [bool] {
     return s.len() == 0
+}
+
+fun repeat(s: string, n: int) [string] {
+    var res = ""
+
+    for i in 1:n {
+        res += s
+    }
+
+    return res
 }

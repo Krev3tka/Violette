@@ -2,6 +2,7 @@ use crate::lexer::span::Span;
 use crate::lexer::token::Token;
 use crate::parser::Precedence::Lowest;
 use crate::parser::parser::{MAX_DEPTH, Parser};
+use crate::parser::program::ImportItem;
 use crate::parser::types::Type;
 use crate::parser::{Expression, ParseError};
 
@@ -32,7 +33,7 @@ pub enum Statement {
 
     If(IfStatement),
 
-    ForCondition {
+    While {
         condition: Expression,
         body: Vec<Statement>,
         span: Span,
@@ -54,11 +55,11 @@ pub enum Statement {
     },
 
     Break {
-        span: Span
+        span: Span,
     },
 
     Continue {
-        span: Span
+        span: Span,
     },
 
     Return {
@@ -165,6 +166,7 @@ impl Parser {
                 }
             }
             Token::If => self.parse_if_statement(),
+            Token::While => self.parse_while_statement(),
             Token::For => self.parse_for_statement(),
             Token::Fun if matches!(self.peek_token.token, Token::Identifier(_)) => {
                 self.parse_function()
@@ -295,7 +297,7 @@ impl Parser {
             } else if matches!(self.peek_token.token, Token::Assign) {
                 self.parse_for_counter(&var)
             } else {
-                self.parse_for_condition()
+                Err(self.unexpected(&self.current_token))
             }
         } else {
             Err(self.unexpected(&self.current_token))
@@ -391,7 +393,8 @@ impl Parser {
         })
     }
 
-    pub fn parse_for_condition(&mut self) -> Result<Statement, ParseError> {
+    pub fn parse_while_statement(&mut self) -> Result<Statement, ParseError> {
+        self.expect(Token::While)?;
         let span = self.current_token.span;
 
         let saved = self.allowed_struct_literal;
@@ -408,7 +411,7 @@ impl Parser {
         self.next_token();
         let (body, _) = self.parse_block()?;
 
-        Ok(Statement::ForCondition {
+        Ok(Statement::While {
             condition,
             body,
             span,
@@ -438,12 +441,10 @@ impl Parser {
             _ => return Err(self.unexpected(&self.current_token)),
         };
 
-
         self.expect(Token::LeftBrace)?;
 
         let (body, ending_span) = self.parse_block()?;
         let ending_span = ending_span.unwrap();
-
 
         Ok(Statement::Fun {
             name,
@@ -451,7 +452,7 @@ impl Parser {
             return_type,
             body,
             span,
-            ending_span
+            ending_span,
         })
     }
 
@@ -479,7 +480,7 @@ impl Parser {
                 let ty = self.parse_type()?;
                 self.expect(Token::RightBracket)?;
                 Some(ty)
-            },
+            }
             _ => None,
         };
 
@@ -487,7 +488,7 @@ impl Parser {
             name,
             params,
             return_type,
-            span
+            span,
         })
     }
 
@@ -547,6 +548,7 @@ impl Parser {
 
         let name = match self.current_token.token.clone() {
             Token::Identifier(n) => n,
+            Token::PrimitiveType(t) => format!("{:?}", t).to_lowercase(),
             _ => {
                 return Err(ParseError::UnexpectedToken {
                     token: self.current_token.token.clone(),
@@ -558,7 +560,7 @@ impl Parser {
         Ok(name)
     }
 
-    pub fn parse_imports(&mut self) -> Result<Vec<String>, ParseError> {
+    pub fn parse_imports(&mut self) -> Result<Vec<ImportItem>, ParseError> {
         self.expect(Token::Import)?;
 
         let mut packages = Vec::new();
@@ -568,14 +570,8 @@ impl Parser {
             self.skip_terminators();
 
             while !matches!(self.current_token.token, Token::RightParen) {
-                let name = match self.current_token.token.clone() {
-                    Token::Identifier(v) => v,
-                    _ => return Err(self.unexpected(&self.current_token)),
-                };
-
-                self.next_token();
-
-                packages.push(name);
+                packages.push(self.parse_single_import_item()?);
+                self.skip_terminators();
 
                 match self.current_token.token.clone() {
                     Token::Comma => self.expect(Token::Comma),
@@ -589,16 +585,10 @@ impl Parser {
 
                 self.skip_terminators();
             }
+            self.expect(Token::RightParen)?;
         } else {
-            packages.push(match self.current_token.token.clone() {
-                Token::Identifier(v) => v,
-                _ => {
-                    return Err(ParseError::UnexpectedToken {
-                        token: self.current_token.token.clone(),
-                        span: self.current_token.span,
-                    });
-                }
-            });
+            packages.push(self.parse_single_import_item()?);
+            self.skip_terminators();
         }
 
         Ok(packages)
@@ -638,6 +628,71 @@ impl Parser {
     pub fn parse_top_level(&mut self) -> Result<Vec<Statement>, ParseError> {
         self.parse_statements()
     }
+
+    fn parse_single_import_item(&mut self) -> Result<ImportItem, ParseError> {
+        let span = self.current_token.span;
+
+        let first_seg = match self.current_token.token.clone() {
+            Token::Identifier(v) => v,
+            Token::PrimitiveType(t) => format!("{:?}", t).to_lowercase(),
+            _ => return Err(self.unexpected(&self.current_token)),
+        };
+        self.next_token();
+
+        let mut module_path = first_seg;
+        let mut symbols = Vec::new();
+
+        while matches!(self.current_token.token, Token::Dot)
+            && matches!(
+                self.peek_token.token,
+                Token::Identifier(_) | Token::PrimitiveType(_)
+            )
+        {
+            self.expect(Token::Dot)?;
+
+            let sub_name = match self.current_token.token.clone() {
+                Token::Identifier(v) => v,
+                Token::PrimitiveType(t) => format!("{:?}", t).to_lowercase(),
+                _ => return Err(self.unexpected(&self.current_token)),
+            };
+            self.next_token();
+
+            module_path.push('.');
+            module_path.push_str(&sub_name);
+        }
+
+        if matches!(self.current_token.token, Token::Dot) {
+            self.expect(Token::Dot)?;
+            self.expect(Token::LeftBrace)?;
+            self.skip_terminators();
+
+            while !matches!(self.current_token.token, Token::RightBrace) {
+                let sym = match self.current_token.token.clone() {
+                    Token::Identifier(v) => v,
+                    _ => return Err(self.unexpected(&self.current_token)),
+                };
+                self.next_token();
+                symbols.push(sym);
+                self.skip_terminators();
+
+                match self.current_token.token.clone() {
+                    Token::Comma => {
+                        self.expect(Token::Comma)?;
+                        self.skip_terminators();
+                    }
+                    Token::RightBrace => break,
+                    _ => return Err(self.unexpected(&self.current_token)),
+                }
+            }
+            self.expect(Token::RightBrace)?;
+        }
+
+        Ok(ImportItem {
+            module: module_path,
+            symbols,
+            span,
+        })
+    }
 }
 
 impl Statement {
@@ -648,19 +703,15 @@ impl Statement {
             Statement::Let { span, .. } => *span,
             Statement::Const { span, .. } => *span,
             Statement::If(IfStatement { span, .. }) => *span,
-            Statement::ForCondition { span, .. } => *span,
+            Statement::While { span, .. } => *span,
             Statement::ForRange { span, .. } => *span,
             Statement::ForCounter { span, .. } => *span,
             Statement::Return { span, .. } => *span,
-            Statement::ExternFun { span, ..} => *span,
+            Statement::ExternFun { span, .. } => *span,
             Statement::Fun { span, .. } => *span,
             Statement::Struct { span, .. } => *span,
-            Statement::Break {
-                span
-            } => *span,
-            Statement::Continue {
-                span
-            } => *span,
+            Statement::Break { span } => *span,
+            Statement::Continue { span } => *span,
         }
     }
 }

@@ -4,6 +4,8 @@
 
 #include "vio_string.h"
 
+#include <string.h>
+
 VioString vio_str_from_literal(const char *s, size_t len) {
   return (VioString){.data = (char *)s, .len = len, .cap = 0};
 }
@@ -36,8 +38,8 @@ VioString vio_str_concat(VioString a, VioString b) {
   return (VioString){.data = hdr->data, .len = new_len, .cap = new_len + 1};
 }
 
-size_t vio_str_len(VioString s) {
-    return s.len
+int64_t vio_str_len(VioString s) {
+    return s.len;
 }
 
 void vio_str_retain(VioString s) {

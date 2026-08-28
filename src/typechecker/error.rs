@@ -19,13 +19,13 @@ impl BindingKind {
 pub enum DefinitionKind {
     Var,
     Fun,
-    Struct
+    Struct,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum LoopControlKind {
     Break,
-    Continue
+    Continue,
 }
 
 #[allow(dead_code)]
@@ -87,7 +87,7 @@ pub enum TypeError {
         name: String,
         first_span: Span,
         second_span: Span,
-        def_kind: DefinitionKind
+        def_kind: DefinitionKind,
     },
 
     ConflictingEntryPoint {
@@ -105,12 +105,12 @@ pub enum TypeError {
     MissingReturn {
         name: String,
         fun_span: Span,
-        close_brace_span: Span
+        close_brace_span: Span,
     },
 
     OutsideLoop {
         kind: LoopControlKind,
-        span: Span
+        span: Span,
     },
 
     NoSuchMethod {

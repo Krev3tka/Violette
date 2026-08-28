@@ -212,7 +212,8 @@ impl Parser {
                 span: start_span,
             },
             Token::Identifier(s) => {
-                if self.allowed_struct_literal && matches!(self.peek_token.token, Token::LeftBrace) {
+                if self.allowed_struct_literal && matches!(self.peek_token.token, Token::LeftBrace)
+                {
                     self.parse_struct_literal(start_span)?
                 } else {
                     Expression::Identifier {
@@ -230,12 +231,16 @@ impl Parser {
                 span: start_span,
             },
             Token::LeftParen => {
+                self.paren_depth += 1;
                 self.next_token();
+                self.skip_terminators();
 
                 let expr = self.parse_expression(Lowest)?;
+                self.skip_terminators();
 
                 if matches!(self.peek_token.token, Token::RightParen) {
                     self.next_token();
+                    self.paren_depth -= 1;
                     expr
                 } else {
                     return Err(self.unexpected(&self.current_token));
@@ -263,10 +268,19 @@ impl Parser {
             _ => return Err(self.unexpected(&self.current_token)),
         };
 
-        while precedence < self.peek_precedence()
-            || (precedence == self.peek_precedence()
-                && matches!(self.peek_token.token, Token::Assign | Token::Power))
-        {
+        self.skip_terminators();
+
+        while {
+            if self.paren_depth > 0 {
+                while matches!(self.peek_token.token, Token::Newline) {
+                    self.next_token();
+                }
+            }
+
+            precedence < self.peek_precedence()
+                || (precedence == self.peek_precedence()
+                    && matches!(self.peek_token.token, Token::Assign | Token::Power))
+        } {
             match &self.peek_token.token {
                 Token::Add
                 | Token::Subtract
@@ -370,6 +384,8 @@ impl Parser {
                 }
                 _ => break,
             }
+
+            self.skip_terminators();
         }
 
         Ok(left)
@@ -455,6 +471,7 @@ impl Parser {
 
     pub fn parse_dot(&mut self, left: Expression, span: Span) -> Result<Expression, ParseError> {
         self.expect(Token::Dot)?;
+        self.skip_terminators();
         let name = match self.current_token.token.clone() {
             Token::Identifier(name) => name,
             _ => return Err(self.unexpected(&self.current_token)),
@@ -517,15 +534,22 @@ impl Parser {
     }
 
     pub fn parse_call_args(&mut self) -> Result<Vec<Expression>, ParseError> {
+        self.paren_depth += 1;
         self.next_token();
+        self.skip_terminators();
+
         let mut args = Vec::new();
         while !matches!(self.current_token.token, Token::RightParen) {
             args.push(self.parse_expression(Lowest)?);
             self.next_token();
+
             if matches!(self.current_token.token, Token::Comma) {
                 self.next_token();
+                self.skip_terminators();
             }
         }
+
+        self.paren_depth -= 1;
         Ok(args)
     }
 

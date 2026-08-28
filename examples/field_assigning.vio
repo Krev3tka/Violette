@@ -12,5 +12,4 @@ fun main() {
     p.x *= 15
 
     println(p.x)
-    println(!true)
 }

@@ -37,7 +37,7 @@ impl Env {
                 name: name.clone(),
                 first_span: self.scopes.last_mut().unwrap().get(&name).unwrap().span,
                 second_span: *span,
-                def_kind: DefinitionKind::Var
+                def_kind: DefinitionKind::Var,
             });
         }
 

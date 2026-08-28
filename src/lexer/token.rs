@@ -19,6 +19,9 @@ pub enum Token {
     /// Keyword `else`.
     Else,
 
+    /// Keyword `while`.
+    While,
+
     /// Keyword `for`.
     For,
 

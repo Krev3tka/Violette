@@ -1,11 +1,76 @@
 use crate::codegen::codegen::Codegen;
 use crate::diagnostics::diagnostics::Diagnostics;
 use crate::lexer::lexer::Lexer;
+use crate::parser::Statement;
 use crate::parser::parser::Parser;
+use crate::parser::program::{ImportItem, Program};
 use crate::typechecker::checker::Checker;
 use std::path::Path;
 use std::process::Command;
 use std::{env, fs};
+
+const STD_PRELUDE: &str = include_str!("../std/prelude.vio");
+const STD_MATH: &str = include_str!("../std/math.vio");
+const STD_INT: &str = include_str!("../std/int.vio");
+const STD_STRING: &str = include_str!("../std/string.vio");
+
+fn parse_module(source: &str, pkg_name: &str) -> Program {
+    let lexer = Lexer::new(source);
+    let mut parser = Parser::new(lexer);
+    parser
+        .parse_program(pkg_name)
+        .expect("Failed to parse stdlib")
+}
+
+fn filter_declarations(declarations: Vec<Statement>, symbols: &[String]) -> Vec<Statement> {
+    if symbols.is_empty() {
+        return declarations;
+    }
+
+    declarations
+        .into_iter()
+        .filter(|stmt| match stmt {
+            Statement::ExternFun { .. } => true,
+            Statement::Fun { name, .. }
+            | Statement::Const { name, .. }
+            | Statement::Struct { name, .. } => symbols.contains(name),
+            _ => false,
+        })
+        .collect()
+}
+
+fn resolve_import(import_item: &ImportItem, file_path: &Path) -> Vec<Statement> {
+    let (module_name, symbols) =
+        if import_item.symbols.is_empty() && import_item.module.contains('.') {
+            let parts: Vec<&str> = import_item.module.rsplitn(2, '.').collect();
+            (parts[1], vec![parts[0].to_string()])
+        } else {
+            (import_item.module.as_str(), import_item.symbols.clone())
+        };
+
+    let module_ast = match module_name {
+        "math" => parse_module(STD_MATH, "math"),
+        "int" => parse_module(STD_INT, "int"),
+        "string" => parse_module(STD_STRING, "string"),
+        _ => {
+            let local_path = file_path
+                .parent()
+                .unwrap_or(Path::new(""))
+                .join(format!("{}.vio", module_name));
+
+            if local_path.exists() {
+                let local_src =
+                    fs::read_to_string(&local_path).expect("Failed to read local module");
+                parse_module(&local_src, module_name)
+            } else {
+                println!("Failed to load module {}", module_name);
+                return vec![];
+            }
+        }
+    };
+
+    filter_declarations(module_ast.declarations, &symbols)
+}
 
 pub fn find_cc() -> Option<String> {
     if let Ok(cc) = env::var("CC") {
@@ -41,10 +106,42 @@ pub fn compile(command: &str, file: &str) {
     let lexer = Lexer::new(&input);
     let mut parser = Parser::new(lexer);
 
-    let ast = match parser.parse_program(&default_package) {
+    let mut ast = match parser.parse_program(&default_package) {
         Ok(prg) => prg,
         Err(e) => return println!("Parse error: {}", e),
     };
+
+    let prelude_ast = parse_module(STD_PRELUDE, "std");
+
+    let mut all_declarations = Vec::new();
+    let mut imported_symbols = std::collections::HashSet::new();
+
+    let mut add_imported_decls = |decls: Vec<Statement>| {
+        for stmt in decls {
+            match &stmt {
+                Statement::Fun { name, .. }
+                | Statement::ExternFun { name, ..}
+                | Statement::Const { name, .. }
+                | Statement::Struct { name, .. } => {
+                    if imported_symbols.insert(name.clone()) {
+                        all_declarations.push(stmt);
+                    }
+                }
+                _ => all_declarations.push(stmt),
+            }
+        }
+    };
+
+    for import_item in &prelude_ast.imports {
+        add_imported_decls(resolve_import(import_item, file_path))
+    }
+
+    for import_item in &ast.imports {
+        add_imported_decls(resolve_import(import_item, file_path));
+    }
+
+    all_declarations.extend(ast.declarations);
+    ast.declarations = all_declarations;
 
     let mut checker = Checker::default();
 
@@ -76,6 +173,8 @@ pub fn compile(command: &str, file: &str) {
     let print_c: &str = include_str!("../vio_helpers/vio_io/vio_print.c");
     let scanln_h: &str = include_str!("../vio_helpers/vio_io/vio_scanln.h");
     let scanln_c: &str = include_str!("../vio_helpers/vio_io/vio_scanln.c");
+    let int_h: &str = include_str!("../vio_helpers/vio_casting/vio_int.h");
+    let int_c: &str = include_str!("../vio_helpers/vio_casting/vio_int.c");
 
     let write_rt = |sub: &str, name: &str, content: &str| -> std::path::PathBuf {
         let dir = temp_dir.join(sub);
@@ -94,6 +193,8 @@ pub fn compile(command: &str, file: &str) {
     let println_c_path = write_rt("vio_io", "vio_println.c", println_c);
     write_rt("vio_io", "vio_scanln.h", scanln_h);
     let scanln_c_path = write_rt("vio_io", "vio_scanln.c", scanln_c);
+    write_rt("vio_casting", "vio_int.h", int_h);
+    let int_c_path = write_rt("vio_casting", "vio_int.c", int_c);
 
     let c_path = env::temp_dir().join(format!(
         "{}_vio_out.c",
@@ -117,6 +218,7 @@ pub fn compile(command: &str, file: &str) {
         .arg(&print_c_path)
         .arg(&println_c_path)
         .arg(&scanln_c_path)
+        .arg(&int_c_path)
         .arg("-I")
         .arg(&temp_dir)
         .arg("-o")

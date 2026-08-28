@@ -309,6 +309,7 @@ impl Lexer {
                     "const" => Token::Const,
                     "if" => Token::If,
                     "else" => Token::Else,
+                    "while" => Token::While,
                     "for" => Token::For,
                     "in" => Token::In,
                     "continue" => Token::Continue,

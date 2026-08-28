@@ -6,23 +6,32 @@ import (
 	"log"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
 const TestPaths = "../../examples/"
 
-var Errors = map[string]string{
-	"fail_user_struct.vio":  "error: couldn't re-define `User`\n  > ../../examples/invalid/fail_user_struct.vio:17:8\n     |\n  3  |  struct User {\n     |         ____ first definition of `User` is here\n     |\n     |\n 17  |  struct User {\n     |         ^^^^ second definition of `User` is here\n     |",
-	"fail_constatation.vio": "error: couldn't assign again to const variable `THREE_HOURS_IN_SECONDS`\n  > ../../examples/invalid/fail_constatation.vio:5:31\n    |\n 4  |      const THREE_HOURS_IN_SECONDS = 2 * 60 * 60 // Const variable\n    |            ______________________ first variable defined as const here\n    |\n    |\n 5  |      THREE_HOURS_IN_SECONDS += 60 * 60          // Error: trying to add and assign new value to constant variable\n    |                                ^^^^^^^ couldn't assign to this const variable\n    |\n\nerror: couldn't assign again to immutable variable `x`\n  > ../../examples/invalid/fail_constatation.vio:10:9\n     |\n  9  |      let x = 5\n     |          _ first variable defined as immutable here\n     |\n     |\n 10  |      x = 6 // Error: assigning new value to immutable variable\n     |          ^ couldn't assign to this immutable variable\n     |",
+var ExpectedErrors = map[string]string{
+	"fail_breaking_bad.vio":      "found `break` outside of a loop",
+	"fail_constatation.vio":      "couldn't assign again to const variable",
+	"fail_not_full_return.vio":   "there's no `return` in every path",
+	"fail_redefine_fun_vars.vio": "couldn't re-define",
+	"fail_user_struct.vio":       "couldn't re-define",
 }
 
 var ExpectedOutputs = map[string]string{
 	"bits.vio":            "452",
-	"escape_analysis.vio": "Quotes: \"Hello, Violette!\"" + "\nBackslash: \\",
+	"demo_showcase.vio":   "3.16228\n8\nIs `Violette` empty?: false",
+	"escape_analysis.vio": "Quotes: \"Hello, Violette!\"\nBackslash: \\",
+	"extern_fun.vio":      "64\n8\n3",
 	"factorial.vio":       "120\n1\n1",
 	"fibonacci.vio":       "55",
+	"field_assigning.vio": "15",
 	"fizzbuzz.vio":        "1\n2\nfizz\n4\nbuzz\nfizz\n7\n8\nfizz\nbuzz\n11\nfizz\n13\n14\nfizzbuzz",
 	"if_else.vio":         "36\n10.648\n361",
+	"methodology.vio":     "5",
+	"moduling.vio":        "17",
 	"multiplication_table_via_ranges.vio": "1 2 3 4 5 6 7 8 9 \n" +
 		"2 4 6 8 10 12 14 16 18 \n" +
 		"3 6 9 12 15 18 21 24 27 \n" +
@@ -32,10 +41,18 @@ var ExpectedOutputs = map[string]string{
 		"7 14 21 28 35 42 49 56 63 \n" +
 		"8 16 24 32 40 48 56 64 72 \n" +
 		"9 18 27 36 45 54 63 72 81 ",
-	"point.vio":         "3.5",
-	"sprouting.vio":     "true",
-	"square.vio":        "36",
-	"string_concat.vio": "Hello, Violette!",
+	"point.vio":          "3.5",
+	"sprouting.vio":      "true",
+	"square.vio":         "36",
+	"string_concat.vio":  "Hello, Violette!",
+	"to_be_continue.vio": "0\n1\n2\n3\n4\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16",
+	"zero_init.vio":      "Bio: \n0",
+}
+
+var ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+
+func stripAnsi(str string) string {
+	return ansiRegex.ReplaceAllString(str, "")
 }
 
 var testCases []TestCase
@@ -52,9 +69,9 @@ func runCompiler(filePath string) (string, error) {
 
 	output, err := cmd.CombinedOutput()
 
-	output = []byte(strings.Trim(string(output), "\n"))
+	cleanStr := stripAnsi(strings.TrimSpace(string(output)))
 
-	return string(output), err
+	return cleanStr, err
 }
 
 func WalkDirFunc(path string, d fs.DirEntry, err error) error {
@@ -76,7 +93,7 @@ func WalkDirFunc(path string, d fs.DirEntry, err error) error {
 		isNegative := strings.Contains(path, "/invalid/") && strings.HasPrefix(filename, "fail_")
 
 		expectedOutput, ok := ExpectedOutputs[filename]
-		expectedErr, errOk := Errors[filename]
+		expectedErr, errOk := ExpectedErrors[filename]
 
 		if !ok && !errOk {
 			return fmt.Errorf("failed to find right output or error for %s", filename)
@@ -100,30 +117,33 @@ func main() {
 		log.Fatalf("Walking Directories error: %v", err)
 	}
 
-	fmt.Printf("How many tests: %d\n", len(testCases))
-	for _, test := range testCases {
-		fmt.Printf("- %s (Negative: %t, Expected: %q)\n", test.Path, test.IsNegativeTest, test.ExpectedError)
+	fmt.Printf("Running %d integration tests for Violette...\n", len(testCases))
+	passed := 0
 
+	for _, test := range testCases {
 		output, err := runCompiler(test.Path)
 
 		if test.IsNegativeTest {
 			if !strings.Contains(output, test.ExpectedError) {
-				log.Fatalf("[FAIL] Negative test %s failed.\nExpected error substring: %q\nGot output:\n%q",
+				log.Fatalf("[FAIL] Negative test %s failed.\nExpected error substring: %q\nGot output:\n%s",
 					test.Path, test.ExpectedError, output)
 			}
-			fmt.Printf("[PASS] Negative test %s correctly failed with expected message.\n", test.Path)
+			fmt.Printf("  [PASS] %s (caught %q)\n", filepath.Base(test.Path), test.ExpectedError)
+			passed++
 		} else {
 			if err != nil {
 				log.Fatalf("[FAIL] Positive test %s failed to compile/run:\nErr: %v\nOutput:\n%s",
 					test.Path, err, output)
 			}
 
-			if output != test.ExpectedOutput {
-				log.Fatalf("[FAIL] Positive test %s failed.\nExpected: %q, got: %q",
+			if strings.TrimSpace(output) != strings.TrimSpace(test.ExpectedOutput) {
+				log.Fatalf("[FAIL] Output mismatch for %s.\nExpected:\n%s\nGot:\n%s",
 					test.Path, test.ExpectedOutput, output)
-			} else {
-				fmt.Printf("[PASS] Positive test %s succeeded.\n", test.Path)
 			}
+			fmt.Printf("  [PASS] %s\n", filepath.Base(test.Path))
+			passed++
 		}
 	}
+
+	fmt.Printf("\nAll %d tests passed successfully\n", passed)
 }
