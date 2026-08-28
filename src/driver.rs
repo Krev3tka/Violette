@@ -206,7 +206,11 @@ pub fn compile(command: &str, file: &str) {
     fs::create_dir_all(&bin_dir).expect("Failed to create bin dir");
 
     let out = bin_dir.join(
-        Path::new(file).file_stem().unwrap().to_string_lossy().to_string()
+        Path::new(file)
+            .file_stem()
+            .unwrap()
+            .to_string_lossy()
+            .to_string(),
     );
 
     let status = Command::new(&compiler)
@@ -233,9 +237,7 @@ pub fn compile(command: &str, file: &str) {
     }
 
     if command == "run" {
-        let status = Command::new(&out)
-            .status()
-            .expect("Failed to execute");
+        let status = Command::new(&out).status().expect("Failed to execute");
 
         if !status.success() {
             if let Some(code) = status.code() {
