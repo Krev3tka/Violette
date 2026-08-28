@@ -202,11 +202,11 @@ pub fn compile(command: &str, file: &str) {
     ));
     fs::write(&c_path, code).expect("Failed to write temporary C file");
 
-    fs::create_dir_all("bin/").unwrap();
+    let bin_dir = env::temp_dir().join("violette_bin");
+    fs::create_dir_all(&bin_dir).expect("Failed to create bin dir");
 
-    let out = format!(
-        "bin/{}",
-        Path::new(file).file_stem().unwrap().to_str().unwrap()
+    let out = bin_dir.join(
+        Path::new(file).file_stem().unwrap().to_string_lossy().to_string()
     );
 
     let status = Command::new(&compiler)
@@ -233,7 +233,7 @@ pub fn compile(command: &str, file: &str) {
     }
 
     if command == "run" {
-        let status = Command::new(format!("./{}", out))
+        let status = Command::new(&out)
             .status()
             .expect("Failed to execute");
 
