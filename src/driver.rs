@@ -226,8 +226,8 @@ pub fn compile(command: &str, file: &str) {
         .arg("-I")
         .arg(&temp_dir)
         .arg("-o")
-        .arg("-lm")
         .arg(out.clone())
+        .arg("-lm")
         .status()
         .expect("Failed to execute C compiler");
 
