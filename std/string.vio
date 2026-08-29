@@ -1,21 +1,51 @@
 package string
 
-extern fun vio_str_len(s: string) [int]
+extern func vio_str_len(s: string) [int]
 
-fun len(s: string) [int] {
+func len(s: string) [int] {
     return vio_str_len(s)
 }
 
-fun is_empty(s: string) [bool] {
+func is_empty(s: string) [bool] {
     return s.len() == 0
 }
 
-fun repeat(s: string, n: int) [string] {
+func repeat(s: string, n: int) [string] {
     var res = ""
 
-    for i in 1:n {
+    for i in 0:n {
         res += s
     }
 
     return res
+}
+
+func starts_with(s: string, prefix: string) [bool] {
+    if prefix.len() > s.len() {
+        return false
+    }
+
+    for i in 0:prefix.len() {
+        if s[i] != prefix[i] {
+            return false
+        }
+    }
+
+    return true
+}
+
+func ends_with(s: string, suffix: string) [bool] {
+    if suffix.len() > s.len() {
+        return false
+    }
+
+    let offset = s.len() - suffix.len()
+
+    for i in 0:suffix.len() {
+        if s[offset + i] != suffix[i] {
+            return false
+        }
+    }
+
+    return true
 }

@@ -5,7 +5,7 @@ struct User {
     age: int
 }
 
-fun main() {
+func main() {
     let user = User {
         name: "Krev3tka",
         age: 16

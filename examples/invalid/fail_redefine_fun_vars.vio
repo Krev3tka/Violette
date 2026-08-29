@@ -1,13 +1,13 @@
-fun double(x: int) [int] {
+func double(x: int) [int] {
     return x * 2
 }
 
-fun main() {
+func main() {
     var x = 5
 
     let x = 7
 }
 
-fun double(x: float64) [float64] {
+func double(x: float64) [float64] {
     return x * 2.0
 }

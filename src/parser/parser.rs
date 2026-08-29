@@ -64,7 +64,7 @@ impl Parser {
     }
 
     fn parse_type_inner(&mut self) -> Result<Type, ParseError> {
-        if matches!(self.current_token.token, Token::Fun) {
+        if matches!(self.current_token.token, Token::Func) {
             self.next_token();
             self.expect(Token::LeftParen)?;
 

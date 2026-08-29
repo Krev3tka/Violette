@@ -1,6 +1,6 @@
 package main
 
-fun main() {
+func main() {
     let s1 = "Hello, "
     let s2 = "Violette!"
 

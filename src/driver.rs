@@ -30,8 +30,8 @@ fn filter_declarations(declarations: Vec<Statement>, symbols: &[String]) -> Vec<
     declarations
         .into_iter()
         .filter(|stmt| match stmt {
-            Statement::ExternFun { .. } => true,
-            Statement::Fun { name, .. }
+            Statement::ExternFunc { .. } => true,
+            Statement::Func { name, .. }
             | Statement::Const { name, .. }
             | Statement::Struct { name, .. } => symbols.contains(name),
             _ => false,
@@ -119,8 +119,8 @@ pub fn compile(command: &str, file: &str) {
     let mut add_imported_decls = |decls: Vec<Statement>| {
         for stmt in decls {
             match &stmt {
-                Statement::Fun { name, .. }
-                | Statement::ExternFun { name, .. }
+                Statement::Func { name, .. }
+                | Statement::ExternFunc { name, .. }
                 | Statement::Const { name, .. }
                 | Statement::Struct { name, .. } => {
                     if imported_symbols.insert(name.clone()) {

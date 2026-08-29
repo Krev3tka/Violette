@@ -28,5 +28,6 @@ VioString vio_str_concat(VioString a, VioString b);
 void vio_str_retain(VioString s);
 void vio_str_release(VioString s);
 int64_t vio_str_len(VioString s);
+int64_t vio_str_get(VioString s, int64_t index);
 
 #endif // VIO_HELPERS_VIO_STRINGS_H

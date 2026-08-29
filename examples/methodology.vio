@@ -3,7 +3,7 @@ struct Point {
     y: float64,
 }
 
-fun sqrt(n: float64) [float64] {
+func sqrt(n: float64) [float64] {
     if n < 0.0 { return -1.0 }
     if n == 0.0 || n == 1.0 { return n }
 
@@ -19,11 +19,11 @@ fun sqrt(n: float64) [float64] {
 
 }
 
-fun distance(p: Point) [float64] {
+func distance(p: Point) [float64] {
     return sqrt((p.x * p.x) + (p.y * p.y))
 }
 
-fun main() {
+func main() {
     let p = Point {
         x: 3,
         y: 4,

@@ -1,4 +1,4 @@
-fun is_cool(x: int) [bool] {
+func is_cool(x: int) [bool] {
     if x > 10 {
         return true
     }
@@ -6,7 +6,7 @@ fun is_cool(x: int) [bool] {
     // Missing return
 }
 
-fun main() {
+func main() {
     let a = is_cool(7)
 
     let b = is_cool(-5)

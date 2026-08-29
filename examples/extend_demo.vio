@@ -1,0 +1,25 @@
+import math.{sqrt}
+
+struct Point {
+    x: float64,
+    y: float64,
+}
+
+extend Point {
+    func new(x: float64, y: float64) [Point] {
+        return Point { x: x, y: y }
+    }
+
+    func distance(p: Point, other: Point) [float64] {
+        let dx = p.x - other.x
+        let dy = p.y - other.y
+        return ((dx * dx) + (dy * dy)).sqrt()
+    }
+}
+
+func main() {
+    let p1 = Point.new(0.0, 0.0)
+    let p2 = Point.new(3.0, 4.0)
+
+    println(p1.distance(p2))
+}

@@ -43,7 +43,7 @@ impl Parser {
 
         while matches!(
             self.current_token.token,
-            Token::Fun | Token::Struct | Token::Const | Token::Extern
+            Token::Func | Token::Struct | Token::Const | Token::Extern | Token::Extend
         ) {
             declarations.push(self.parse_statement()?);
             self.skip_terminators();

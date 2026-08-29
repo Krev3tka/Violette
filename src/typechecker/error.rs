@@ -104,7 +104,7 @@ pub enum TypeError {
 
     MissingReturn {
         name: String,
-        fun_span: Span,
+        func_span: Span,
         close_brace_span: Span,
     },
 

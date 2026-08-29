@@ -46,6 +46,7 @@ var ExpectedOutputs = map[string]string{
 	"square.vio":         "36",
 	"string_concat.vio":  "Hello, Violette!",
 	"to_be_continue.vio": "0\n1\n2\n3\n4\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16",
+	"string_indexation.vio": "86\nDoes `Violette` start with `Vio`: true\nDoes `Violette` start with `Vim`: false\nDoes `Violette` ends with `lette`: true\nDoes `Violette` ends with `latte`: false",
 	"zero_init.vio":      "Bio: \n0",
 }
 
@@ -85,6 +86,11 @@ func WalkDirFunc(path string, d fs.DirEntry, err error) error {
 
 	if filepath.Ext(path) == ".vio" {
 		filename := filepath.Base(path)
+		directory := filepath.Dir(path)
+
+		if strings.Contains(directory, "/benching") || strings.HasPrefix(filename, "bench_") {
+		    return nil
+		}
 
 		if filename == "input.vio" {
 			return nil

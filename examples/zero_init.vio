@@ -3,7 +3,7 @@ struct Profile {
     age: int
 }
 
-fun main() {
+func main() {
     let profile = Profile{}
 
     let msg = "Bio: " + profile.bio

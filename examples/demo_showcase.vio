@@ -1,9 +1,9 @@
-import math.sqrt
+import math
 
-fun main() {
+func main() {
     let num = 42
     if num.is_even() {
-        println(clamp(num, 0, 10).to_float().sqrt())
+        println(math.clamp(num, 0, 10).to_float().sqrt())
     }
 
     let text = "Violette"

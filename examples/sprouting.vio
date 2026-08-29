@@ -1,18 +1,18 @@
 package main
 
-fun fetch(url: string) [string] {
+func fetch(url: string) [string] {
     return "Content-Type: application/json"
 }
 
-fun parse(info: string) [string] {
+func parse(info: string) [string] {
     return "data.json { age: 19, uuid: 0x123456 }"
 }
 
-fun validate(data: string) [bool] {
+func validate(data: string) [bool] {
     return true
 }
 
-fun main() {
+func main() {
     let result = "https://google.com" ~> fetch ~> parse ~> validate
 
     println(result)

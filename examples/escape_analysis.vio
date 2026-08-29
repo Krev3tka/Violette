@@ -1,6 +1,6 @@
 package main
 
-fun main() {
+func main() {
     println("Quotes: \"Hello, Violette!\"")
     println("Backslash: \\")
 }

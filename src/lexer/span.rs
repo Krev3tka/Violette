@@ -1,5 +1,5 @@
 use crate::lexer::token::Token;
-use crate::parser::statement::{FunParam, MatchArm};
+use crate::parser::statement::{FuncParam, MatchArm};
 use crate::parser::{Expression, Statement};
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Ord, PartialOrd, Default)]
@@ -239,14 +239,14 @@ impl ClearSpan for Statement {
                 }
                 *span = Span::default();
             }
-            Statement::ExternFun { params, span, .. } => {
+            Statement::ExternFunc { params, span, .. } => {
                 for param in params {
                     param.clear_span();
                 }
 
                 *span = Span::default();
             }
-            Statement::Fun {
+            Statement::Func {
                 params,
                 body,
                 span,
@@ -268,6 +268,13 @@ impl ClearSpan for Statement {
                 }
                 *span = Span::default();
             }
+            Statement::Extend { methods, span, .. } => {
+                for method in methods {
+                    method.clear_span();
+                }
+                
+                *span = Span::default();
+            }
         }
     }
 }
@@ -280,7 +287,7 @@ impl ClearSpan for MatchArm {
     }
 }
 
-impl ClearSpan for FunParam {
+impl ClearSpan for FuncParam {
     fn clear_span(&mut self) {
         self.span = Span::default();
     }

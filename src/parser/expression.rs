@@ -2,7 +2,7 @@ use crate::lexer::span::Span;
 use crate::lexer::token::Token;
 use crate::parser::Precedence::Lowest;
 use crate::parser::parser::{MAX_DEPTH, Parser};
-use crate::parser::statement::{FunParam, MatchArm};
+use crate::parser::statement::{FuncParam, MatchArm};
 use crate::parser::types::Type;
 use crate::parser::{ParseError, Precedence, Statement};
 
@@ -95,7 +95,7 @@ pub enum Expression {
     },
 
     Lambda {
-        params: Vec<FunParam>,
+        params: Vec<FuncParam>,
         return_type: Option<Type>,
         body: Vec<Statement>,
         span: Span,
@@ -122,7 +122,7 @@ pub enum RangeKind {
     ///
     /// # Examples:
     /// ```violette
-    /// fun main() {
+    /// funс main() {
     ///     for i in 1:10 {
     ///         print(i, ", ")
     ///     }
@@ -137,7 +137,7 @@ pub enum RangeKind {
     ///
     /// # Examples:
     /// ```violette
-    /// fun main() {
+    /// funс main() {
     ///     for i in 1..10 {
     ///         print(i, ", ")
     ///     }
@@ -264,7 +264,7 @@ impl Parser {
                 }
             }
             Token::Match => self.parse_match_expression()?,
-            Token::Fun => self.parse_lambda()?,
+            Token::Func => self.parse_lambda()?,
             _ => return Err(self.unexpected(&self.current_token)),
         };
 
@@ -499,7 +499,7 @@ impl Parser {
         self.parse_expression(Lowest)
     }
 
-    pub fn parse_fun_params(&mut self) -> Result<Vec<FunParam>, ParseError> {
+    pub fn parse_fun_params(&mut self) -> Result<Vec<FuncParam>, ParseError> {
         let start_span = self.current_token.span;
 
         let mut params = Vec::new();
@@ -515,7 +515,7 @@ impl Parser {
 
             let param_type = self.parse_type()?;
 
-            let param = FunParam {
+            let param = FuncParam {
                 name: param_name,
                 param_type,
                 span: start_span,
@@ -556,7 +556,7 @@ impl Parser {
     pub fn parse_lambda(&mut self) -> Result<Expression, ParseError> {
         let start_span = self.current_token.span;
 
-        self.expect(Token::Fun)?;
+        self.expect(Token::Func)?;
         self.expect(Token::LeftParen)?;
         let params = self.parse_fun_params()?;
         self.expect(Token::RightParen)?;

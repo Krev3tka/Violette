@@ -1,4 +1,4 @@
-fun main () {
+func main () {
     for i in 0:10 {
         if i == 5 {
             continue

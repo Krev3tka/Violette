@@ -1,6 +1,6 @@
 import math
 
-fun main() {
+func main() {
     println(
         (-64.0)
         .abs()

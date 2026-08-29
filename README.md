@@ -31,13 +31,13 @@ struct Point {
     y: float64,
 }
 
-fun distance(p: Point, other: Point) [float64] {
+funс distance(p: Point, other: Point) [float64] {
     let dx = p.x - other.x
     let dy = p.y - other.y
     return sqrt((dx * dx) + (dy * dy))
 }
 
-fun main() {
+funс main() {
     let p1 = Point { x: 0.0, y: 0.0 }
     let p2 = Point { x: 3.0, y: 4.0 }
 
@@ -55,19 +55,19 @@ fun main() {
 
 ### 2. Sprout Operator (`~>`)
 ```violette
-fun fetch(url: string) [string] {
+funс fetch(url: string) [string] {
     return "payload"
 }
 
-fun parse(data: string) [string] {
+funс parse(data: string) [string] {
     return "json"
 }
 
-fun validate(data: string) [bool] {
+funс validate(data: string) [bool] {
     return true
 }
 
-fun main() {
+funс main() {
     // this string is the same as validate(parse(fetch("https://example.com")))
     let is_valid = "https://example.com" ~> fetch ~> parse ~> validate
     println(is_valid) // true
@@ -76,7 +76,7 @@ fun main() {
 
 ### 3. Strings & Prelude
 ```violette
-fun main() {
+funс main() {
     let text = "Violette"
     
     if !text.is_empty() {

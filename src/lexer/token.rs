@@ -37,8 +37,8 @@ pub enum Token {
     /// Keyword `match`.
     Match,
 
-    /// Keyword `fun`.
-    Fun,
+    /// Keyword `func`.
+    Func,
 
     /// Keyword `extern`
     Extern,
@@ -51,6 +51,9 @@ pub enum Token {
 
     /// Keyword `struct`.
     Struct,
+
+    /// Keyword `extend`.
+    Extend,
 
     /// Keyword `interface`.
     Interface,

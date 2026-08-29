@@ -1,6 +1,6 @@
 package main
 
-fun main() {
+func main() {
     let a = ~(0b101 # 0b1011) & 0o53 ^ 0x1E4
 
     println(a)

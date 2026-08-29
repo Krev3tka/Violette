@@ -1,0 +1,25 @@
+import string.{starts_with, ends_with}
+
+func get(s: string, idx: int) [int] {
+    if idx >= s.len() || idx < 0 {
+        return 0
+    }
+
+    return s[idx]
+}
+
+func main() {
+    println("Violette".get(0))
+
+    print("Does `Violette` start with `Vio`: ")
+    println("Violette".starts_with("Vio"))
+
+    print("Does `Violette` start with `Vim`: ")
+    println("Violette".starts_with("Vim"))
+
+    print("Does `Violette` ends with `lette`: ")
+    println("Violette".ends_with("lette"))
+
+    print("Does `Violette` ends with `latte`: ")
+    println("Violette".ends_with("latte"))
+}

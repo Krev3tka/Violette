@@ -64,3 +64,11 @@ void vio_str_release(VioString s) {
   if (hdr->ref_count == 0)
     free(hdr);
 }
+
+int64_t vio_str_get(VioString s, int64_t index) {
+  if (index >= s.len || index < 0) {
+    abort();
+  }
+
+  return (int64_t)s.data[index];
+}

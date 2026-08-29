@@ -108,7 +108,7 @@ impl Diagnostics for TypeError {
             }
             TypeError::MissingReturn {
                 name,
-                fun_span,
+                func_span: fun_span,
                 close_brace_span,
             } => {
                 let labels = [

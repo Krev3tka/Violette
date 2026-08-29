@@ -71,14 +71,14 @@ mod lexing_tests {
     }
 
     #[test]
-    fn fun_fetch_user() {
+    fn func_fetch_user() {
         let input =
-            "fun fetchUser(id: int) [Win(User) | Fail(string)] {} // it's fetchUser function";
+            "func fetchUser(id: int) [Win(User) | Fail(string)] {} // it's fetchUser funcction";
 
         assert_tokens(
             input,
             vec![
-                Token::Fun,
+                Token::Func,
                 Token::Identifier("fetchUser".to_string()),
                 Token::LeftParen,
                 Token::Identifier("id".to_string()),

@@ -5,7 +5,7 @@ struct Point {
     theta: float64
 }
 
-fun main() {
+func main() {
     let p1 = Point {
         r: 3.5,
         theta: 152.99

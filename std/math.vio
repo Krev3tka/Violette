@@ -1,6 +1,6 @@
 package math
 
-fun abs(n: float64) [float64] {
+func abs(n: float64) [float64] {
     if n >= 0.0 {
         return n
     }
@@ -8,7 +8,7 @@ fun abs(n: float64) [float64] {
     return -n
 }
 
-fun sqrt(val: float64) [float64] {
+func sqrt(val: float64) [float64] {
     if val < 0.0 {
         return -1.0
     }
@@ -31,11 +31,11 @@ fun sqrt(val: float64) [float64] {
     return guess
 }
 
-fun pow(base: float64, exp: float64) [float64] {
+func pow(base: float64, exp: float64) [float64] {
     return base ** exp
 }
 
-fun sign(n: int) [int] {
+func sign(n: int) [int] {
     if n < 0 {
         return -1
     } else if n == 0 {
@@ -45,27 +45,27 @@ fun sign(n: int) [int] {
     return 1
 }
 
-fun is_even(n: int) [bool] {
+func is_even(n: int) [bool] {
     return n % 2 == 0
 }
 
-fun is_odd(n: int) [bool] {
+func is_odd(n: int) [bool] {
     return n % 2 == 1
 }
 
-fun is_positive(n: int) [bool] {
+func is_positive(n: int) [bool] {
     return n > 0
 }
 
-fun is_negative(n: int) [bool] {
+func is_negative(n: int) [bool] {
     return n < 0
 }
 
-fun is_zero(n: int) [bool] {
+func is_zero(n: int) [bool] {
     return n == 0
 }
 
-fun min(this: int, other: int) [int] {
+func min(this: int, other: int) [int] {
     if this < other {
         return this
     }
@@ -73,7 +73,7 @@ fun min(this: int, other: int) [int] {
     return other
 }
 
-fun max(this: int, other: int) [int] {
+func max(this: int, other: int) [int] {
     if this >= other {
         return this
     }
@@ -81,7 +81,7 @@ fun max(this: int, other: int) [int] {
     return other
 }
 
-fun clamp(val: int, min: int, max: int) [int] {
+func clamp(val: int, min: int, max: int) [int] {
     if val < min {
         return min
     }
@@ -93,6 +93,6 @@ fun clamp(val: int, min: int, max: int) [int] {
     return val
 }
 
-fun hypot(a: float64, b: float64) [float64] {
+func hypot(a: float64, b: float64) [float64] {
     return sqrt(a * a + b * b)
 }

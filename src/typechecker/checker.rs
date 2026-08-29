@@ -42,7 +42,7 @@ impl Checker {
                     let ty = self.infer(value);
                     self.defined(name.clone(), ty, BindingKind::Const, *span);
                 }
-                Statement::Fun {
+                Statement::Func {
                     name,
                     params,
                     return_type,
@@ -87,7 +87,7 @@ impl Checker {
                     );
                 }
 
-                Statement::ExternFun {
+                Statement::ExternFunc {
                     name,
                     params,
                     return_type,
@@ -136,6 +136,69 @@ impl Checker {
                     }
                     self.structs.insert(name.clone(), fields);
                 }
+                Statement::Extend {
+                    target,
+                    methods,
+                    span
+                } => {
+                    let target_ty = self.resolve(target);
+
+                    match target_ty {
+                        Ty::Struct(struct_name) => {
+                            if !self.structs.contains_key(&struct_name) {
+                                self.errors.push(TypeError::UnknownName {
+                                    name: struct_name.clone(),
+                                    span: *span,
+                                });
+                                continue
+                            }
+
+                            for method in methods {
+                                if let Statement::Func { name, params, return_type, span, .. } = method {
+                                    let params: Vec<_> =
+                                        params.iter().map(|p| self.resolve(&p.param_type)).collect();
+
+                                    let ret = return_type.as_ref().map_or(Ty::Unit, |t| self.resolve(t));
+
+                                    let f = Ty::Fn {
+                                        params: params.clone(),
+                                        ret: Box::new(return_type.as_ref().map_or(Ty::Unit, |t| self.resolve(t))),
+                                    };
+
+                                    if self.funcs.contains_key(name) {
+                                        self.errors.push(TypeError::DuplicateDefinition {
+                                            name: name.clone(),
+                                            first_span: match self.funcs.get(name) {
+                                                Some(f) => f.span,
+                                                None => unreachable!(),
+                                            },
+                                            second_span: stmt.span(),
+                                            def_kind: DefinitionKind::Fun,
+                                        });
+                                        continue;
+                                    }
+
+                                    self.defined(name.clone(), f, BindingKind::Var, *span);
+                                    self.funcs.insert(
+                                        name.clone(),
+                                        FnSig {
+                                            params,
+                                            ret,
+                                            span: *span,
+                                        },
+                                    );
+                                }
+                            }
+                        }
+                        _ => {
+                            self.errors.push(TypeError::Unsupported {
+                                desc: format!("Cannot extend non-struct type {:?}", target_ty),
+                                span: *span
+                            });
+                        }
+                    }
+
+                }
                 _ => {}
             };
         }
@@ -179,7 +242,7 @@ impl Checker {
     pub fn check_fn(&mut self, stmt: &Statement) {
         self.env.push();
 
-        if let Statement::Fun {
+        if let Statement::Func {
             params,
             return_type,
             body,
@@ -326,7 +389,7 @@ impl Checker {
 
                 self.expect(&ty, cur_ref, stmt.span())
             }
-            Statement::ExternFun {
+            Statement::ExternFunc {
                 name, params, span, ..
             } => {
                 let sig = FnSig {
@@ -378,6 +441,13 @@ impl Checker {
                 }
             }
             Statement::Struct { .. } => self.check_struct(stmt),
+            Statement::Extend { methods, .. } => {
+                for method in methods {
+                    if let Statement::Func { .. } = method {
+                        self.check_fn(method);
+                    }
+                }
+            }
             _ => {}
         }
     }
@@ -480,7 +550,7 @@ impl Checker {
         self.define_builtins();
         self.collect_signatures(&program.declarations);
         for stmt in &program.declarations {
-            if let Statement::Fun { .. } = stmt {
+            if let Statement::Func { .. } = stmt {
                 self.check_fn(stmt);
             }
         }
@@ -658,12 +728,24 @@ impl Checker {
                     param: Box::new(Ty::Int),
                 }
             }
-            Expression::Index { .. } => {
-                self.errors.push(TypeError::Unsupported {
-                    desc: "Indexing".to_string(),
-                    span: expr.span(),
-                });
-                Ty::Error
+            Expression::Index { left, index, span } => {
+                let left_ty = self.infer(left.as_ref());
+                let index_ty = self.infer(index.as_ref());
+
+                self.expect(&index_ty, &Ty::Int, *span);
+
+                match left_ty {
+                    Ty::String => Ty::Int,
+                    Ty::Error => Ty::Error,
+                    _ => {
+                        self.errors.push(TypeError::Unsupported {
+                            desc: format!("Type `{:?}` doesn't support indexing", left_ty),
+                            span: *span,
+                        });
+
+                        Ty::Error
+                    }
+                }
             }
             Expression::Call {
                 function,
@@ -800,6 +882,29 @@ impl Checker {
                 args,
                 span,
             } => {
+                if let Expression::Identifier { name: mod_name, .. } = object.as_ref()
+                    && self.env.lookup(mod_name).is_none() && self.funcs.contains_key(name) {
+                    let sig = self.funcs.get(name).cloned().unwrap();
+
+                    if args.len() != sig.params.len() {
+                        self.errors.push(TypeError::ArityMismatch {
+                            name: name.clone(),
+                            expected: sig.params.len(),
+                            found: args.len(),
+                            span: *span,
+                        });
+                        return sig.ret;
+                    }
+
+                    for (arg, param_ty) in args.iter().zip(sig.params.iter()) {
+                        let a_ty = self.infer(arg);
+                        self.expect(&a_ty, param_ty, *span);
+                    }
+
+                    return sig.ret;
+
+                }
+
                 let obj_ty = self.infer(object.as_ref());
 
                 match &obj_ty {
@@ -923,7 +1028,7 @@ impl Checker {
     }
 
     pub fn check_returns(&mut self, stmt: &Statement) {
-        if let Statement::Fun {
+        if let Statement::Func {
             name,
             body,
             span,
@@ -940,7 +1045,7 @@ impl Checker {
             if !guarantee_returns {
                 self.errors.push(TypeError::MissingReturn {
                     name: name.clone(),
-                    fun_span: *span,
+                    func_span: *span,
                     close_brace_span: *ending_span,
                 })
             }
@@ -957,11 +1062,12 @@ impl Checker {
                 | Statement::While { .. }
                 | Statement::ForRange { .. }
                 | Statement::ForCounter { .. }
-                | Statement::Fun { .. }
+                | Statement::Func { .. }
                 | Statement::Struct { .. }
                 | Statement::Break { .. }
                 | Statement::Continue { .. }
-                | Statement::ExternFun { .. } => continue,
+                | Statement::ExternFunc { .. }
+                | Statement::Extend { .. } => continue,
                 Statement::If(IfStatement {
                     then_block,
                     else_if,
@@ -992,7 +1098,7 @@ impl Checker {
     }
 
     fn ret_type_is_unit(&mut self, stmt: &Statement) -> bool {
-        if let Statement::Fun { return_type, .. } = stmt {
+        if let Statement::Func { return_type, .. } = stmt {
             if return_type.is_none() {
                 return true;
             }

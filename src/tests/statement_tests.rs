@@ -6,11 +6,11 @@ pub mod statements_tests {
     use crate::lexer::token::{PrimitiveType, Token};
     use crate::parser::Statement;
     use crate::parser::parser::Parser;
-    use crate::parser::statement::{ElseIf, FunParam, StructParam};
+    use crate::parser::statement::{ElseIf, FuncParam, StructParam};
     use crate::parser::types::Type::{Primitive, Union};
     use crate::parser::types::{Type, TypePath};
     use crate::tests::helpers::{
-        assert_stmt_tests, call, const_stmt, expr_stmt, for_counter, for_range, fun, ident,
+        assert_stmt_tests, call, const_stmt, expr_stmt, for_counter, for_range, func, ident,
         if_stmt, index, infix, int, let_stmt, postfix, ret, struct_def, while_loop,
     };
 
@@ -114,17 +114,17 @@ if a > 7 {
     }
 
     #[test]
-    fn fun_fetch_user_ii() {
-        let input = "fun fetch_user(db: Sql.databases.psql, count: int) [Win(User) | Fail(NotFound) | Fail(NotConnected)] {
+    fn func_fetch_user_ii() {
+        let input = "func fetch_user(db: Sql.databases.psql, count: int) [Win(User) | Fail(NotFound) | Fail(NotConnected)] {
     return count + 5
 }";
 
         assert_stmt_tests(vec![(
             input,
-            fun(
+            func(
                 "fetch_user",
                 vec![
-                    FunParam {
+                    FuncParam {
                         name: "db".to_string(),
                         param_type: Type::Named(TypePath {
                             segments: vec![
@@ -135,7 +135,7 @@ if a > 7 {
                         }),
                         span: Span::default(),
                     },
-                    FunParam {
+                    FuncParam {
                         name: "count".to_string(),
                         param_type: Type::Primitive(PrimitiveType::Int),
                         span: Span::default(),
@@ -177,7 +177,7 @@ if a > 7 {
                 ),
             ),
             (
-                "fun BinarySearch(arr: std.vector, target: int) [Win(int) | Fail(NotFound)] {
+                "func BinarySearch(arr: std.vector, target: int) [Win(int) | Fail(NotFound)] {
     let left = 0
     let right = len(arr)
 
@@ -195,17 +195,17 @@ if a > 7 {
 
     return Fail(NotFound)
 }",
-                fun(
+                func(
                     "BinarySearch",
                     vec![
-                        FunParam {
+                        FuncParam {
                             name: "arr".to_string(),
                             param_type: Type::Named(TypePath {
                                 segments: vec!["std".to_string(), "vector".to_string()],
                             }),
                             span: Span::default(),
                         },
-                        FunParam {
+                        FuncParam {
                             name: "target".to_string(),
                             param_type: Type::Primitive(Int),
                             span: Span::default(),
@@ -331,8 +331,8 @@ if a > 7 {
     }
 
     #[test]
-    fn function_body_keeps_all_statements() {
-        let input = "fun outer() {
+    fn funcction_body_keeps_all_statements() {
+        let input = "func outer() {
             if c {
                 y()
             }
@@ -345,7 +345,7 @@ if a > 7 {
         let stmt = parser.parse_statement().expect("outer must be parsed");
 
         match stmt {
-            Statement::Fun { body, .. } => assert_eq!(body.len(), 2),
+            Statement::Func { body, .. } => assert_eq!(body.len(), 2),
             other => panic!("expected Fun, got {:?}", other),
         }
     }

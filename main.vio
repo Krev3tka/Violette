@@ -4,11 +4,11 @@ struct Config {
     age: `toml:int`
 }
 
-fun BuildConfig(c: &Config, name: string, age: int) [Win(Config) | Fail] {
+funс BuildConfig(c: &Config, name: string, age: int) [Win(Config) | Fail] {
     // ...
 }
 
-fun main() {
+funс main() {
     let cfg = Config {
         // ...
     }

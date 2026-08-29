@@ -1,10 +1,10 @@
-extern fun vio_to_float(n: int) [float64]
-extern fun vio_to_string(n: int) [string]
+extern func vio_to_float(n: int) [float64]
+extern func vio_to_string(n: int) [string]
 
-fun to_float(n: int) [float64] {
+func to_float(n: int) [float64] {
     return vio_to_float(n)
 }
 
-fun to_string(n: int) [string] {
+func to_string(n: int) [string] {
     return vio_to_string(n)
 }

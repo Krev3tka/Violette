@@ -1,6 +1,6 @@
 package if_else
 
-fun IfElse(x: float32) [float64] {
+func IfElse(x: float32) [float64] {
     if x > 5.0 {
         return x ** 2.0
     } else if x < 10.0 {
@@ -10,7 +10,7 @@ fun IfElse(x: float32) [float64] {
     }
 }
 
-fun main() {
+func main() {
     println(IfElse(6.0))
     println(IfElse(2.2))
     println(IfElse(19.0))

@@ -1,6 +1,6 @@
 package fizzbuzz
 
-fun main() {
+func main() {
     for i = 1; i <= 15; i++ {
         if i % 15 == 0 {
             println("fizzbuzz")

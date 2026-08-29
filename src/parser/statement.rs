@@ -67,16 +67,16 @@ pub enum Statement {
         span: Span,
     },
 
-    ExternFun {
+    ExternFunc {
         name: String,
-        params: Vec<FunParam>,
+        params: Vec<FuncParam>,
         return_type: Option<Type>,
         span: Span,
     },
 
-    Fun {
+    Func {
         name: String,
-        params: Vec<FunParam>,
+        params: Vec<FuncParam>,
         return_type: Option<Type>,
         body: Vec<Statement>,
         span: Span,
@@ -85,9 +85,15 @@ pub enum Statement {
 
     Struct {
         name: String,
-        fields: Vec<FunParam>,
+        fields: Vec<FuncParam>,
         span: Span,
     },
+
+    Extend {
+        target: Type,
+        methods: Vec<Statement>,
+        span: Span,
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -107,13 +113,13 @@ pub struct ElseIf {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct FunParam {
+pub struct FuncParam {
     pub name: String,
     pub param_type: Type,
     pub(crate) span: Span,
 }
 
-pub type StructParam = FunParam;
+pub type StructParam = FuncParam;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct MatchArm {
@@ -168,7 +174,7 @@ impl Parser {
             Token::If => self.parse_if_statement(),
             Token::While => self.parse_while_statement(),
             Token::For => self.parse_for_statement(),
-            Token::Fun if matches!(self.peek_token.token, Token::Identifier(_)) => {
+            Token::Func if matches!(self.peek_token.token, Token::Identifier(_)) => {
                 self.parse_function()
             }
             Token::Break => {
@@ -207,6 +213,7 @@ impl Parser {
                 })
             }
             Token::Struct => self.parse_struct(),
+            Token::Extend => self.parse_extend(),
             _ => {
                 let expr = self.parse_expression(Lowest)?;
                 self.next_token();
@@ -421,7 +428,7 @@ impl Parser {
     pub fn parse_function(&mut self) -> Result<Statement, ParseError> {
         let mut span = self.current_token.span;
 
-        self.expect(Token::Fun)?;
+        self.expect(Token::Func)?;
 
         let name = match self.current_token.token.clone() {
             Token::Identifier(fun_name) => fun_name.clone(),
@@ -446,7 +453,7 @@ impl Parser {
         let (body, ending_span) = self.parse_block()?;
         let ending_span = ending_span.unwrap();
 
-        Ok(Statement::Fun {
+        Ok(Statement::Func {
             name,
             params,
             return_type,
@@ -460,7 +467,7 @@ impl Parser {
         let mut span = self.current_token.span;
 
         self.expect(Token::Extern)?;
-        self.expect(Token::Fun)?;
+        self.expect(Token::Func)?;
 
         let name = match self.current_token.token.clone() {
             Token::Identifier(fun_name) => fun_name.clone(),
@@ -484,7 +491,7 @@ impl Parser {
             _ => None,
         };
 
-        Ok(Statement::ExternFun {
+        Ok(Statement::ExternFunc {
             name,
             params,
             return_type,
@@ -592,6 +599,42 @@ impl Parser {
         }
 
         Ok(packages)
+    }
+
+    pub fn parse_extend(&mut self) -> Result<Statement, ParseError> {
+        let start_span = self.current_token.span;
+
+        self.expect(Token::Extend)?;
+
+        let target = self.parse_type()?;
+        self.skip_terminators();
+
+        let end_span = self.current_token.span;
+
+        self.expect(Token::LeftBrace)?;
+        self.skip_terminators();
+
+        let mut methods = Vec::new();
+
+        while !matches!(self.current_token.token, Token::RightBrace) {
+            let method = self.parse_statement()?;
+
+            match method {
+                Statement::Func { .. } => {
+                    methods.push(method);
+                    self.skip_terminators();
+                }
+                _ => return Err(self.unexpected(&self.current_token)),
+            }
+        }
+
+        self.expect(Token::RightBrace)?;
+
+        Ok(Statement::Extend {
+            target,
+            methods,
+            span: start_span.merge(&end_span)
+        })
     }
 
     fn parse_statements(&mut self) -> Result<Vec<Statement>, ParseError> {
@@ -707,9 +750,10 @@ impl Statement {
             Statement::ForRange { span, .. } => *span,
             Statement::ForCounter { span, .. } => *span,
             Statement::Return { span, .. } => *span,
-            Statement::ExternFun { span, .. } => *span,
-            Statement::Fun { span, .. } => *span,
+            Statement::ExternFunc { span, .. } => *span,
+            Statement::Func { span, .. } => *span,
             Statement::Struct { span, .. } => *span,
+            Statement::Extend { span, .. } => *span,
             Statement::Break { span } => *span,
             Statement::Continue { span } => *span,
         }
