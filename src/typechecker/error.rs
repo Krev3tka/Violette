@@ -118,4 +118,10 @@ pub enum TypeError {
         method: String,
         span: Span,
     },
+    MethodFoundAsGlobal {
+        ty: Ty,
+        method: String,
+        span: Span,
+        help: String,
+    },
 }

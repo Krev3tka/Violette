@@ -93,7 +93,7 @@ pub enum Statement {
         target: Type,
         methods: Vec<Statement>,
         span: Span,
-    }
+    },
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -633,7 +633,7 @@ impl Parser {
         Ok(Statement::Extend {
             target,
             methods,
-            span: start_span.merge(&end_span)
+            span: start_span.merge(&end_span),
         })
     }
 

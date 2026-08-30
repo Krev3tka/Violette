@@ -272,7 +272,7 @@ impl ClearSpan for Statement {
                 for method in methods {
                     method.clear_span();
                 }
-                
+
                 *span = Span::default();
             }
         }

@@ -112,24 +112,43 @@ impl Codegen {
                     params_str
                 };
                 lines.push(format!("{ret_str} {c_name}({params_str});"))
-            } else if let Statement::Extend { target, methods, .. } =s {
+            } else if let Statement::Extend {
+                target, methods, ..
+            } = s
+            {
                 let target_ty = self.checker.resolve(target);
                 let target_name = match target_ty {
                     Ty::Struct(name) => name,
-                    _ => format!("{:?}", target_ty)
+                    _ => format!("{:?}", target_ty),
                 };
 
                 for method in methods {
-                    if let Statement::Func { name, params, return_type, .. } = method {
+                    if let Statement::Func {
+                        name,
+                        params,
+                        return_type,
+                        ..
+                    } = method
+                    {
                         let c_name = format!("vio_user_{}_{}", target_name, name);
-                        let ret_ty = return_type.as_ref().map_or(Ty::Unit, |t| self.checker.resolve(t));
+                        let ret_ty = return_type
+                            .as_ref()
+                            .map_or(Ty::Unit, |t| self.checker.resolve(t));
                         let ret_str = self.c_type(&ret_ty);
-                        let params_str = params.iter().map(|p| {
+                        let params_str = params
+                            .iter()
+                            .map(|p| {
                                 let ty = self.checker.resolve(&p.param_type);
                                 format!("{} {}", self.c_type(&ty), p.name)
-                            }).collect::<Vec<_>>().join(", ");
+                            })
+                            .collect::<Vec<_>>()
+                            .join(", ");
 
-                        let params_str = if params_str.is_empty() { "void".to_string() } else { params_str };
+                        let params_str = if params_str.is_empty() {
+                            "void".to_string()
+                        } else {
+                            params_str
+                        };
                         lines.push(format!("{ret_str} {c_name}({params_str});"));
                     }
                 }
@@ -331,12 +350,25 @@ impl Codegen {
 
                 let f = self.emit_expression(function.as_ref())?;
 
-                let c_fn_name =
+                let mut c_fn_name =
                     if f == "main" || f.starts_with("vio_") || self.extern_funcs.contains(&f) {
                         f.clone()
                     } else {
                         format!("vio_user_{}", f)
                     };
+
+                if let Expression::Identifier { name, .. } = function.as_ref()
+                    && self.checker.env.lookup(name).is_none()
+                    && !args.is_empty()
+                {
+                    let first_arg_ty = self.checker.infer(&args[0]);
+                    if let Ty::Struct(ref s_name) = first_arg_ty {
+                        let method_sig_name = format!("{}.{}", s_name, name);
+                        if self.checker.funcs.contains_key(&method_sig_name) {
+                            c_fn_name = format!("vio_user_{}_{}", s_name, name);
+                        }
+                    }
+                }
 
                 let a = args
                     .iter()
@@ -349,28 +381,31 @@ impl Codegen {
             Expression::MethodCall {
                 object, name, args, ..
             } => {
-                let (c_fn_name, is_static_or_module) = if let Expression::Identifier { name: obj_name, .. } = object.as_ref() {
-                    if self.checker.structs.contains_key(obj_name) {
-                        (format!("vio_user_{}_{}", obj_name, name), true)
-                    } else if name == "main" || name.starts_with("vio_") || self.extern_funcs.contains(name) {
-                        (name.clone(), false)
-                    } else if self.checker.env.lookup(obj_name).is_none() {
-                        (format!("vio_user_{}", name), true)
+                let (c_fn_name, is_static_or_module) =
+                    if let Expression::Identifier { name: obj_name, .. } = object.as_ref() {
+                        if self.checker.structs.contains_key(obj_name) {
+                            (format!("vio_user_{}_{}", obj_name, name), true)
+                        } else if name == "main"
+                            || name.starts_with("vio_")
+                            || self.extern_funcs.contains(name)
+                        {
+                            (name.clone(), false)
+                        } else if self.checker.env.lookup(obj_name).is_none() {
+                            (format!("vio_user_{}", name), true)
+                        } else {
+                            let obj_ty = self.checker.infer(object.as_ref());
+                            match obj_ty {
+                                Ty::Struct(s) => (format!("vio_user_{}_{}", s, name), false),
+                                _ => (format!("vio_user_{}", name), false),
+                            }
+                        }
                     } else {
                         let obj_ty = self.checker.infer(object.as_ref());
                         match obj_ty {
                             Ty::Struct(s) => (format!("vio_user_{}_{}", s, name), false),
                             _ => (format!("vio_user_{}", name), false),
                         }
-                    }
-                } else {
-                    let obj_ty = self.checker.infer(object.as_ref());
-                    match obj_ty {
-                        Ty::Struct(s) => (format!("vio_user_{}_{}", s, name), false),
-                        _ => (format!("vio_user_{}", name), false),
-                    }
-                };
-
+                    };
 
                 let mut all_args = Vec::new();
 
@@ -516,12 +551,14 @@ impl Codegen {
             Statement::Continue { .. } => "continue;".to_string(),
             Statement::Func { .. } => self.emit_function(stmt)?,
             Statement::Struct { .. } => self.emit_struct(stmt)?,
-            Statement::Extend { target, methods, .. } => {
+            Statement::Extend {
+                target, methods, ..
+            } => {
                 let target_ty = self.checker.resolve(target);
 
                 let target_name = match target_ty {
                     Ty::Struct(name) => name,
-                    _ => format!("{:?}", target_ty)
+                    _ => format!("{:?}", target_ty),
                 };
 
                 let mut lines = Vec::new();
@@ -629,11 +666,12 @@ impl Codegen {
 
     pub fn emit_function(&mut self, stmt: &Statement) -> Result<String, CodegenError> {
         if let Statement::Func { name, .. } = stmt {
-            let c_name = if name == "main" || name.starts_with("vio_") || self.extern_funcs.contains(name) {
-                name.clone()
-            } else {
-                format!("vio_user_{}", name)
-            };
+            let c_name =
+                if name == "main" || name.starts_with("vio_") || self.extern_funcs.contains(name) {
+                    name.clone()
+                } else {
+                    format!("vio_user_{}", name)
+                };
 
             self.emit_function_custom(stmt, &c_name)
         } else {
@@ -641,7 +679,11 @@ impl Codegen {
         }
     }
 
-    pub fn emit_function_custom(&mut self, stmt: &Statement, c_name: &str) -> Result<String, CodegenError> {
+    pub fn emit_function_custom(
+        &mut self,
+        stmt: &Statement,
+        c_name: &str,
+    ) -> Result<String, CodegenError> {
         if let Statement::Func {
             name,
             params,

@@ -176,6 +176,39 @@ impl Diagnostics for TypeError {
                     },
                 )
             }
+            TypeError::MethodFoundAsGlobal {
+                ty,
+                method,
+                span,
+                help,
+            } => {
+                let labels = [Label::primary(
+                    *span,
+                    format!(
+                        "method not found on type `{}`",
+                        match ty {
+                            Ty::Struct(s) => s.clone(),
+                            _ => format!("{:?}", ty),
+                        }
+                    ),
+                    path.to_string(),
+                )];
+
+                self.report(
+                    path.to_string(),
+                    *span,
+                    format!(
+                        "no method named `{}` found for type `{}`",
+                        method,
+                        match ty {
+                            Ty::Struct(s) => s.clone(),
+                            _ => format!("{:?}", ty),
+                        }
+                    ),
+                    &labels,
+                    Some(help),
+                )
+            }
             _ => format!("{:?}", self),
         }
     }

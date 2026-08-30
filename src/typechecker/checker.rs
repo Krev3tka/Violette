@@ -139,7 +139,7 @@ impl Checker {
                 Statement::Extend {
                     target,
                     methods,
-                    span
+                    span,
                 } => {
                     let target_ty = self.resolve(target);
 
@@ -150,24 +150,31 @@ impl Checker {
                                     name: struct_name.clone(),
                                     span: *span,
                                 });
-                                continue
+                                continue;
                             }
 
                             for method in methods {
-                                if let Statement::Func { name, params, return_type, span, .. } = method {
-                                    let params: Vec<_> =
-                                        params.iter().map(|p| self.resolve(&p.param_type)).collect();
+                                if let Statement::Func {
+                                    name,
+                                    params,
+                                    return_type,
+                                    span,
+                                    ..
+                                } = method
+                                {
+                                    let full_name = format!("{}.{}", struct_name, name);
 
-                                    let ret = return_type.as_ref().map_or(Ty::Unit, |t| self.resolve(t));
+                                    let params_ty: Vec<_> = params
+                                        .iter()
+                                        .map(|p| self.resolve(&p.param_type))
+                                        .collect();
 
-                                    let f = Ty::Fn {
-                                        params: params.clone(),
-                                        ret: Box::new(return_type.as_ref().map_or(Ty::Unit, |t| self.resolve(t))),
-                                    };
+                                    let ret =
+                                        return_type.as_ref().map_or(Ty::Unit, |t| self.resolve(t));
 
-                                    if self.funcs.contains_key(name) {
+                                    if self.funcs.contains_key(&full_name) {
                                         self.errors.push(TypeError::DuplicateDefinition {
-                                            name: name.clone(),
+                                            name: full_name.clone(),
                                             first_span: match self.funcs.get(name) {
                                                 Some(f) => f.span,
                                                 None => unreachable!(),
@@ -178,11 +185,10 @@ impl Checker {
                                         continue;
                                     }
 
-                                    self.defined(name.clone(), f, BindingKind::Var, *span);
                                     self.funcs.insert(
-                                        name.clone(),
+                                        full_name.clone(),
                                         FnSig {
-                                            params,
+                                            params: params_ty,
                                             ret,
                                             span: *span,
                                         },
@@ -193,11 +199,10 @@ impl Checker {
                         _ => {
                             self.errors.push(TypeError::Unsupported {
                                 desc: format!("Cannot extend non-struct type {:?}", target_ty),
-                                span: *span
+                                span: *span,
                             });
                         }
                     }
-
                 }
                 _ => {}
             };
@@ -752,6 +757,34 @@ impl Checker {
                 args,
                 span,
             } => {
+                let arg_types: Vec<Ty> = args.iter().map(|a| self.infer(a)).collect();
+
+                if let Expression::Identifier { name, .. } = function.as_ref()
+                    && self.env.lookup(name).is_none()
+                    && !args.is_empty()
+                    && let Ty::Struct(ref s_name) = arg_types[0]
+                {
+                    let method_name = format!("{}.{}", s_name, name);
+                    if let Some(sig) = self.funcs.get(&method_name).cloned() {
+                        if args.len() != sig.params.len() {
+                            self.errors.push(TypeError::ArityMismatch {
+                                name: name.clone(),
+                                expected: sig.params.len(),
+                                found: args.len(),
+                                span: *span,
+                            });
+                            return sig.ret;
+                        }
+
+                        for ((a_ty, arg), param) in
+                            arg_types.iter().zip(args.iter()).zip(sig.params.iter())
+                        {
+                            self.expect(a_ty, param, arg.span());
+                        }
+                        return sig.ret;
+                    }
+                }
+
                 let callee = self.infer(function);
                 match callee {
                     Ty::Fn { params, ret } => {
@@ -882,92 +915,105 @@ impl Checker {
                 args,
                 span,
             } => {
-                if let Expression::Identifier { name: mod_name, .. } = object.as_ref()
-                    && self.env.lookup(mod_name).is_none() && self.funcs.contains_key(name) {
-                    let sig = self.funcs.get(name).cloned().unwrap();
+                let mut found_sig = None;
+                let mut is_static = false;
+                let mut obj_ty = Ty::Error;
 
-                    if args.len() != sig.params.len() {
+                if let Expression::Identifier { name: obj_name, .. } = object.as_ref() {
+                    if self.structs.contains_key(obj_name) {
+                        let sig_name = format!("{}.{}", obj_name, name);
+                        found_sig = self.funcs.get(&sig_name).cloned();
+                        is_static = true;
+                    } else if self.env.lookup(obj_name).is_none() {
+                        found_sig = self.funcs.get(name).cloned();
+                        if found_sig.is_some() {
+                            is_static = true;
+                        }
+                    }
+                }
+
+                if !is_static {
+                    obj_ty = self.infer(object.as_ref());
+                    let sig_name = match &obj_ty {
+                        Ty::Struct(s) => format!("{}.{}", s, name),
+                        Ty::String | Ty::Int | Ty::Float | Ty::Bool => name.clone(),
+                        Ty::Error => return Ty::Error,
+                        _ => {
+                            self.errors.push(TypeError::NoSuchMethod {
+                                ty: obj_ty.clone(),
+                                method: name.clone(),
+                                span: *span,
+                            });
+                            return Ty::Error;
+                        }
+                    };
+                    found_sig = self.funcs.get(&sig_name).cloned();
+                }
+
+                if let Some(sig) = found_sig {
+                    let expected_args = if is_static {
+                        &sig.params[..]
+                    } else {
+                        if sig.params.is_empty() {
+                            self.errors.push(TypeError::ArityMismatch {
+                                name: name.clone(),
+                                expected: 1,
+                                found: 0,
+                                span: *span,
+                            });
+                            return Ty::Error;
+                        }
+                        self.expect(&obj_ty, &sig.params[0], object.span());
+                        &sig.params[1..]
+                    };
+
+                    if args.len() != expected_args.len() {
                         self.errors.push(TypeError::ArityMismatch {
                             name: name.clone(),
-                            expected: sig.params.len(),
+                            expected: expected_args.len(),
                             found: args.len(),
                             span: *span,
                         });
                         return sig.ret;
                     }
 
-                    for (arg, param_ty) in args.iter().zip(sig.params.iter()) {
+                    for (arg, param_ty) in args.iter().zip(expected_args.iter()) {
                         let a_ty = self.infer(arg);
-                        self.expect(&a_ty, param_ty, *span);
+                        self.expect(&a_ty, param_ty, arg.span());
                     }
 
-                    return sig.ret;
-
-                }
-
-                let obj_ty = self.infer(object.as_ref());
-
-                match &obj_ty {
-                    Ty::Struct(struct_name) => {
-                        if !self.structs.contains_key(struct_name) {
-                            self.errors.push(TypeError::UnknownName {
-                                name: name.clone(),
+                    sig.ret
+                } else {
+                    if is_static {
+                        self.errors.push(TypeError::UnknownName {
+                            name: name.clone(),
+                            span: *span,
+                        });
+                    } else {
+                        if let Some(global_sig) = self.funcs.get(name)
+                            && !global_sig.params.is_empty()
+                            && global_sig.params[0] == obj_ty
+                        {
+                            self.errors.push(TypeError::MethodFoundAsGlobal {
+                                ty: obj_ty.clone(),
+                                method: name.clone(),
                                 span: *span,
+                                help: format!(
+                                    "there is a global function `{}`, did you want to declare it to `extend {} {{ ... }}`?",
+                                    name,
+                                    match obj_ty {
+                                        Ty::Struct(ref s_name) => s_name,
+                                        _ => "Type"
+                                    }),
                             });
                             return Ty::Error;
                         }
-                    }
-                    Ty::String | Ty::Int | Ty::Float | Ty::Bool => {}
-                    _ => {
                         self.errors.push(TypeError::NoSuchMethod {
                             ty: obj_ty,
                             method: name.clone(),
                             span: *span,
                         });
-
-                        return Ty::Error;
                     }
-                };
-
-                let sig = self.funcs.get(name).cloned();
-
-                if let Some(sig) = sig {
-                    if sig.params.is_empty() {
-                        self.errors.push(TypeError::ArityMismatch {
-                            name: name.clone(),
-                            expected: 1,
-                            found: 0,
-                            span: *span,
-                        });
-                        return Ty::Error;
-                    }
-
-                    self.expect(&obj_ty, &sig.params[0], object.span());
-
-                    let rest_params = &sig.params[1..];
-                    if args.len() != rest_params.len() {
-                        self.errors.push(TypeError::ArityMismatch {
-                            name: name.clone(),
-                            expected: rest_params.len(),
-                            found: args.len(),
-                            span: *span,
-                        });
-
-                        return sig.ret.clone();
-                    }
-
-                    for (arg, param_ty) in args.iter().zip(rest_params.iter()) {
-                        let a_ty = self.infer(arg);
-                        self.expect(&a_ty, param_ty, arg.span());
-                    }
-
-                    sig.ret.clone()
-                } else {
-                    self.errors.push(TypeError::UnknownName {
-                        name: name.clone(),
-                        span: *span,
-                    });
-
                     Ty::Error
                 }
             }
