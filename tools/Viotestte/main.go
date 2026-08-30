@@ -18,6 +18,7 @@ var ExpectedErrors = map[string]string{
 	"fail_not_full_return.vio":   "there's no `return` in every path",
 	"fail_redefine_fun_vars.vio": "couldn't re-define",
 	"fail_user_struct.vio":       "couldn't re-define",
+	"fail_with_no_extend.vio":    "no method named `distance` found for type `Point`",
 }
 
 var ExpectedOutputs = map[string]string{
@@ -25,12 +26,12 @@ var ExpectedOutputs = map[string]string{
 	"demo_showcase.vio":   "3.16228\n8\nIs `Violette` empty?: false",
 	"escape_analysis.vio": "Quotes: \"Hello, Violette!\"\nBackslash: \\",
 	"extern_fun.vio":      "64\n8\n3",
+	"extend_demo.vio":     "5",
 	"factorial.vio":       "120\n1\n1",
 	"fibonacci.vio":       "55",
 	"field_assigning.vio": "15",
 	"fizzbuzz.vio":        "1\n2\nfizz\n4\nbuzz\nfizz\n7\n8\nfizz\nbuzz\n11\nfizz\n13\n14\nfizzbuzz",
 	"if_else.vio":         "36\n10.648\n361",
-	"methodology.vio":     "5",
 	"moduling.vio":        "17",
 	"multiplication_table_via_ranges.vio": "1 2 3 4 5 6 7 8 9 \n" +
 		"2 4 6 8 10 12 14 16 18 \n" +
@@ -66,7 +67,7 @@ type TestCase struct {
 }
 
 func runCompiler(filePath string) (string, error) {
-	cmd := exec.Command("cargo", "run", "--quiet", "--", "run", filePath)
+	cmd := exec.Command("../../target/debug/violette", "run", filePath)
 
 	output, err := cmd.CombinedOutput()
 
@@ -117,6 +118,11 @@ func WalkDirFunc(path string, d fs.DirEntry, err error) error {
 }
 
 func main() {
+    buildCmd := exec.Command("cargo", "build", "--quiet")
+	if err := buildCmd.Run(); err != nil {
+		log.Fatalf("Failed to build Violette: %v", err)
+	}
+
 	err := filepath.WalkDir(TestPaths, WalkDirFunc)
 
 	if err != nil {
