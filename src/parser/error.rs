@@ -1,19 +1,12 @@
 use crate::lexer::span::Span;
 use crate::lexer::token::Token;
 
-#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum ParseError {
     ExpectedIdentifier {
         context: &'static str,
         found: Token,
-        span: Span
-    },
-
-    ExpectedExpression {
-        context: &'static str,
-        found: Token,
-        span: Span
+        span: Span,
     },
 
     ExpectedAssign {
@@ -23,10 +16,10 @@ pub enum ParseError {
     },
 
     UnclosedDelimiter {
-        open_token: Token,
+        open_token: Box<Token>,
         open_span: Span,
-        expected_token: Token,
-        found_tok: Token,
+        expected_token: Box<Token>,
+        found_tok: Box<Token>,
         found_span: Span,
     },
 
@@ -38,17 +31,16 @@ pub enum ParseError {
     ExpectedType {
         context: &'static str,
         found: Token,
-        span: Span
+        span: Span,
     },
 
     InvalidTypeSyntax {
         desc: &'static str,
-        span: Span
+        span: Span,
     },
 
-
     InvalidForLoopSyntax {
-        span: Span
+        span: Span,
     },
 
     InvalidElseBranch {
@@ -61,18 +53,17 @@ pub enum ParseError {
         span: Span,
     },
 
-
     UnexpectedEof {
         expected: &'static str,
         span: Span,
     },
 
     TooDeep {
-        span: Span
+        span: Span,
     },
 
     UnexpectedToken {
         token: Token,
-        span: Span
+        span: Span,
     },
 }

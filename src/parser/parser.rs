@@ -1,9 +1,9 @@
 use crate::lexer::lexer::Lexer;
 use crate::lexer::span::SpannedToken;
 use crate::lexer::token::{PrimitiveType, Token};
-use crate::parser::{ParseError, Precedence};
 use crate::parser::expression::token_precedence;
 use crate::parser::types::{Type, TypePath};
+use crate::parser::{ParseError, Precedence};
 
 pub const MAX_DEPTH: u32 = 64;
 
@@ -41,8 +41,8 @@ impl Parser {
     pub fn unexpected(&self, tok: &SpannedToken) -> ParseError {
         if tok.token == Token::Eof {
             ParseError::UnexpectedEof {
-                expected: "",
-                span: tok.span
+                expected: "expression or statement",
+                span: tok.span,
             }
         } else {
             ParseError::UnexpectedToken {
@@ -69,9 +69,17 @@ impl Parser {
     fn parse_type_inner(&mut self) -> Result<Type, ParseError> {
         if matches!(self.current_token.token, Token::Func) {
             self.next_token();
-            let open_token = self.current_token.token.clone();
-            let open_span = self.current_token.span;
-            self.expect(Token::LeftParen, self.unexpected(&self.current_token))?;
+
+            let open_paren_tok = self.current_token.token.clone();
+            let open_paren_span = self.current_token.span;
+
+            self.expect(
+                Token::LeftParen,
+                ParseError::InvalidTypeSyntax {
+                    desc: "expected '(' after 'func' in function type",
+                    span: self.current_token.span,
+                },
+            )?;
 
             let mut types = Vec::new();
 
@@ -85,37 +93,45 @@ impl Parser {
                     }
                 }
             }
-            self.expect(Token::RightParen, ParseError::UnclosedDelimiter {
-                open_token,
-                open_span,
-                expected_token: Token::RightParen,
-                found_tok: self.current_token.token.clone(),
-                found_span: self.current_token.span
-            })?;
+
+            self.expect(
+                Token::RightParen,
+                ParseError::UnclosedDelimiter {
+                    open_token: Box::new(open_paren_tok),
+                    open_span: open_paren_span,
+                    expected_token: Box::new(Token::RightParen),
+                    found_tok: Box::new(self.current_token.token.clone()),
+                    found_span: self.current_token.span,
+                },
+            )?;
 
             let mut ret = None;
 
             if matches!(self.current_token.token, Token::LeftBracket) {
-                let open_token = self.current_token.token.clone();
-                let open_span = self.current_token.span;
+                let open_bracket_tok = self.current_token.token.clone();
+                let open_bracket_span = self.current_token.span;
                 self.next_token();
 
                 ret = Some(Box::new(self.parse_type()?));
-                self.expect(Token::RightBracket, ParseError::UnclosedDelimiter {
-                    open_token,
-                    open_span,
-                    expected_token: Token::RightBracket,
-                    found_tok: self.current_token.token.clone(),
-                    found_span: self.current_token.span
-                })?;
+
+                self.expect(
+                    Token::RightBracket,
+                    ParseError::UnclosedDelimiter {
+                        open_token: Box::new(open_bracket_tok),
+                        open_span: open_bracket_span,
+                        expected_token: Box::new(Token::RightBracket),
+                        found_tok: Box::new(self.current_token.token.clone()),
+                        found_span: self.current_token.span,
+                    },
+                )?;
             }
 
             return Ok(Type::Fn { params: types, ret });
         }
 
         if matches!(self.current_token.token, Token::LeftBracket) {
-            let open_token = self.current_token.token.clone();
-            let open_span = self.current_token.span;
+            let open_bracket_tok = self.current_token.token.clone();
+            let open_bracket_span = self.current_token.span;
             self.next_token();
 
             let mut variants = Vec::new();
@@ -129,13 +145,16 @@ impl Parser {
                 self.skip_terminators();
             }
 
-            self.expect(Token::RightBracket, ParseError::UnclosedDelimiter {
-                open_token,
-                open_span,
-                expected_token: Token::RightBracket,
-                found_tok: self.current_token.token.clone(),
-                found_span: self.current_token.span
-            })?;
+            self.expect(
+                Token::RightBracket,
+                ParseError::UnclosedDelimiter {
+                    open_token: Box::new(open_bracket_tok),
+                    open_span: open_bracket_span,
+                    expected_token: Box::new(Token::RightBracket),
+                    found_tok: Box::new(self.current_token.token.clone()),
+                    found_span: self.current_token.span,
+                },
+            )?;
 
             if variants.len() == 1 {
                 return Ok(variants.remove(0));
@@ -209,25 +228,34 @@ impl Parser {
 
                     match self.current_token.token.clone() {
                         Token::Identifier(subname) => segments.push(subname),
-                        _ => return Err(self.unexpected(&self.current_token)),
+                        _ => {
+                            return Err(ParseError::ExpectedIdentifier {
+                                context: "after '.' in type path",
+                                found: self.current_token.token.clone(),
+                                span: self.current_token.span,
+                            });
+                        }
                     }
 
-                    self.next_token()
+                    self.next_token();
                 }
 
                 if matches!(self.current_token.token, Token::LeftParen) {
-                    let open_token = self.current_token.token.clone();
-                    let open_span = self.current_token.span;
+                    let open_paren_tok = self.current_token.token.clone();
+                    let open_paren_span = self.current_token.span;
 
                     self.expect(Token::LeftParen, self.unexpected(&self.current_token))?;
                     let param = self.parse_single_type()?;
-                    self.expect(Token::RightParen, ParseError::UnclosedDelimiter {
-                        open_token,
-                        open_span,
-                        expected_token: Token::RightParen,
-                        found_tok: self.current_token.token.clone(),
-                        found_span: self.current_token.span
-                    })?;
+                    self.expect(
+                        Token::RightParen,
+                        ParseError::UnclosedDelimiter {
+                            open_token: Box::new(open_paren_tok),
+                            open_span: open_paren_span,
+                            expected_token: Box::new(Token::RightParen),
+                            found_tok: Box::new(self.current_token.token.clone()),
+                            found_span: self.current_token.span,
+                        },
+                    )?;
 
                     Ok(Type::Generic {
                         name: segments.last().unwrap().clone(),
@@ -238,7 +266,11 @@ impl Parser {
                 }
             }
 
-            _ => Err(self.unexpected(&self.current_token)),
+            _ => Err(ParseError::ExpectedType {
+                context: "in type annotation",
+                found: self.current_token.token.clone(),
+                span: self.current_token.span,
+            }),
         }
     }
 

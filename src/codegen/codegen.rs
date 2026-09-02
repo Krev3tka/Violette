@@ -216,7 +216,11 @@ impl Codegen {
 
         if !prg.main.is_empty() {
             lines.push("int main(void) {".to_string());
+
+            self.checker.env.push();
             lines.push(self.emit_block(&prg.main)?);
+            self.checker.env.pop();
+
             lines.push("}".to_string());
         }
 
@@ -330,9 +334,10 @@ impl Codegen {
                         Ty::Bool => "bool",
                         Ty::String => "string",
                         _ => {
-                            return Err(CodegenError::Unsupported(
-                                "print for this type".to_string(),
-                            ));
+                            return Err(CodegenError::Unsupported(format!(
+                                "print for this type: {:?}",
+                                arg_ty
+                            )));
                         }
                     };
 
@@ -508,18 +513,8 @@ impl Codegen {
                 name,
                 params,
                 return_type,
-                span,
+                ..
             } => {
-                let param_tys: Vec<Ty> = params
-                    .iter()
-                    .map(|p| self.checker.resolve(&p.param_type))
-                    .collect();
-
-                for (p, param_ty) in params.iter().zip(param_tys.iter()) {
-                    self.checker
-                        .defined(p.name.clone(), param_ty.clone(), BindingKind::Var, *span)
-                }
-
                 let mut ret = Ty::Unit;
 
                 if let Some(ty) = return_type {

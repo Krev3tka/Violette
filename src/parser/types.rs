@@ -1,5 +1,4 @@
-use crate::lexer::span::Span;
-use crate::lexer::token::{PrimitiveType, Token};
+use crate::lexer::token::PrimitiveType;
 use crate::parser::error::ParseError;
 use crate::parser::parser::MAX_DEPTH;
 
@@ -32,10 +31,11 @@ impl std::fmt::Display for ParseError {
                 "unexpected token: {:?} at {}:{}",
                 token, span.start.line, span.start.col
             ),
-            ParseError::UnexpectedEof {
-                expected,
-                span
-            } => write!(f, "unexpected end of file, expected {} at the {}:{}", expected, span.start.line, span.start.col),
+            ParseError::UnexpectedEof { expected, span } => write!(
+                f,
+                "unexpected end of file, expected {} at the {}:{}",
+                expected, span.start.line, span.start.col
+            ),
             ParseError::TooDeep { span } => {
                 write!(
                     f,
@@ -43,7 +43,7 @@ impl std::fmt::Display for ParseError {
                     MAX_DEPTH, span.start.line, span.start.col
                 )
             }
-            _ => write!(f, "not ready yet"),
+            _ => write!(f, "not ready yet, {:?}", self),
         }
     }
 }

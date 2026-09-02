@@ -121,6 +121,7 @@ pub enum RangeKind {
     /// **doesn't include right bound of the range**
     ///
     /// # Examples:
+    /// # Examples:
     /// ```violette
     /// funс main() {
     ///     for i in 1:10 {
@@ -195,6 +196,7 @@ impl Parser {
         self.depth -= 1;
         result
     }
+
     fn parse_expression_inner(&mut self, precedence: Precedence) -> Result<Expression, ParseError> {
         let mut start_span = self.current_token.span;
 
@@ -231,6 +233,9 @@ impl Parser {
                 span: start_span,
             },
             Token::LeftParen => {
+                let open_token = self.current_token.token.clone();
+                let open_span = self.current_token.span;
+
                 self.paren_depth += 1;
                 self.next_token();
                 self.skip_terminators();
@@ -243,7 +248,13 @@ impl Parser {
                     self.paren_depth -= 1;
                     expr
                 } else {
-                    return Err(self.unexpected(&self.current_token));
+                    return Err(ParseError::UnclosedDelimiter {
+                        open_token: Box::new(open_token),
+                        open_span,
+                        expected_token: Box::new(Token::RightParen),
+                        found_tok: Box::new(self.peek_token.token.clone()),
+                        found_span: self.peek_token.span,
+                    });
                 }
             }
             Token::Subtract
@@ -252,9 +263,7 @@ impl Parser {
             | Token::Increment
             | Token::Decrement => {
                 let operator = self.current_token.token.clone();
-
                 self.next_token();
-
                 let right = self.parse_expression(Precedence::Prefix)?;
 
                 Expression::Prefix {
@@ -268,7 +277,7 @@ impl Parser {
             _ => return Err(self.unexpected(&self.current_token)),
         };
 
-        self.skip_terminators();
+        // self.skip_terminators();
 
         while {
             if self.paren_depth > 0 {
@@ -345,7 +354,6 @@ impl Parser {
                 }
                 Token::LeftBracket => {
                     self.next_token();
-
                     left = self.parse_index_expression(left)?;
                 }
                 Token::Sprout => {
@@ -362,13 +370,9 @@ impl Parser {
                 }
                 Token::LeftShift | Token::RightShift => {
                     let peek_prec = self.peek_precedence();
-
                     self.next_token();
-
                     let operator = self.current_token.token.clone();
-
                     self.next_token();
-
                     let right = self.parse_expression(peek_prec)?;
 
                     left = Expression::Infix {
@@ -393,13 +397,21 @@ impl Parser {
 
     fn parse_index_expression(&mut self, left: Expression) -> Result<Expression, ParseError> {
         let start_span = self.current_token.span;
+        let open_token = self.current_token.token.clone();
+        let open_span = self.current_token.span;
 
         self.next_token();
 
         let index = self.parse_expression(Lowest)?;
 
         if !matches!(self.peek_token.token, Token::RightBracket) {
-            return Err(self.unexpected(&self.peek_token));
+            return Err(ParseError::UnclosedDelimiter {
+                open_token: Box::new(open_token),
+                open_span,
+                expected_token: Box::new(Token::RightBracket),
+                found_tok: Box::new(self.peek_token.token.clone()),
+                found_span: self.peek_token.span,
+            });
         }
         self.next_token();
 
@@ -413,7 +425,7 @@ impl Parser {
     pub fn parse_match_expression(&mut self) -> Result<Expression, ParseError> {
         let start_span = self.current_token.span;
 
-        self.expect(Token::Match)?;
+        self.expect(Token::Match, self.unexpected(&self.current_token))?;
 
         let saved = self.allowed_struct_literal;
         self.allowed_struct_literal = false;
@@ -422,7 +434,10 @@ impl Parser {
 
         self.next_token();
 
-        self.expect(Token::LeftBrace)?;
+        let open_brace_tok = self.current_token.token.clone();
+        let open_brace_span = self.current_token.span;
+
+        self.expect(Token::LeftBrace, self.unexpected(&self.current_token))?;
         self.skip_arm_separators();
 
         let mut arms = Vec::new();
@@ -430,7 +445,14 @@ impl Parser {
         while !matches!(self.current_token.token, Token::RightBrace | Token::Eof) {
             let pattern = self.parse_pattern()?;
             self.next_token();
-            self.expect(Token::FatArrow)?;
+
+            self.expect(
+                Token::FatArrow,
+                ParseError::ExpectedFatArrow {
+                    found: self.current_token.token.clone(),
+                    span: self.current_token.span,
+                },
+            )?;
 
             let body = if matches!(self.current_token.token, Token::LeftBrace) {
                 self.next_token();
@@ -458,8 +480,14 @@ impl Parser {
             self.skip_arm_separators();
         }
 
-        if !matches!(self.current_token.token, Token::RightBrace | Token::Eof) {
-            return Err(self.unexpected(&self.current_token));
+        if !matches!(self.current_token.token, Token::RightBrace) {
+            return Err(ParseError::UnclosedDelimiter {
+                open_token: Box::new(open_brace_tok),
+                open_span: open_brace_span,
+                expected_token: Box::new(Token::RightBrace),
+                found_tok: Box::new(self.current_token.token.clone()),
+                found_span: self.current_token.span,
+            });
         }
 
         Ok(Expression::Match {
@@ -470,12 +498,20 @@ impl Parser {
     }
 
     pub fn parse_dot(&mut self, left: Expression, span: Span) -> Result<Expression, ParseError> {
-        self.expect(Token::Dot)?;
+        self.expect(Token::Dot, self.unexpected(&self.current_token))?;
         self.skip_terminators();
+
         let name = match self.current_token.token.clone() {
             Token::Identifier(name) => name,
-            _ => return Err(self.unexpected(&self.current_token)),
+            _ => {
+                return Err(ParseError::ExpectedIdentifier {
+                    context: "after '.' in field access",
+                    found: self.current_token.token.clone(),
+                    span: self.current_token.span,
+                });
+            }
         };
+
         if matches!(self.peek_token.token, Token::LeftParen) {
             let span = self.current_token.span;
             self.next_token();
@@ -501,17 +537,22 @@ impl Parser {
 
     pub fn parse_fun_params(&mut self) -> Result<Vec<FuncParam>, ParseError> {
         let start_span = self.current_token.span;
-
         let mut params = Vec::new();
 
         while !matches!(self.current_token.token, Token::RightParen) {
             let param_name = match self.current_token.token.clone() {
                 Token::Identifier(name) => name,
-                _ => return Err(self.unexpected(&self.current_token)),
+                _ => {
+                    return Err(ParseError::ExpectedIdentifier {
+                        context: "in function parameter",
+                        found: self.current_token.token.clone(),
+                        span: self.current_token.span,
+                    });
+                }
             };
 
             self.next_token();
-            self.expect(Token::Colon)?;
+            self.expect(Token::Colon, self.unexpected(&self.current_token))?;
 
             let param_type = self.parse_type()?;
 
@@ -524,7 +565,7 @@ impl Parser {
             params.push(param);
 
             match self.current_token.token.clone() {
-                Token::Comma => self.expect(Token::Comma),
+                Token::Comma => self.expect(Token::Comma, self.unexpected(&self.current_token)),
                 Token::RightParen => break,
                 _ => return Err(self.unexpected(&self.current_token)),
             }?;
@@ -556,18 +597,45 @@ impl Parser {
     pub fn parse_lambda(&mut self) -> Result<Expression, ParseError> {
         let start_span = self.current_token.span;
 
-        self.expect(Token::Func)?;
-        self.expect(Token::LeftParen)?;
+        self.expect(Token::Func, self.unexpected(&self.current_token))?;
+
+        let open_paren_tok = self.current_token.token.clone();
+        let open_paren_span = self.current_token.span;
+
+        self.expect(Token::LeftParen, self.unexpected(&self.current_token))?;
         let params = self.parse_fun_params()?;
-        self.expect(Token::RightParen)?;
+        self.expect(
+            Token::RightParen,
+            ParseError::UnclosedDelimiter {
+                open_token: Box::new(open_paren_tok),
+                open_span: open_paren_span,
+                expected_token: Box::new(Token::RightParen),
+                found_tok: Box::new(self.current_token.token.clone()),
+                found_span: self.current_token.span,
+            },
+        )?;
+
         let mut return_type = None;
 
         if matches!(self.current_token.token, Token::LeftBracket) {
+            let open_bracket_tok = self.current_token.token.clone();
+            let open_bracket_span = self.current_token.span;
             self.next_token();
+
             return_type = Some(self.parse_type()?);
-            self.expect(Token::RightBracket)?;
+            self.expect(
+                Token::RightBracket,
+                ParseError::UnclosedDelimiter {
+                    open_token: Box::new(open_bracket_tok),
+                    open_span: open_bracket_span,
+                    expected_token: Box::new(Token::RightBracket),
+                    found_tok: Box::new(self.current_token.token.clone()),
+                    found_span: self.current_token.span,
+                },
+            )?;
         }
-        self.expect(Token::LeftBrace)?;
+
+        self.expect(Token::LeftBrace, self.unexpected(&self.current_token))?;
 
         let (body, _) = self.parse_block()?;
         Ok(Expression::Lambda {
@@ -612,10 +680,20 @@ impl Parser {
     pub fn parse_struct_literal(&mut self, start_span: Span) -> Result<Expression, ParseError> {
         let name = match &self.current_token.token {
             Token::Identifier(n) => n.clone(),
-            _ => return Err(self.unexpected(&self.current_token)),
+            _ => {
+                return Err(ParseError::ExpectedIdentifier {
+                    context: "in struct literal name",
+                    found: self.current_token.token.clone(),
+                    span: self.current_token.span,
+                });
+            }
         };
         self.next_token();
-        self.expect(Token::LeftBrace)?;
+
+        let open_brace_tok = self.current_token.token.clone();
+        let open_brace_span = self.current_token.span;
+
+        self.expect(Token::LeftBrace, self.unexpected(&self.current_token))?;
         self.skip_terminators();
 
         let mut fields = Vec::new();
@@ -623,11 +701,17 @@ impl Parser {
         while !matches!(self.current_token.token, Token::RightBrace) {
             let field_name = match self.current_token.token.clone() {
                 Token::Identifier(n) => n,
-                _ => return Err(self.unexpected(&self.current_token)),
+                _ => {
+                    return Err(ParseError::ExpectedIdentifier {
+                        context: "in struct field name",
+                        found: self.current_token.token.clone(),
+                        span: self.current_token.span,
+                    });
+                }
             };
 
             self.next_token();
-            self.expect(Token::Colon)?;
+            self.expect(Token::Colon, self.unexpected(&self.current_token))?;
 
             let field_val = Box::new(self.parse_expression(Lowest)?);
             fields.push(StructLiteralField {
@@ -639,14 +723,25 @@ impl Parser {
             self.skip_terminators();
 
             match self.current_token.token.clone() {
-                Token::Comma => self.expect(Token::Comma),
+                Token::Comma => self.expect(Token::Comma, self.unexpected(&self.current_token)),
                 Token::RightBrace => break,
                 _ => return Err(self.unexpected(&self.current_token)),
             }?;
             self.skip_terminators();
         }
 
-        self.skip_terminators();
+        self.expect(
+            Token::RightBrace,
+            ParseError::UnclosedDelimiter {
+                open_token: Box::new(open_brace_tok),
+                open_span: open_brace_span,
+                expected_token: Box::new(Token::RightBrace),
+                found_tok: Box::new(self.current_token.token.clone()),
+                found_span: self.current_token.span,
+            },
+        )?;
+
+        // self.skip_terminators();
 
         Ok(Expression::StructLiteral {
             name,

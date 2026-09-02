@@ -6,13 +6,13 @@
 
 #[macro_use]
 pub mod parser;
+mod error;
 pub mod expression;
 pub mod program;
 pub mod statement;
 pub mod types;
-mod error;
 
+pub use error::ParseError;
 pub use expression::Expression;
 pub use statement::Statement;
 pub use types::Precedence;
-pub use error::ParseError;

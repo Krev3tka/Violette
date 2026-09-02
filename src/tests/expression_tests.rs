@@ -114,14 +114,14 @@ mod expressions_tests {
             ),
             (
                 "match res {
-                    Win(num) => {
-                        match num {
-                            num > 5 => true,
-                            num <= 5 => false,
-                        }
-                    }
-                    Fail(r) => print(r)
-                }",
+    Win(num) => {
+        match num {
+            num > 5 => true,
+            num <= 5 => false,
+        }
+    }
+    Fail(r) => print(r)
+}",
                 expr_stmt(match_expr(
                     ident("res"),
                     vec![
