@@ -10,7 +10,9 @@ pub mod expression;
 pub mod program;
 pub mod statement;
 pub mod types;
+mod error;
 
 pub use expression::Expression;
 pub use statement::Statement;
-pub use types::{ParseError, Precedence};
+pub use types::Precedence;
+pub use error::ParseError;

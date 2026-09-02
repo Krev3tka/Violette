@@ -1,22 +1,8 @@
+import math.sqrt
+
 struct Point {
     x: float64,
     y: float64,
-}
-
-func sqrt(n: float64) [float64] {
-    if n < 0.0 { return -1.0 }
-    if n == 0.0 || n == 1.0 { return n }
-
-    var x = n / 2.0
-    var last_x = 0.0
-
-    while x != last_x {
-        last_x = x
-        x = 0.5 * (x + (n / x))
-    }
-
-    return x
-
 }
 
 func distance(p: Point) [float64] {

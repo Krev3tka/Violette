@@ -1,9 +1,9 @@
 use crate::lexer::lexer::Lexer;
 use crate::lexer::span::SpannedToken;
 use crate::lexer::token::{PrimitiveType, Token};
-use crate::parser::Precedence;
+use crate::parser::{ParseError, Precedence};
 use crate::parser::expression::token_precedence;
-use crate::parser::types::{ParseError, Type, TypePath};
+use crate::parser::types::{Type, TypePath};
 
 pub const MAX_DEPTH: u32 = 64;
 
@@ -40,7 +40,10 @@ impl Parser {
 
     pub fn unexpected(&self, tok: &SpannedToken) -> ParseError {
         if tok.token == Token::Eof {
-            ParseError::UnexpectedEof
+            ParseError::UnexpectedEof {
+                expected: "",
+                span: tok.span
+            }
         } else {
             ParseError::UnexpectedToken {
                 token: tok.token.clone(),
@@ -66,7 +69,9 @@ impl Parser {
     fn parse_type_inner(&mut self) -> Result<Type, ParseError> {
         if matches!(self.current_token.token, Token::Func) {
             self.next_token();
-            self.expect(Token::LeftParen)?;
+            let open_token = self.current_token.token.clone();
+            let open_span = self.current_token.span;
+            self.expect(Token::LeftParen, self.unexpected(&self.current_token))?;
 
             let mut types = Vec::new();
 
@@ -80,21 +85,37 @@ impl Parser {
                     }
                 }
             }
-            self.expect(Token::RightParen)?;
+            self.expect(Token::RightParen, ParseError::UnclosedDelimiter {
+                open_token,
+                open_span,
+                expected_token: Token::RightParen,
+                found_tok: self.current_token.token.clone(),
+                found_span: self.current_token.span
+            })?;
 
             let mut ret = None;
 
             if matches!(self.current_token.token, Token::LeftBracket) {
+                let open_token = self.current_token.token.clone();
+                let open_span = self.current_token.span;
                 self.next_token();
 
                 ret = Some(Box::new(self.parse_type()?));
-                self.expect(Token::RightBracket)?;
+                self.expect(Token::RightBracket, ParseError::UnclosedDelimiter {
+                    open_token,
+                    open_span,
+                    expected_token: Token::RightBracket,
+                    found_tok: self.current_token.token.clone(),
+                    found_span: self.current_token.span
+                })?;
             }
 
             return Ok(Type::Fn { params: types, ret });
         }
 
         if matches!(self.current_token.token, Token::LeftBracket) {
+            let open_token = self.current_token.token.clone();
+            let open_span = self.current_token.span;
             self.next_token();
 
             let mut variants = Vec::new();
@@ -108,7 +129,13 @@ impl Parser {
                 self.skip_terminators();
             }
 
-            self.expect(Token::RightBracket)?;
+            self.expect(Token::RightBracket, ParseError::UnclosedDelimiter {
+                open_token,
+                open_span,
+                expected_token: Token::RightBracket,
+                found_tok: self.current_token.token.clone(),
+                found_span: self.current_token.span
+            })?;
 
             if variants.len() == 1 {
                 return Ok(variants.remove(0));
@@ -189,9 +216,18 @@ impl Parser {
                 }
 
                 if matches!(self.current_token.token, Token::LeftParen) {
-                    self.expect(Token::LeftParen)?;
+                    let open_token = self.current_token.token.clone();
+                    let open_span = self.current_token.span;
+
+                    self.expect(Token::LeftParen, self.unexpected(&self.current_token))?;
                     let param = self.parse_single_type()?;
-                    self.expect(Token::RightParen)?;
+                    self.expect(Token::RightParen, ParseError::UnclosedDelimiter {
+                        open_token,
+                        open_span,
+                        expected_token: Token::RightParen,
+                        found_tok: self.current_token.token.clone(),
+                        found_span: self.current_token.span
+                    })?;
 
                     Ok(Type::Generic {
                         name: segments.last().unwrap().clone(),
@@ -220,16 +256,12 @@ impl Parser {
         token_precedence(&self.peek_token.token)
     }
 
-    pub fn expect(&mut self, expected: Token) -> Result<(), ParseError> {
+    pub fn expect(&mut self, expected: Token, err: ParseError) -> Result<(), ParseError> {
         if std::mem::discriminant(&self.current_token.token) == std::mem::discriminant(&expected) {
             self.next_token();
             Ok(())
         } else {
-            Err(ParseError::Expected {
-                expected,
-                found: self.current_token.token.clone(),
-                span: self.current_token.span,
-            })
+            Err(err)
         }
     }
 }

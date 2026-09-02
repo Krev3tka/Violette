@@ -660,7 +660,10 @@ impl Parser {
         self.allowed_struct_literal = saved;
 
         if !matches!(self.current_token.token, Token::RightBrace) {
-            return Err(ParseError::UnexpectedEof);
+            return Err(ParseError::UnexpectedEof {
+                expected: "not ready yet",
+                span: self.current_token.span
+            });
         }
         let end_span = self.current_token.span;
         self.next_token();

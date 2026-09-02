@@ -1,5 +1,6 @@
 use crate::lexer::span::Span;
 use crate::lexer::token::{PrimitiveType, Token};
+use crate::parser::error::ParseError;
 use crate::parser::parser::MAX_DEPTH;
 
 #[derive(Debug, PartialEq, PartialOrd, Clone, Copy)]
@@ -23,23 +24,6 @@ pub enum Precedence {
     Postfix,     // x++ x-- () [] .
 }
 
-#[derive(Debug, Clone)]
-pub enum ParseError {
-    UnexpectedToken {
-        token: Token,
-        span: Span,
-    },
-    UnexpectedEof,
-    Expected {
-        expected: Token,
-        found: Token,
-        span: Span,
-    },
-    TooDeep {
-        span: Span,
-    },
-}
-
 impl std::fmt::Display for ParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -48,16 +32,10 @@ impl std::fmt::Display for ParseError {
                 "unexpected token: {:?} at {}:{}",
                 token, span.start.line, span.start.col
             ),
-            ParseError::UnexpectedEof => write!(f, "unexpected end of file"),
-            ParseError::Expected {
+            ParseError::UnexpectedEof {
                 expected,
-                found,
-                span,
-            } => write!(
-                f,
-                "expected {:?}, found {:?} at {}:{}",
-                expected, found, span.start.line, span.start.col
-            ),
+                span
+            } => write!(f, "unexpected end of file, expected {} at the {}:{}", expected, span.start.line, span.start.col),
             ParseError::TooDeep { span } => {
                 write!(
                     f,
@@ -65,6 +43,7 @@ impl std::fmt::Display for ParseError {
                     MAX_DEPTH, span.start.line, span.start.col
                 )
             }
+            _ => write!(f, "not ready yet"),
         }
     }
 }
