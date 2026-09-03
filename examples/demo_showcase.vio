@@ -3,7 +3,12 @@ import math
 func main() {
     let num = 42
     if num.is_even() {
-        println(math.clamp(num, 0, 10).to_float().sqrt())
+        println(
+            num
+            .clamp(0, 10)
+            .to_float()
+            .sqrt()
+        )
     }
 
     let text = "Violette"
