@@ -1,0 +1,13 @@
+func filter_print(x: int, predicate: func (int) [bool]) {
+    if predicate(x) {
+        println(x)
+    }
+}
+
+func main() {
+    filter_print(10, (> 5))
+    filter_print(3, (> 5))
+
+    filter_print(7, (!= 7))
+    filter_print(42, (!= 7))
+}

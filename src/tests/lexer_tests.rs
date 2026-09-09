@@ -1,6 +1,7 @@
 #[cfg(test)]
 #[allow(clippy::approx_constant)]
 mod lexing_tests {
+    use crate::lexer::error::LexError;
     use crate::lexer::lexer::Lexer;
     use crate::lexer::token::PrimitiveType::Int;
     use crate::lexer::token::{PrimitiveType, Token};
@@ -18,7 +19,10 @@ mod lexing_tests {
                 break;
             }
 
-            assert_ne!(spanned_token.token, Token::Illegal);
+            assert_ne!(
+                spanned_token.token,
+                Token::Illegal(LexError::UnexpectedChar('a'))
+            );
         }
 
         res

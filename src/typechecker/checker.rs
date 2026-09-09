@@ -39,7 +39,7 @@ impl Checker {
                 Statement::Const {
                     name, value, span, ..
                 } => {
-                    let ty = self.infer(value);
+                    let ty = self.infer(value, None);
                     self.defined(name.clone(), ty, BindingKind::Const, *span);
                 }
                 Statement::Func {
@@ -241,6 +241,7 @@ impl Checker {
                 name: name.clone(),
                 param: Box::new(self.resolve(param)),
             },
+            Type::Infer => Ty::Infer
         }
     }
 
@@ -259,7 +260,7 @@ impl Checker {
                 let ty = self.resolve(&p.param_type);
                 if let Err(e) = self
                     .env
-                    .define(p.name.clone(), ty, BindingKind::Var, &p.span)
+                    .define(p.name.clone(), ty, BindingKind::Param, &p.span)
                 {
                     self.errors.push(e);
                 }
@@ -284,7 +285,7 @@ impl Checker {
             ..
         } = stmt
         {
-            let cond_ty = self.infer(cond);
+            let cond_ty = self.infer(cond, None);
 
             self.expect(&cond_ty, &Ty::Bool, stmt.span());
 
@@ -296,7 +297,7 @@ impl Checker {
             span,
         } = stmt
         {
-            let _iter_ty = self.infer(iterable);
+            let _iter_ty = self.infer(iterable, None);
 
             if let Expression::Range { end, .. } = iterable
                 && end.is_none()
@@ -320,11 +321,11 @@ impl Checker {
         {
             self.check_statement(init.as_ref());
 
-            let cond_ty = self.infer(cond);
+            let cond_ty = self.infer(cond, None);
 
             self.expect(&cond_ty, &Ty::Bool, stmt.span());
 
-            let _post_ty = self.infer(post);
+            let _post_ty = self.infer(post, None);
 
             self.check_block(body);
         }
@@ -336,29 +337,29 @@ impl Checker {
     pub fn check_statement(&mut self, stmt: &Statement) {
         match stmt {
             Statement::Var { name, value, .. } => {
-                let ty = self.infer(value);
+                let ty = self.infer(value, None);
 
                 self.defined(name.clone(), ty, BindingKind::Var, stmt.span())
             }
             Statement::Let { name, value, .. } => {
-                let ty = self.infer(value);
+                let ty = self.infer(value, None);
 
                 self.defined(name.clone(), ty, BindingKind::Let, stmt.span())
             }
             Statement::Const { name, value, .. } => {
-                let ty = self.infer(value);
+                let ty = self.infer(value, None);
 
                 self.defined(name.clone(), ty, BindingKind::Const, stmt.span())
             }
             Statement::If(if_stmt) => {
-                let cond_ty = self.infer(&if_stmt.condition);
+                let cond_ty = self.infer(&if_stmt.condition, None);
 
                 self.expect(&cond_ty, &Ty::Bool, stmt.span());
 
                 self.check_block(&if_stmt.then_block);
 
                 for s in &if_stmt.else_if {
-                    let cond_ty = self.infer(&s.condition);
+                    let cond_ty = self.infer(&s.condition, None);
 
                     self.expect(&cond_ty, &Ty::Bool, stmt.span());
 
@@ -386,7 +387,7 @@ impl Checker {
             }
             Statement::Return { value, .. } => {
                 let ty = match value {
-                    Some(v) => self.infer(v),
+                    Some(v) => self.infer(v, None),
                     None => Ty::Unit,
                 };
 
@@ -442,7 +443,7 @@ impl Checker {
                         }),
                     }
                 } else {
-                    self.infer(expression);
+                    self.infer(expression, None);
                 }
             }
             Statement::Struct { .. } => self.check_struct(stmt),
@@ -491,7 +492,7 @@ impl Checker {
             return;
         }
 
-        let value_ty = self.infer(value_expr);
+        let value_ty = self.infer(value_expr, None);
 
         self.expect(&value_ty, &entity.ty, value_expr.span())
     }
@@ -515,7 +516,7 @@ impl Checker {
             });
         }
 
-        let obj_ty = self.infer(object);
+        let obj_ty = self.infer(object, None);
 
         match obj_ty {
             Ty::Struct(struct_name) => {
@@ -526,7 +527,7 @@ impl Checker {
                     .map(|(_, ty, _)| ty.clone());
 
                 if let Some(field_ty) = field_ty {
-                    let val_ty = self.infer(value_expr);
+                    let val_ty = self.infer(value_expr, None);
 
                     self.expect(&val_ty, &field_ty, value_expr.span());
                 } else {
@@ -576,7 +577,7 @@ impl Checker {
         self.env.pop()
     }
 
-    pub fn infer(&mut self, expr: &Expression) -> Ty {
+    pub fn infer(&mut self, expr: &Expression, expected_ty: Option<&Ty>) -> Ty {
         match expr {
             Expression::IntLiteral { .. } => Ty::Int,
             Expression::BoolLiteral { .. } => Ty::Bool,
@@ -598,8 +599,8 @@ impl Checker {
                 right,
                 span,
             } => {
-                let left_ty = self.infer(left);
-                let right_ty = self.infer(right);
+                let left_ty = self.infer(left, None);
+                let right_ty = self.infer(right, None);
 
                 match operator {
                     Token::Add => match (&left_ty, &right_ty) {
@@ -617,7 +618,7 @@ impl Checker {
                             Ty::Error
                         }
                     },
-                    Token::Subtract | Token::Multiply | Token::Divide => {
+                    Token::Subtract | Token::Multiply | Token::Divide | Token::Power => {
                         match (&left_ty, &right_ty) {
                             (Ty::Int, Ty::Int) => Ty::Int,
                             (Ty::Float, Ty::Float) => Ty::Float,
@@ -692,7 +693,7 @@ impl Checker {
                 right,
                 span,
             } => {
-                let right_ty = self.infer(right.as_ref());
+                let right_ty = self.infer(right.as_ref(), None);
 
                 match operator {
                     Token::LogicNot => {
@@ -722,8 +723,8 @@ impl Checker {
                 }
             }
             Expression::Range { start, end, .. } => {
-                let start_ty = start.as_ref().map_or(Ty::Int, |s| self.infer(s));
-                let end_ty = end.as_ref().map_or(Ty::Int, |e| self.infer(e));
+                let start_ty = start.as_ref().map_or(Ty::Int, |s| self.infer(s, None));
+                let end_ty = end.as_ref().map_or(Ty::Int, |e| self.infer(e, None));
 
                 self.expect(&start_ty, &Ty::Int, expr.span());
                 self.expect(&end_ty, &Ty::Int, expr.span());
@@ -734,8 +735,8 @@ impl Checker {
                 }
             }
             Expression::Index { left, index, span } => {
-                let left_ty = self.infer(left.as_ref());
-                let index_ty = self.infer(index.as_ref());
+                let left_ty = self.infer(left.as_ref(), None);
+                let index_ty = self.infer(index.as_ref(), None);
 
                 self.expect(&index_ty, &Ty::Int, *span);
 
@@ -757,35 +758,34 @@ impl Checker {
                 args,
                 span,
             } => {
-                let arg_types: Vec<Ty> = args.iter().map(|a| self.infer(a)).collect();
-
                 if let Expression::Identifier { name, .. } = function.as_ref()
                     && self.env.lookup(name).is_none()
                     && !args.is_empty()
-                    && let Ty::Struct(ref s_name) = arg_types[0]
                 {
-                    let method_name = format!("{}.{}", s_name, name);
-                    if let Some(sig) = self.funcs.get(&method_name).cloned() {
-                        if args.len() != sig.params.len() {
-                            self.errors.push(TypeError::ArityMismatch {
-                                name: name.clone(),
-                                expected: sig.params.len(),
-                                found: args.len(),
-                                span: *span,
-                            });
+                    let first_arg_ty = self.infer(&args[0], None);
+                    if let Ty::Struct(ref s_name) = first_arg_ty {
+                        let method_name = format!("{}.{}", s_name, name);
+                        if let Some(sig) = self.funcs.get(&method_name).cloned() {
+                            if args.len() != sig.params.len() {
+                                self.errors.push(TypeError::ArityMismatch {
+                                    name: name.clone(),
+                                    expected: sig.params.len(),
+                                    found: args.len(),
+                                    span: *span,
+                                });
+                                return sig.ret;
+                            }
+
+                            for (arg, param) in args.iter().zip(sig.params.iter()) {
+                                let a_ty = self.infer(arg, Some(param));
+                                self.expect(&a_ty, param, arg.span());
+                            }
                             return sig.ret;
                         }
-
-                        for ((a_ty, arg), param) in
-                            arg_types.iter().zip(args.iter()).zip(sig.params.iter())
-                        {
-                            self.expect(a_ty, param, arg.span());
-                        }
-                        return sig.ret;
                     }
                 }
 
-                let callee = self.infer(function);
+                let callee = self.infer(function, None);
                 match callee {
                     Ty::Fn { params, ret } => {
                         if args.len() != params.len() {
@@ -802,8 +802,8 @@ impl Checker {
                         }
 
                         for (arg, param) in args.iter().zip(params.iter()) {
-                            let a = self.infer(arg);
-                            self.expect(&a, param, arg.span());
+                            let a_ty = self.infer(arg, Some(param));
+                            self.expect(&a_ty, param, arg.span());
                         }
                         *ret
                     }
@@ -823,9 +823,34 @@ impl Checker {
                 body,
                 ..
             } => {
-                let param_tys: Vec<Ty> =
-                    params.iter().map(|p| self.resolve(&p.param_type)).collect();
-                let ret = return_type.as_ref().map_or(Ty::Unit, |t| self.resolve(t));
+                let (expected_fn_params, expected_fn_ret) = match expected_ty {
+                    Some(Ty::Fn { params, ret, .. }) => (Some(params), Some(ret.as_ref())),
+                    _ => (None, None)
+                };
+
+                let mut param_tys = Vec::new();
+
+                for (i, p) in params.iter().enumerate() {
+                    let mut ty = self.resolve(&p.param_type);
+
+                    if ty == Ty::Infer {
+                        if let Some(expected_p) = expected_fn_params.and_then(|ep| ep.get(i)) {
+                            ty = expected_p.clone();
+                        } else {
+                            self.errors.push(TypeError::Unsupported {
+                                desc: "Cannot infer type for parameter (try to pass lambda directly to a typed function)".to_string(),
+                                span: p.span,
+                            });
+                            ty = Ty::Error;
+                        }
+                    }
+                    param_tys.push(ty)
+                }
+
+                let ret = match return_type {
+                    Some(t) => self.resolve(t),
+                    None => expected_fn_ret.cloned().unwrap_or(Ty::Unit)
+                };
 
                 let saved_ret = self.current_ret.clone();
                 self.current_ret = ret.clone();
@@ -862,7 +887,7 @@ impl Checker {
                 }
 
                 for f in fields {
-                    match self.infer(f.field_val.as_ref()) {
+                    match self.infer(f.field_val.as_ref(), None) {
                         Ty::Error => return Ty::Error,
                         _ => continue,
                     }
@@ -871,7 +896,7 @@ impl Checker {
                 Ty::Struct(name.clone())
             }
             Expression::Field { object, name, span } => {
-                let obj_ty = self.infer(object.as_ref());
+                let obj_ty = self.infer(object.as_ref(), None);
 
                 match obj_ty {
                     Ty::Struct(s) => match self.structs.get(&s) {
@@ -933,7 +958,7 @@ impl Checker {
                 }
 
                 if !is_static {
-                    obj_ty = self.infer(object.as_ref());
+                    obj_ty = self.infer(object.as_ref(), None);
                     let sig_name = match &obj_ty {
                         Ty::Struct(s) => format!("{}.{}", s, name),
                         Ty::String | Ty::Int | Ty::Float | Ty::Bool => name.clone(),
@@ -978,7 +1003,7 @@ impl Checker {
                     }
 
                     for (arg, param_ty) in args.iter().zip(expected_args.iter()) {
-                        let a_ty = self.infer(arg);
+                        let a_ty = self.infer(arg, Some(param_ty));
                         self.expect(&a_ty, param_ty, arg.span());
                     }
 

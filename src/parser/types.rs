@@ -65,6 +65,8 @@ pub enum Type {
     },
 
     Union(Vec<Type>),
+    
+    Infer,
 }
 
 #[derive(Clone, Debug, PartialEq)]

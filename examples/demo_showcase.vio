@@ -14,6 +14,7 @@ func main() {
     let text = "Violette"
     println(text.len())
 
+
     print("Is `" + text + "` empty?: ")
     println(text.is_empty())
 }

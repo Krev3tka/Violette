@@ -1,3 +1,5 @@
+use crate::lexer::error::LexError;
+
 #[allow(dead_code)]
 #[derive(Debug, PartialEq, Clone)]
 pub enum Token {
@@ -258,7 +260,7 @@ pub enum Token {
     Eof,
 
     /// Unrecognized or illegal token.
-    Illegal,
+    Illegal(LexError),
 }
 
 /// Primitive scalar and built-in types supported by Violette.

@@ -18,6 +18,7 @@ impl Diagnostics for TypeError {
                 let kind_str = match kind {
                     BindingKind::Let => "immutable",
                     BindingKind::Const => "const",
+                    BindingKind::Param => "parameter",
                     _ => unreachable!(),
                 };
 
@@ -34,22 +35,20 @@ impl Diagnostics for TypeError {
                     ),
                 ];
 
+                let kinda_message = format!("try to use `var` instead of `{}`", kind_str);
+
+                let help = match kind {
+                    BindingKind::Let | BindingKind::Const => Some(kinda_message.as_str()),
+                    BindingKind::Param => Some("function parameters are always immutable by design"),
+                    _ => None,
+                };
+
                 self.report(
                     path.to_string(),
                     *assign_span,
                     format!("couldn't assign again to {} variable `{}`", kind_str, name),
                     &labels,
-                    Some(
-                        format!(
-                            "try to use `var` instead of `{}`",
-                            match kind {
-                                BindingKind::Let => "let",
-                                BindingKind::Const => "const",
-                                _ => unreachable!(),
-                            }
-                        )
-                        .as_str(),
-                    ),
+                    help,
                 )
             }
             TypeError::DuplicateDefinition {

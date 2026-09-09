@@ -12,6 +12,11 @@ use crate::typechecker::types::Ty;
 pub struct Codegen {
     checker: Checker,
     extern_funcs: std::collections::HashSet<String>,
+    typedefs: Vec<String>,
+    fn_type_names: std::collections::HashMap<String, String>,
+    lambda_prototypes: Vec<String>,
+    lifted_lambdas: Vec<String>,
+    lambda_count: usize
 }
 
 impl Codegen {
@@ -21,6 +26,11 @@ impl Codegen {
         Codegen {
             checker,
             extern_funcs: std::collections::HashSet::new(),
+            typedefs: Vec::new(),
+            fn_type_names: std::collections::HashMap::new(),
+            lambda_prototypes: Vec::new(),
+            lifted_lambdas: Vec::new(),
+            lambda_count: 0,
         }
     }
 
@@ -32,7 +42,27 @@ impl Codegen {
             Ty::String => "VioString".to_string(),
             Ty::Struct(s) => s.to_string(),
             Ty::Unit => "void".to_string(),
-            Ty::Fn { .. } => todo!(),
+            Ty::Fn { params, ret } => {
+                let ret_c = self.c_type(ret);
+                let params_c: Vec<String> = params.iter().map(|p| self.c_type(p)).collect();
+                let params_str = if params_c.is_empty() {
+                    "void".to_string()
+                } else {
+                    params_c.join(", ")
+                };
+
+                let sig_key = format!("{ret_c}({params_str})");
+                if let Some(name) = self.fn_type_names.get(&sig_key) {
+                    return name.clone()
+                }
+
+                let type_name = format!("vio_fn_type_{}", self.fn_type_names.len());
+                let typedef_def = format!("typedef {ret_c} (*{type_name})({params_str});");
+                self.fn_type_names.insert(sig_key, type_name.clone());
+                self.typedefs.push(typedef_def);
+
+                type_name
+            },
             _ => "unknown".to_string(),
         }
     }
@@ -55,7 +85,7 @@ impl Codegen {
         for s in &prg.declarations {
             if let Statement::Const { name, value, span } = s {
                 let val_str = self.emit_expression(value)?;
-                let ty = self.checker.infer(value);
+                let ty = self.checker.infer(value, None);
 
                 self.checker
                     .defined(name.clone(), ty, BindingKind::Const, *span);
@@ -224,7 +254,27 @@ impl Codegen {
             lines.push("}".to_string());
         }
 
-        let mut res = lines.join("\n");
+        let mut final_lines = Vec::new();
+        final_lines.push("#include \"vio_runtime.h\"\n".to_string());
+
+        if !self.typedefs.is_empty() {
+            final_lines.extend(self.typedefs.clone());
+            final_lines.push("\n".to_string());
+        }
+
+        if !self.lambda_prototypes.is_empty() {
+            final_lines.extend(self.lambda_prototypes.clone());
+            final_lines.push("\n".to_string());
+        }
+
+        final_lines.extend(lines.into_iter().skip(1));
+
+        if !self.lifted_lambdas.is_empty() {
+            final_lines.extend(self.lifted_lambdas.clone());
+            final_lines.push("\n".to_string());
+        }
+
+        let mut res = final_lines.join("\n");
 
         res.push('\n');
 
@@ -282,8 +332,8 @@ impl Codegen {
                 ..
             } => {
                 if matches!(operator, Token::Add)
-                    && matches!(self.checker.infer(left.as_ref()), Ty::String)
-                    && matches!(self.checker.infer(right.as_ref()), Ty::String)
+                    && matches!(self.checker.infer(left.as_ref(), None), Ty::String)
+                    && matches!(self.checker.infer(right.as_ref(), None), Ty::String)
                 {
                     return Ok(format!(
                         "vio_str_concat({}, {})",
@@ -321,13 +371,13 @@ impl Codegen {
 
                 format!("vio_str_get({}, {})", left_str, index_str)
             }
-            Expression::Identifier { name: ident, .. } => ident.clone(),
+            Expression::Identifier { name: ident, .. } => ident.replace("$", "_arg_"),
             Expression::Call { function, args, .. } => {
                 if let Expression::Identifier { name, .. } = function.as_ref()
                     && (name == "print" || name == "println")
                     && args.len() == 1
                 {
-                    let arg_ty = self.checker.infer(&args[0]);
+                    let arg_ty = self.checker.infer(&args[0], None);
                     let suffix = match arg_ty {
                         Ty::Int => "int",
                         Ty::Float => "float",
@@ -358,15 +408,17 @@ impl Codegen {
                 let mut c_fn_name =
                     if f == "main" || f.starts_with("vio_") || self.extern_funcs.contains(&f) {
                         f.clone()
-                    } else {
+                    } else if self.checker.funcs.contains_key(&f) {
                         format!("vio_user_{}", f)
+                    } else {
+                        f.clone()
                     };
 
                 if let Expression::Identifier { name, .. } = function.as_ref()
                     && self.checker.env.lookup(name).is_none()
                     && !args.is_empty()
                 {
-                    let first_arg_ty = self.checker.infer(&args[0]);
+                    let first_arg_ty = self.checker.infer(&args[0], None);
                     if let Ty::Struct(ref s_name) = first_arg_ty {
                         let method_sig_name = format!("{}.{}", s_name, name);
                         if self.checker.funcs.contains_key(&method_sig_name) {
@@ -398,14 +450,14 @@ impl Codegen {
                         } else if self.checker.env.lookup(obj_name).is_none() {
                             (format!("vio_user_{}", name), true)
                         } else {
-                            let obj_ty = self.checker.infer(object.as_ref());
+                            let obj_ty = self.checker.infer(object.as_ref(), None);
                             match obj_ty {
                                 Ty::Struct(s) => (format!("vio_user_{}_{}", s, name), false),
                                 _ => (format!("vio_user_{}", name), false),
                             }
                         }
                     } else {
-                        let obj_ty = self.checker.infer(object.as_ref());
+                        let obj_ty = self.checker.infer(object.as_ref(), None);
                         match obj_ty {
                             Ty::Struct(s) => (format!("vio_user_{}_{}", s, name), false),
                             _ => (format!("vio_user_{}", name), false),
@@ -427,6 +479,71 @@ impl Codegen {
             Expression::Field { object, name, .. } => {
                 format!("{}.{}", self.emit_expression(object.as_ref())?, name)
             }
+            Expression::Lambda {
+                params,
+                return_type,
+                body,
+                ..
+            } => {
+                let lambda_name = format!("vio_lambda_{}", self.lambda_count);
+                self.lambda_count += 1;
+
+                self.checker.env.push();
+
+                let mut param_strs = Vec::new();
+                for p in params {
+                    let clean_name = p.name.replace("$", "_arg_");
+
+                    let mut ty = self.checker.resolve(&p.param_type);
+                    if ty == Ty::Infer {
+                        let inferred= body.iter().find_map(|s| {
+                            if let Statement::Return { value: Some(Expression::Infix { right, .. }), .. } = s {
+                                Some(self.checker.infer(right, None))
+                            } else {
+                                None
+                            }
+                        });
+
+                        ty = inferred.unwrap_or(Ty::Int)
+                    }
+
+                    self.checker.defined(p.name.clone(), ty.clone(), BindingKind::Let, p.span);
+                    param_strs.push(format!("{} {}", self.c_type(&ty), clean_name))
+                }
+
+                let ret_ty = match return_type {
+                    Some(t) => self.checker.resolve(t),
+                    None => {
+                        let inferred = body.iter().find_map(|s| {
+                            if let Statement::Return { value: Some(v), .. } = s {
+                                Some(self.checker.infer(v, None))
+                            } else {
+                                None
+                            }
+                        });
+                        inferred.unwrap_or(Ty::Unit)
+                    }
+                };
+
+                let ret_c = self.c_type(&ret_ty);
+
+                let param_list = if param_strs.is_empty() {
+                    "void".to_string()
+                } else {
+                    param_strs.join(", ")
+                };
+
+                let body_c = self.emit_block(body)?;
+
+                self.checker.env.pop();
+
+                self.lambda_prototypes.push(format!("static {ret_c} {lambda_name}({param_list});"));
+                self.lifted_lambdas.push(format!(
+                    "static {ret_c} {lambda_name}({param_list}) {{\n{body_c}\n}}\n"
+                ));
+
+                lambda_name
+            }
             _ => {
                 return Err(CodegenError::Unsupported(format!(
                     "this expression: {:?}",
@@ -443,7 +560,7 @@ impl Codegen {
             | Statement::Var { name, value, span } => {
                 let val_str = self.emit_expression(value)?;
 
-                let ty = self.checker.infer(value);
+                let ty = self.checker.infer(value, None);
 
                 self.checker.defined(
                     name.clone(),
@@ -792,7 +909,7 @@ impl Codegen {
             | Statement::Const { name, value, .. }
             | Statement::Var { name, value, .. } = s
             {
-                let ty = self.checker.infer(value);
+                let ty = self.checker.infer(value, None);
 
                 if matches!(ty, Ty::String) {
                     string_vars.push(name.clone());

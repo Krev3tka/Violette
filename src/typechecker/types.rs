@@ -16,5 +16,6 @@ pub enum Ty {
         params: Vec<Ty>,
         ret: Box<Ty>,
     },
+    Infer,
     Error,
 }

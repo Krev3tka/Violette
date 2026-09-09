@@ -1,0 +1,7 @@
+func add_five(a: int) [int] {
+    return a + 5
+}
+
+println(
+    "https://archlinux.org" ~> add_five
+)

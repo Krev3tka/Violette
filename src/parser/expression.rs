@@ -240,6 +240,77 @@ impl Parser {
                 self.next_token();
                 self.skip_terminators();
 
+                match self.current_token.token.clone() {
+                    Token::Equals
+                    | Token::NotEquals
+                    | Token::Less
+                    | Token::Greater
+                    | Token::LessOrEquals
+                    | Token::GreaterOrEquals
+                    | Token::Sprout
+                    | Token::Add
+                    | Token::Subtract
+                    | Token::Multiply
+                    | Token::Divide
+                    | Token::Modulus
+                    | Token::Power
+                    | Token::LogicAnd
+                    | Token::LogicOr
+                    | Token::LogicNot
+                    | Token::BitAnd
+                    | Token::BitOr
+                    | Token::BitNot
+                    | Token::BitXOR
+                    | Token::LeftShift
+                    | Token::RightShift => {
+                        let operator = self.current_token.token.clone();
+                        self.next_token();
+
+                        let right_part = self.parse_expression(Lowest)?;
+
+                        self.next_token();
+                        self.paren_depth -= 1;
+
+                        self.expect(
+                            Token::RightParen,
+                            ParseError::UnclosedDelimiter {
+                                open_token: Box::new(open_token),
+                                open_span,
+                                expected_token: Box::new(Token::RightParen),
+                                found_tok: Box::new(self.current_token.token.clone()),
+                                found_span: self.current_token.span
+                            }
+                        )?;
+
+                        let arg_ident = Expression::Identifier {
+                            name: String::from("$0"),
+                            span: start_span
+                        };
+
+                        let body_expr = Expression::Infix {
+                            left: Box::new(arg_ident),
+                            operator,
+                            right: Box::new(right_part),
+                            span: start_span
+                        };
+
+                        return Ok(Expression::Lambda {
+                            params: vec![FuncParam {
+                                name: String::from("$0"),
+                                param_type: Type::Infer,
+                                span: start_span
+                            }],
+                            return_type: None,
+                            body: vec![Statement::Return {
+                                value: Some(body_expr),
+                                span: start_span,
+                            }],
+                            span: start_span
+                        })
+                    }
+                    _ => {}
+                };
+
                 let expr = self.parse_expression(Lowest)?;
                 self.skip_terminators();
 
@@ -582,7 +653,10 @@ impl Parser {
         let mut args = Vec::new();
         while !matches!(self.current_token.token, Token::RightParen) {
             args.push(self.parse_expression(Lowest)?);
-            self.next_token();
+
+            if !matches!(self.current_token.token, Token::RightParen | Token::Comma) {
+                self.next_token();
+            }
 
             if matches!(self.current_token.token, Token::Comma) {
                 self.next_token();

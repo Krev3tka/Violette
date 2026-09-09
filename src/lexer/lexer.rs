@@ -1,3 +1,5 @@
+use crate::lexer::error::LexError;
+use crate::lexer::error::LexError::UnclosedComment;
 use crate::lexer::span::{Position, Span, SpannedToken};
 use crate::lexer::token::{PrimitiveType, Token};
 
@@ -92,7 +94,7 @@ impl Lexer {
                 }
 
                 if self.current == '\0' {
-                    self.make_token(Token::Illegal, start)
+                    self.make_token(Token::Illegal(LexError::UnclosedString), start)
                 } else {
                     self.make_token(Token::String(string_val), start)
                 }
@@ -228,7 +230,7 @@ impl Lexer {
 
                     if depth > 0 {
                         SpannedToken {
-                            token: Token::Illegal,
+                            token: Token::Illegal(UnclosedComment),
                             span: Span::new(start, self.current_pos()),
                         }
                     } else {
@@ -277,7 +279,14 @@ impl Lexer {
 
                     if digits.is_empty() {
                         SpannedToken {
-                            token: Token::Illegal,
+                            token: Token::Illegal(LexError::EmptyRadixDigits {
+                                radix: match prefix {
+                                    'b' => "binary",
+                                    'o' => "oct",
+                                    'x' | 'X' => "hex",
+                                    _ => unreachable!(),
+                                },
+                            }),
                             span: Span::new(start, self.current_pos()),
                         }
                     } else {
@@ -352,7 +361,10 @@ impl Lexer {
                 }
             }
 
-            _ => self.make_token(Token::Illegal, start),
+            _ => self.make_token(
+                Token::Illegal(LexError::UnexpectedChar(self.current)),
+                start,
+            ),
         }
     }
 
@@ -459,39 +471,39 @@ impl Lexer {
 
                 ("i8", false) => match cleaned.parse::<i8>() {
                     Ok(v) => Token::Int8(v),
-                    Err(_) => Token::Illegal,
+                    Err(_) => Token::Illegal(LexError::InvalidNumberSuffix(suffix)),
                 },
                 ("i16", false) => match cleaned.parse::<i16>() {
                     Ok(v) => Token::Int16(v),
-                    Err(_) => Token::Illegal,
+                    Err(_) => Token::Illegal(LexError::InvalidNumberSuffix(suffix)),
                 },
                 ("i32", false) => match cleaned.parse::<i32>() {
                     Ok(v) => Token::Int32(v),
-                    Err(_) => Token::Illegal,
+                    Err(_) => Token::Illegal(LexError::InvalidNumberSuffix(suffix)),
                 },
                 ("i64", false) => match cleaned.parse::<i64>() {
                     Ok(v) => Token::Int64(v),
-                    Err(_) => Token::Illegal,
+                    Err(_) => Token::Illegal(LexError::InvalidNumberSuffix(suffix)),
                 },
 
                 ("u8", false) => match cleaned.parse::<u8>() {
                     Ok(v) => Token::Uint8(v),
-                    Err(_) => Token::Illegal,
+                    Err(_) => Token::Illegal(LexError::InvalidNumberSuffix(suffix)),
                 },
                 ("u16", false) => match cleaned.parse::<u16>() {
                     Ok(v) => Token::Uint16(v),
-                    Err(_) => Token::Illegal,
+                    Err(_) => Token::Illegal(LexError::InvalidNumberSuffix(suffix)),
                 },
                 ("u32", false) => match cleaned.parse::<u32>() {
                     Ok(v) => Token::Uint32(v),
-                    Err(_) => Token::Illegal,
+                    Err(_) => Token::Illegal(LexError::InvalidNumberSuffix(suffix)),
                 },
                 ("u64", false) => match cleaned.parse::<u64>() {
                     Ok(v) => Token::Uint64(v),
-                    Err(_) => Token::Illegal,
+                    Err(_) => Token::Illegal(LexError::InvalidNumberSuffix(suffix)),
                 },
 
-                _ => Token::Illegal,
+                _ => Token::Illegal(LexError::InvalidNumberSuffix(suffix)),
             };
 
             return SpannedToken {
@@ -507,7 +519,7 @@ impl Lexer {
                     span: Span::new(start, self.current_pos()),
                 },
                 Err(_) => SpannedToken {
-                    token: Token::Illegal,
+                    token: Token::Illegal(LexError::NumberOverflow(digits)),
                     span: Span::new(start, self.current_pos()),
                 },
             }
@@ -518,7 +530,7 @@ impl Lexer {
                     span: Span::new(start, self.current_pos()),
                 },
                 Err(_) => SpannedToken {
-                    token: Token::Illegal,
+                    token: Token::Illegal(LexError::NumberOverflow(digits)),
                     span: Span::new(start, self.current_pos()),
                 },
             }

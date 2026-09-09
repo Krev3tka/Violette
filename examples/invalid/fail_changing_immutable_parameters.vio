@@ -1,0 +1,7 @@
+func calculate_price(price: float64) [float64] {
+    price = price * 1.2 // Error: assignment to immutable parameter
+
+    return price
+}
+
+println(1000.0.calculate_price())
