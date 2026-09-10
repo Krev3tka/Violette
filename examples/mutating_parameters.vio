@@ -1,0 +1,21 @@
+func inc(var x: &int) {
+    x = x + 1
+}
+
+func swap(var a: &int, var b: &int) {
+    let temp = a
+    a = b
+    b = temp
+}
+
+func main() {
+    var num = 10
+    inc(&num)
+    println(num)
+
+    var x = 1
+    var y = 2
+    swap(&x, &y)
+    println(x)
+    println(y)
+}

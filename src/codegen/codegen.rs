@@ -16,7 +16,7 @@ pub struct Codegen {
     fn_type_names: std::collections::HashMap<String, String>,
     lambda_prototypes: Vec<String>,
     lifted_lambdas: Vec<String>,
-    lambda_count: usize
+    lambda_count: usize,
 }
 
 impl Codegen {
@@ -53,7 +53,7 @@ impl Codegen {
 
                 let sig_key = format!("{ret_c}({params_str})");
                 if let Some(name) = self.fn_type_names.get(&sig_key) {
-                    return name.clone()
+                    return name.clone();
                 }
 
                 let type_name = format!("vio_fn_type_{}", self.fn_type_names.len());
@@ -62,7 +62,8 @@ impl Codegen {
                 self.typedefs.push(typedef_def);
 
                 type_name
-            },
+            }
+            Ty::Ref { inner, .. } => format!("{}*", self.c_type(inner)),
             _ => "unknown".to_string(),
         }
     }
@@ -130,7 +131,15 @@ impl Codegen {
                 let params_str = params
                     .iter()
                     .map(|p| {
-                        let ty = self.checker.resolve(&p.param_type);
+                        let mut ty = self.checker.resolve(&p.param_type);
+
+                        if p.is_ref {
+                            ty = Ty::Ref {
+                                inner: Box::new(ty),
+                                is_mut: p.kind.is_mutable(),
+                            }
+                        }
+
                         format!("{} {}", self.c_type(&ty), p.name)
                     })
                     .collect::<Vec<_>>()
@@ -161,10 +170,13 @@ impl Codegen {
                     } = method
                     {
                         let c_name = format!("vio_user_{}_{}", target_name, name);
+
                         let ret_ty = return_type
                             .as_ref()
                             .map_or(Ty::Unit, |t| self.checker.resolve(t));
+
                         let ret_str = self.c_type(&ret_ty);
+
                         let params_str = params
                             .iter()
                             .map(|p| {
@@ -201,7 +213,16 @@ impl Codegen {
             {
                 let p: Vec<Ty> = params
                     .iter()
-                    .map(|p| self.checker.resolve(&p.param_type))
+                    .map(|p| {
+                        let mut ty = self.checker.resolve(&p.param_type);
+                        if p.is_ref {
+                            ty = Ty::Ref {
+                                inner: Box::new(ty),
+                                is_mut: p.kind.is_mutable(),
+                            }
+                        }
+                        ty
+                    })
                     .collect();
 
                 let ret = return_type
@@ -319,6 +340,9 @@ impl Codegen {
             Expression::Prefix {
                 operator, right, ..
             } => {
+                if matches!(operator, Token::BitAnd) {
+                    return Ok(format!("&{}", self.emit_expression(right.as_ref())?));
+                }
                 format!(
                     "{}{}",
                     self.correlate_operator(operator)?,
@@ -371,7 +395,15 @@ impl Codegen {
 
                 format!("vio_str_get({}, {})", left_str, index_str)
             }
-            Expression::Identifier { name: ident, .. } => ident.replace("$", "_arg_"),
+            Expression::Identifier { name: ident, .. } => {
+                if let Some(entity) = self.checker.env.lookup(ident)
+                    && matches!(entity.ty, Ty::Ref { .. })
+                {
+                    return Ok(format!("(*{})", ident.replace("$", "_arg_")));
+                }
+
+                ident.replace("$", "_arg_")
+            }
             Expression::Call { function, args, .. } => {
                 if let Expression::Identifier { name, .. } = function.as_ref()
                     && (name == "print" || name == "println")
@@ -496,8 +528,12 @@ impl Codegen {
 
                     let mut ty = self.checker.resolve(&p.param_type);
                     if ty == Ty::Infer {
-                        let inferred= body.iter().find_map(|s| {
-                            if let Statement::Return { value: Some(Expression::Infix { right, .. }), .. } = s {
+                        let inferred = body.iter().find_map(|s| {
+                            if let Statement::Return {
+                                value: Some(Expression::Infix { right, .. }),
+                                ..
+                            } = s
+                            {
                                 Some(self.checker.infer(right, None))
                             } else {
                                 None
@@ -507,7 +543,8 @@ impl Codegen {
                         ty = inferred.unwrap_or(Ty::Int)
                     }
 
-                    self.checker.defined(p.name.clone(), ty.clone(), BindingKind::Let, p.span);
+                    self.checker
+                        .defined(p.name.clone(), ty.clone(), BindingKind::Let, p.span);
                     param_strs.push(format!("{} {}", self.c_type(&ty), clean_name))
                 }
 
@@ -537,7 +574,8 @@ impl Codegen {
 
                 self.checker.env.pop();
 
-                self.lambda_prototypes.push(format!("static {ret_c} {lambda_name}({param_list});"));
+                self.lambda_prototypes
+                    .push(format!("static {ret_c} {lambda_name}({param_list});"));
                 self.lifted_lambdas.push(format!(
                     "static {ret_c} {lambda_name}({param_list}) {{\n{body_c}\n}}\n"
                 ));
@@ -807,14 +845,16 @@ impl Codegen {
         {
             self.checker.env.push();
 
-            let param_tys: Vec<Ty> = params
-                .iter()
-                .map(|p| self.checker.resolve(&p.param_type))
-                .collect();
-
-            for (p, param_ty) in params.iter().zip(param_tys.iter()) {
+            for p in params {
+                let mut param_ty = self.checker.resolve(&p.param_type);
+                if p.is_ref {
+                    param_ty = Ty::Ref {
+                        inner: Box::new(param_ty),
+                        is_mut: p.kind.is_mutable(),
+                    };
+                }
                 self.checker
-                    .defined(p.name.clone(), param_ty.clone(), BindingKind::Var, *span)
+                    .defined(p.name.clone(), param_ty, p.kind, *span);
             }
 
             let mut ret = if name == "main" {
@@ -830,14 +870,16 @@ impl Codegen {
 
             let parameters = params
                 .iter()
-                .map(
-                    |FuncParam {
-                         name, param_type, ..
-                     }| {
-                        let ty = self.checker.resolve(param_type);
-                        format!("{} {}", self.c_type(&ty), name.clone())
-                    },
-                )
+                .map(|p| {
+                    let mut ty = self.checker.resolve(&p.param_type);
+                    if p.is_ref {
+                        ty = Ty::Ref {
+                            inner: Box::new(ty),
+                            is_mut: p.kind.is_mutable(),
+                        };
+                    }
+                    format!("{} {}", self.c_type(&ty), p.name.clone())
+                })
                 .collect::<Vec<String>>()
                 .join(", ");
 

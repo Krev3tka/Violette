@@ -5,6 +5,7 @@ use crate::parser::parser::{MAX_DEPTH, Parser};
 use crate::parser::program::ImportItem;
 use crate::parser::types::Type;
 use crate::parser::{Expression, ParseError};
+use crate::typechecker::error::BindingKind;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Statement {
@@ -85,7 +86,7 @@ pub enum Statement {
 
     Struct {
         name: String,
-        fields: Vec<FuncParam>,
+        fields: Vec<StructParam>,
         span: Span,
     },
 
@@ -116,16 +117,24 @@ pub struct ElseIf {
 pub struct FuncParam {
     pub name: String,
     pub param_type: Type,
-    pub(crate) span: Span,
+    pub span: Span,
+    pub kind: BindingKind,
+    pub is_ref: bool,
 }
 
-pub type StructParam = FuncParam;
+#[derive(Debug, PartialEq, Clone)]
+pub struct StructParam {
+    pub name: String,
+    pub param_type: Type,
+    pub span: Span,
+    pub kind: BindingKind,
+}
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct MatchArm {
     pub pattern: Expression,
     pub body: Expression,
-    pub(crate) span: Span,
+    pub span: Span,
 }
 
 impl Parser {
@@ -451,7 +460,7 @@ impl Parser {
         let open_paren_span = self.current_token.span;
 
         self.expect(Token::LeftParen, self.unexpected(&self.current_token))?;
-        let params = self.parse_fun_params()?;
+        let params = self.parse_func_params()?;
 
         span = span.merge(&self.current_token.span);
         self.expect(
@@ -525,7 +534,7 @@ impl Parser {
         let open_paren_span = self.current_token.span;
 
         self.expect(Token::LeftParen, self.unexpected(&self.current_token))?;
-        let params = self.parse_fun_params()?;
+        let params = self.parse_func_params()?;
 
         span = span.merge(&self.current_token.span);
         self.expect(
@@ -612,6 +621,7 @@ impl Parser {
                 name: field_name,
                 param_type: field_type,
                 span,
+                kind: BindingKind::Let,
             };
 
             fields.push(field);

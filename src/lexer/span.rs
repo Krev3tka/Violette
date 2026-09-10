@@ -1,5 +1,5 @@
 use crate::lexer::token::Token;
-use crate::parser::statement::{FuncParam, MatchArm};
+use crate::parser::statement::{FuncParam, MatchArm, StructParam};
 use crate::parser::{Expression, Statement};
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Ord, PartialOrd, Default)]
@@ -288,6 +288,12 @@ impl ClearSpan for MatchArm {
 }
 
 impl ClearSpan for FuncParam {
+    fn clear_span(&mut self) {
+        self.span = Span::default();
+    }
+}
+
+impl ClearSpan for StructParam {
     fn clear_span(&mut self) {
         self.span = Span::default();
     }

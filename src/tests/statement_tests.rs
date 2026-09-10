@@ -13,6 +13,7 @@ pub mod statements_tests {
         assert_stmt_tests, call, const_stmt, expr_stmt, for_counter, for_range, func, ident,
         if_stmt, index, infix, int, let_stmt, postfix, ret, struct_def, while_loop,
     };
+    use crate::typechecker::error::BindingKind;
 
     #[test]
     fn basic_statements() {
@@ -134,11 +135,15 @@ if a > 7 {
                             ],
                         }),
                         span: Span::default(),
+                        kind: BindingKind::Param,
+                        is_ref: false,
                     },
                     FuncParam {
                         name: "count".to_string(),
                         param_type: Type::Primitive(PrimitiveType::Int),
                         span: Span::default(),
+                        kind: BindingKind::Param,
+                        is_ref: false,
                     },
                 ],
                 Some(Union(vec![
@@ -204,11 +209,15 @@ if a > 7 {
                                 segments: vec!["std".to_string(), "vector".to_string()],
                             }),
                             span: Span::default(),
+                            kind: BindingKind::Param,
+                            is_ref: false,
                         },
                         FuncParam {
                             name: "target".to_string(),
                             param_type: Type::Primitive(Int),
                             span: Span::default(),
+                            kind: BindingKind::Param,
+                            is_ref: false,
                         },
                     ],
                     Some(Union(vec![
@@ -312,16 +321,19 @@ if a > 7 {
                         name: "name".to_string(),
                         param_type: Primitive(String),
                         span: Span::default(),
+                        kind: BindingKind::Let,
                     },
                     StructParam {
                         name: "age".to_string(),
                         param_type: Primitive(Int),
                         span: Span::default(),
+                        kind: BindingKind::Let,
                     },
                     StructParam {
                         name: "weight".to_string(),
                         param_type: Primitive(Int),
                         span: Span::default(),
+                        kind: BindingKind::Let,
                     },
                 ],
             ),

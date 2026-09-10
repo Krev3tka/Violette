@@ -53,8 +53,20 @@ impl Checker {
                         self.main_fn_span = Some(*span)
                     }
 
-                    let params: Vec<_> =
-                        params.iter().map(|p| self.resolve(&p.param_type)).collect();
+                    let params: Vec<_> = params
+                        .iter()
+                        .map(|p| {
+                            let ty = self.resolve(&p.param_type);
+                            if p.is_ref {
+                                Ty::Ref {
+                                    inner: Box::new(ty),
+                                    is_mut: p.kind.is_mutable(),
+                                }
+                            } else {
+                                ty
+                            }
+                        })
+                        .collect();
 
                     let ret = return_type.as_ref().map_or(Ty::Unit, |t| self.resolve(t));
 
@@ -241,7 +253,7 @@ impl Checker {
                 name: name.clone(),
                 param: Box::new(self.resolve(param)),
             },
-            Type::Infer => Ty::Infer
+            Type::Infer => Ty::Infer,
         }
     }
 
@@ -257,11 +269,16 @@ impl Checker {
         {
             self.current_ret = return_type.as_ref().map_or(Ty::Unit, |t| self.resolve(t));
             for p in params {
-                let ty = self.resolve(&p.param_type);
-                if let Err(e) = self
-                    .env
-                    .define(p.name.clone(), ty, BindingKind::Param, &p.span)
-                {
+                let mut ty = self.resolve(&p.param_type);
+
+                if p.is_ref {
+                    ty = Ty::Ref {
+                        inner: Box::new(ty),
+                        is_mut: p.kind.is_mutable(),
+                    };
+                }
+
+                if let Err(e) = self.env.define(p.name.clone(), ty, p.kind, &p.span) {
                     self.errors.push(e);
                 }
             }
@@ -492,9 +509,14 @@ impl Checker {
             return;
         }
 
+        let expected_ty = match &entity.ty {
+            Ty::Ref { inner, .. } => inner.as_ref(),
+            t => t,
+        };
+
         let value_ty = self.infer(value_expr, None);
 
-        self.expect(&value_ty, &entity.ty, value_expr.span())
+        self.expect(&value_ty, expected_ty, value_expr.span())
     }
 
     pub fn check_field_assignment(
@@ -584,7 +606,10 @@ impl Checker {
             Expression::StringLiteral { .. } => Ty::String,
             Expression::FloatLiteral { .. } => Ty::Float,
             Expression::Identifier { name, .. } => match self.env.lookup(name) {
-                Some(entity) => entity.ty,
+                Some(entity) => match &entity.ty {
+                    Ty::Ref { inner, .. } => *inner.clone(),
+                    t => t.clone(),
+                },
                 None => {
                     self.errors.push(TypeError::UnknownName {
                         name: name.clone(),
@@ -719,6 +744,30 @@ impl Checker {
 
                         Ty::Int
                     }
+                    Token::BitAnd => match right.as_ref() {
+                        Expression::Identifier { name, .. } => match self.env.lookup(name) {
+                            Some(entity) => Ty::Ref {
+                                inner: Box::new(entity.ty.clone()),
+                                is_mut: entity.kind.is_mutable(),
+                            },
+                            None => {
+                                self.errors.push(TypeError::UnknownName {
+                                    name: name.clone(),
+                                    span: *span,
+                                });
+
+                                Ty::Error
+                            }
+                        },
+                        _ => {
+                            self.errors.push(TypeError::Unsupported {
+                                desc: "Cannot take reference from non-variable expression"
+                                    .to_string(),
+                                span: *span,
+                            });
+                            Ty::Error
+                        }
+                    },
                     _ => Ty::Error,
                 }
             }
@@ -785,7 +834,18 @@ impl Checker {
                     }
                 }
 
-                let callee = self.infer(function, None);
+                let callee = if matches!(function.as_ref(), Expression::Lambda { .. }) {
+                    let arg_types: Vec<Ty> = args.iter().map(|a| self.infer(a, None)).collect();
+
+                    let expected_fn = Ty::Fn {
+                        params: arg_types,
+                        ret: Box::new(Ty::Infer),
+                    };
+                    self.infer(function, Some(&expected_fn))
+                } else {
+                    self.infer(function, None)
+                };
+
                 match callee {
                     Ty::Fn { params, ret } => {
                         if args.len() != params.len() {
@@ -825,7 +885,7 @@ impl Checker {
             } => {
                 let (expected_fn_params, expected_fn_ret) = match expected_ty {
                     Some(Ty::Fn { params, ret, .. }) => (Some(params), Some(ret.as_ref())),
-                    _ => (None, None)
+                    _ => (None, None),
                 };
 
                 let mut param_tys = Vec::new();
@@ -847,19 +907,35 @@ impl Checker {
                     param_tys.push(ty)
                 }
 
-                let ret = match return_type {
-                    Some(t) => self.resolve(t),
-                    None => expected_fn_ret.cloned().unwrap_or(Ty::Unit)
-                };
-
-                let saved_ret = self.current_ret.clone();
-                self.current_ret = ret.clone();
-
                 self.env.push();
 
                 for (p, ty) in params.iter().zip(param_tys.iter()) {
                     self.defined(p.name.clone(), ty.clone(), BindingKind::Var, p.span);
                 }
+
+                let ret = match return_type {
+                    Some(t) => self.resolve(t),
+                    None => {
+                        if let Some(exp_ret) = expected_fn_ret
+                            && *exp_ret != Ty::Infer
+                        {
+                            exp_ret.clone()
+                        } else {
+                            body.iter()
+                                .find_map(|s| {
+                                    if let Statement::Return { value: Some(v), .. } = s {
+                                        Some(self.infer(v, None))
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .unwrap_or(Ty::Unit)
+                        }
+                    }
+                };
+
+                let saved_ret = self.current_ret.clone();
+                self.current_ret = ret.clone();
 
                 for s in body {
                     self.check_statement(s);
@@ -1083,6 +1159,40 @@ impl Checker {
     }
 
     pub fn expect(&mut self, actual: &Ty, expected: &Ty, span: Span) {
+        if let (
+            Ty::Ref {
+                inner: exp_in,
+                is_mut: false,
+            },
+            Ty::Ref {
+                inner: act_in,
+                is_mut: true,
+            },
+        ) = (expected, actual)
+            && exp_in == act_in
+        {
+            return;
+        }
+
+        if let (
+            Ty::Ref {
+                inner: exp_in,
+                is_mut: true,
+            },
+            Ty::Ref {
+                inner: act_in,
+                is_mut: false,
+            },
+        ) = (expected, actual)
+            && exp_in == act_in
+        {
+            self.errors.push(TypeError::Unsupported {
+                desc: "Cannot pass immutable reference to mutable parameter (variable must be declared with `var`)".to_string(),
+                span,
+            });
+            return;
+        }
+
         if let Ty::Union(types) = expected
             && types.iter().any(|ty| ty == actual)
         {

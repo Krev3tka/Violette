@@ -275,7 +275,18 @@ impl Parser {
     }
 
     pub fn next_token(&mut self) {
-        self.current_token = std::mem::replace(&mut self.peek_token, self.lexer.next_token())
+        self.current_token = std::mem::replace(&mut self.peek_token, self.lexer.next_token());
+
+        if self.paren_depth > 0 {
+            while matches!(self.current_token.token, Token::Newline) {
+                self.current_token =
+                    std::mem::replace(&mut self.peek_token, self.lexer.next_token());
+            }
+
+            while matches!(self.peek_token.token, Token::Newline) {
+                self.peek_token = self.lexer.next_token();
+            }
+        }
     }
 
     pub fn skip_terminators(&mut self) {

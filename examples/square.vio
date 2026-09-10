@@ -1,6 +1,6 @@
 package square
 
-func square(x: int) [float64] {
+func square(x: int) [int] {
     return x ** 2
 }
 

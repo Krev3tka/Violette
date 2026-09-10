@@ -1,13 +1,3 @@
-func find_matching(target: int, check: func (int) [bool]) [bool] {
-    return check(target)
-}
-
 func main() {
-    for x in 1..2030 {
-        let is_magic = find_matching(x, (==2 ** 10 - 24))
-        if is_magic {
-            print("Found: ")
-            println(x)
-        }
-    }
+   println (1000 ~> (==2 ** 10 - 24))
 }

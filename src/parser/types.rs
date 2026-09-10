@@ -43,7 +43,7 @@ impl std::fmt::Display for ParseError {
                     MAX_DEPTH, span.start.line, span.start.col
                 )
             }
-            _ => write!(f, "not ready yet, {:?}", self),
+            _ => write!(f, "not ready yet or idk, {:?}", self),
         }
     }
 }
@@ -65,7 +65,7 @@ pub enum Type {
     },
 
     Union(Vec<Type>),
-    
+
     Infer,
 }
 

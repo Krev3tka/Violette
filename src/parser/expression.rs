@@ -5,6 +5,7 @@ use crate::parser::parser::{MAX_DEPTH, Parser};
 use crate::parser::statement::{FuncParam, MatchArm};
 use crate::parser::types::Type;
 use crate::parser::{ParseError, Precedence, Statement};
+use crate::typechecker::error::BindingKind;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expression {
@@ -249,17 +250,14 @@ impl Parser {
                     | Token::GreaterOrEquals
                     | Token::Sprout
                     | Token::Add
-                    | Token::Subtract
                     | Token::Multiply
                     | Token::Divide
                     | Token::Modulus
                     | Token::Power
                     | Token::LogicAnd
                     | Token::LogicOr
-                    | Token::LogicNot
                     | Token::BitAnd
                     | Token::BitOr
-                    | Token::BitNot
                     | Token::BitXOR
                     | Token::LeftShift
                     | Token::RightShift => {
@@ -267,46 +265,48 @@ impl Parser {
                         self.next_token();
 
                         let right_part = self.parse_expression(Lowest)?;
+                        self.skip_terminators();
 
-                        self.next_token();
-                        self.paren_depth -= 1;
-
-                        self.expect(
-                            Token::RightParen,
-                            ParseError::UnclosedDelimiter {
+                        if matches!(self.peek_token.token.clone(), Token::RightParen) {
+                            self.next_token();
+                            self.paren_depth -= 1;
+                        } else {
+                            return Err(ParseError::UnclosedDelimiter {
                                 open_token: Box::new(open_token),
                                 open_span,
                                 expected_token: Box::new(Token::RightParen),
-                                found_tok: Box::new(self.current_token.token.clone()),
-                                found_span: self.current_token.span
-                            }
-                        )?;
+                                found_tok: Box::new(self.peek_token.token.clone()),
+                                found_span: self.peek_token.span,
+                            });
+                        }
 
                         let arg_ident = Expression::Identifier {
                             name: String::from("$0"),
-                            span: start_span
+                            span: start_span,
                         };
 
                         let body_expr = Expression::Infix {
                             left: Box::new(arg_ident),
                             operator,
                             right: Box::new(right_part),
-                            span: start_span
+                            span: start_span,
                         };
 
                         return Ok(Expression::Lambda {
                             params: vec![FuncParam {
                                 name: String::from("$0"),
                                 param_type: Type::Infer,
-                                span: start_span
+                                span: start_span,
+                                kind: BindingKind::Param,
+                                is_ref: false,
                             }],
                             return_type: None,
                             body: vec![Statement::Return {
                                 value: Some(body_expr),
                                 span: start_span,
                             }],
-                            span: start_span
-                        })
+                            span: start_span,
+                        });
                     }
                     _ => {}
                 };
@@ -330,6 +330,7 @@ impl Parser {
             }
             Token::Subtract
             | Token::LogicNot
+            | Token::BitAnd
             | Token::BitNot
             | Token::Increment
             | Token::Decrement => {
@@ -606,11 +607,18 @@ impl Parser {
         self.parse_expression(Lowest)
     }
 
-    pub fn parse_fun_params(&mut self) -> Result<Vec<FuncParam>, ParseError> {
-        let start_span = self.current_token.span;
+    pub fn parse_func_params(&mut self) -> Result<Vec<FuncParam>, ParseError> {
         let mut params = Vec::new();
 
         while !matches!(self.current_token.token, Token::RightParen) {
+            let kind = if matches!(self.current_token.token.clone(), Token::Var) {
+                self.next_token();
+                BindingKind::Var
+            } else {
+                BindingKind::Param
+            };
+
+            let start_span = self.current_token.span;
             let param_name = match self.current_token.token.clone() {
                 Token::Identifier(name) => name,
                 _ => {
@@ -625,12 +633,21 @@ impl Parser {
             self.next_token();
             self.expect(Token::Colon, self.unexpected(&self.current_token))?;
 
+            let is_ref = match self.current_token.token.clone() {
+                Token::BitAnd => {
+                    self.next_token();
+                    true
+                }
+                _ => false,
+            };
             let param_type = self.parse_type()?;
 
             let param = FuncParam {
                 name: param_name,
                 param_type,
                 span: start_span,
+                kind,
+                is_ref,
             };
 
             params.push(param);
@@ -646,21 +663,46 @@ impl Parser {
     }
 
     pub fn parse_call_args(&mut self) -> Result<Vec<Expression>, ParseError> {
+        let open_paren_tok = self.current_token.token.clone();
+        let open_paren_span = self.current_token.span;
+
         self.paren_depth += 1;
         self.next_token();
         self.skip_terminators();
 
         let mut args = Vec::new();
-        while !matches!(self.current_token.token, Token::RightParen) {
-            args.push(self.parse_expression(Lowest)?);
 
-            if !matches!(self.current_token.token, Token::RightParen | Token::Comma) {
+        if matches!(self.current_token.token.clone(), Token::RightParen) {
+            self.paren_depth -= 1;
+            return Ok(args);
+        }
+
+        loop {
+            args.push(self.parse_expression(Lowest)?);
+            self.skip_terminators();
+
+            while self.paren_depth > 0 && matches!(self.peek_token.token, Token::Newline) {
                 self.next_token();
             }
 
-            if matches!(self.current_token.token, Token::Comma) {
+            if matches!(self.peek_token.token, Token::Comma) {
                 self.next_token();
-                self.skip_terminators();
+                self.next_token();
+
+                if matches!(self.current_token.token, Token::RightParen) {
+                    break;
+                }
+            } else if matches!(self.peek_token.token.clone(), Token::RightParen) {
+                self.next_token();
+                break;
+            } else {
+                return Err(ParseError::UnclosedDelimiter {
+                    open_token: Box::new(open_paren_tok),
+                    open_span: open_paren_span,
+                    expected_token: Box::new(Token::RightParen),
+                    found_tok: Box::new(self.peek_token.token.clone()),
+                    found_span: self.peek_token.span,
+                });
             }
         }
 
@@ -677,7 +719,7 @@ impl Parser {
         let open_paren_span = self.current_token.span;
 
         self.expect(Token::LeftParen, self.unexpected(&self.current_token))?;
-        let params = self.parse_fun_params()?;
+        let params = self.parse_func_params()?;
         self.expect(
             Token::RightParen,
             ParseError::UnclosedDelimiter {

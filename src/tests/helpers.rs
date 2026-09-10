@@ -4,7 +4,7 @@ use crate::lexer::lexer::Lexer;
 use crate::lexer::span::{ClearSpan, Span};
 use crate::lexer::token::Token;
 use crate::parser::parser::Parser;
-use crate::parser::statement::{ElseIf, FuncParam, IfStatement, MatchArm};
+use crate::parser::statement::{ElseIf, FuncParam, IfStatement, MatchArm, StructParam};
 use crate::parser::types::Type;
 use crate::parser::{Expression, Precedence, Statement};
 
@@ -216,7 +216,7 @@ pub fn func(
     }
 }
 
-pub fn struct_def(name: &str, fields: Vec<FuncParam>) -> Statement {
+pub fn struct_def(name: &str, fields: Vec<StructParam>) -> Statement {
     Statement::Struct {
         name: name.to_string(),
         fields,

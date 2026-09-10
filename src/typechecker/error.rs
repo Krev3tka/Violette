@@ -7,7 +7,7 @@ pub enum BindingKind {
     Var,
     Let,
     Const,
-    Param
+    Param,
 }
 
 impl BindingKind {

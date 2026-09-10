@@ -15,10 +15,23 @@ impl Diagnostics for TypeError {
                 decl_span,
                 assign_span,
             } => {
-                let kind_str = match kind {
-                    BindingKind::Let => "immutable",
-                    BindingKind::Const => "const",
-                    BindingKind::Param => "parameter",
+                let (kind_str, help_message) = match kind {
+                    BindingKind::Let => (
+                        "let-bound",
+                        "variable was declared with `let`, consider using `var` to make it mutable"
+                            .to_string(),
+                    ),
+                    BindingKind::Const => (
+                        "const",
+                        "constants are immutable and cannot be reassigned".to_string(),
+                    ),
+                    BindingKind::Param => (
+                        "parameter",
+                        format!(
+                            "parameters are immutable by default, add `var` before the name: `var {}: ...`",
+                            name
+                        ),
+                    ),
                     _ => unreachable!(),
                 };
 
@@ -35,20 +48,12 @@ impl Diagnostics for TypeError {
                     ),
                 ];
 
-                let kinda_message = format!("try to use `var` instead of `{}`", kind_str);
-
-                let help = match kind {
-                    BindingKind::Let | BindingKind::Const => Some(kinda_message.as_str()),
-                    BindingKind::Param => Some("function parameters are always immutable by design"),
-                    _ => None,
-                };
-
                 self.report(
                     path.to_string(),
                     *assign_span,
                     format!("couldn't assign again to {} variable `{}`", kind_str, name),
                     &labels,
-                    help,
+                    Some(help_message.as_str()),
                 )
             }
             TypeError::DuplicateDefinition {
@@ -141,7 +146,7 @@ impl Diagnostics for TypeError {
                 let labels = [Label::primary(
                     *span,
                     format!(
-                        "there's a type mismatch, expected `{:?}`, got `{:?}`",
+                        "there's a type mismatch, expected `{}`, got `{}`",
                         expected, found
                     ),
                     path.to_string(),
