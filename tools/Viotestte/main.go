@@ -19,6 +19,8 @@ var ExpectedErrors = map[string]string{
 	"fail_redefine_fun_vars.vio": "couldn't re-define",
 	"fail_user_struct.vio":       "couldn't re-define",
 	"fail_with_no_extend.vio":    "no method named `distance` found for type `Point`",
+	"fail_changing_immutable_parameters.vio": "couldn't assign again to parameter variable `price`",
+	"fail_sprouting_type_mismatch.vio": "found mismatched types",
 }
 
 var ExpectedOutputs = map[string]string{
@@ -32,6 +34,8 @@ var ExpectedOutputs = map[string]string{
 	"field_assigning.vio": "15",
 	"fizzbuzz.vio":        "1\n2\nfizz\n4\nbuzz\nfizz\n7\n8\nfizz\nbuzz\n11\nfizz\n13\n14\nfizzbuzz",
 	"if_else.vio":         "36\n10.648\n361",
+	"lambdas_like_in_haskell.vio": "10\n42",
+	"long_expr_in_lambda.vio": "true",
 	"moduling.vio":        "17",
 	"multiplication_table_via_ranges.vio": "1 2 3 4 5 6 7 8 9 \n" +
 		"2 4 6 8 10 12 14 16 18 \n" +
@@ -42,6 +46,7 @@ var ExpectedOutputs = map[string]string{
 		"7 14 21 28 35 42 49 56 63 \n" +
 		"8 16 24 32 40 48 56 64 72 \n" +
 		"9 18 27 36 45 54 63 72 81 ",
+    "mutating_parameters.vio": "11\n2\n1",
 	"point.vio":          "3.5",
 	"sprouting.vio":      "true",
 	"square.vio":         "36",
