@@ -64,6 +64,7 @@ impl Codegen {
                 type_name
             }
             Ty::Ref { inner, .. } => format!("{}*", self.c_type(inner)),
+            Ty::Infer => "int64_t".to_string(),
             _ => "unknown".to_string(),
         }
     }
@@ -303,6 +304,10 @@ impl Codegen {
     }
 
     pub fn emit_expression(&mut self, expr: &Expression) -> Result<String, CodegenError> {
+        self.emit_expression_with_expected(expr, None)
+    }
+
+    pub fn emit_expression_with_expected(&mut self, expr: &Expression, expected_ty: Option<&Ty>) -> Result<String, CodegenError> {
         Ok(match expr {
             Expression::IntLiteral { val: i, .. } => i.to_string(),
             Expression::FloatLiteral { val: f, .. } => {
@@ -435,6 +440,12 @@ impl Codegen {
                     return Ok(format!("vio_{name}()"));
                 }
 
+                let callee_ty = self.checker.infer(function.as_ref(), None);
+                let expected_params = match &callee_ty {
+                    Ty::Fn { params, .. } => Some(params.clone()),
+                    _ => None
+                };
+
                 let f = self.emit_expression(function.as_ref())?;
 
                 let mut c_fn_name =
@@ -446,22 +457,26 @@ impl Codegen {
                         f.clone()
                     };
 
-                if let Expression::Identifier { name, .. } = function.as_ref()
-                    && self.checker.env.lookup(name).is_none()
-                    && !args.is_empty()
-                {
-                    let first_arg_ty = self.checker.infer(&args[0], None);
-                    if let Ty::Struct(ref s_name) = first_arg_ty {
-                        let method_sig_name = format!("{}.{}", s_name, name);
-                        if self.checker.funcs.contains_key(&method_sig_name) {
-                            c_fn_name = format!("vio_user_{}_{}", s_name, name);
-                        }
-                    }
-                }
+                // if let Expression::Identifier { name, .. } = function.as_ref()
+                //     && self.checker.env.lookup(name).is_none()
+                //     && !args.is_empty()
+                // {
+                //     let first_arg_ty = self.checker.infer(&args[0], None);
+                //     if let Ty::Struct(ref s_name) = first_arg_ty {
+                //         let method_sig_name = format!("{}.{}", s_name, name);
+                //         if self.checker.funcs.contains_key(&method_sig_name) {
+                //             c_fn_name = format!("vio_user_{}_{}", s_name, name);
+                //         }
+                //     }
+                // }
 
                 let a = args
                     .iter()
-                    .map(|arg| self.emit_expression(arg))
+                    .enumerate()
+                    .map(|(i, arg)| {
+                        let exp = expected_params.as_ref().and_then(|p| p.get(i));
+                        self.emit_expression_with_expected(arg, exp)
+                    })
                     .collect::<Result<Vec<_>, _>>()?
                     .join(", ");
 
@@ -520,27 +535,24 @@ impl Codegen {
                 let lambda_name = format!("vio_lambda_{}", self.lambda_count);
                 self.lambda_count += 1;
 
+                let (expected_params, expected_ret) = match expected_ty {
+                    Some(Ty::Fn { params, ret, .. }) => (Some(params), Some(ret.as_ref())),
+                    _ => (None, None)
+                };
+
                 self.checker.env.push();
 
                 let mut param_strs = Vec::new();
-                for p in params {
+                for (i, p) in params.iter().enumerate() {
                     let clean_name = p.name.replace("$", "_arg_");
 
                     let mut ty = self.checker.resolve(&p.param_type);
-                    if ty == Ty::Infer {
-                        let inferred = body.iter().find_map(|s| {
-                            if let Statement::Return {
-                                value: Some(Expression::Infix { right, .. }),
-                                ..
-                            } = s
-                            {
-                                Some(self.checker.infer(right, None))
-                            } else {
-                                None
-                            }
-                        });
-
-                        ty = inferred.unwrap_or(Ty::Int)
+                    if ty == Ty::Infer || ty == Ty::Error {
+                        if let Some(exp_p) = expected_params.and_then(|ep| ep.get(i)) {
+                            ty = exp_p.clone();
+                        } else {
+                            ty = Ty::Int
+                        }
                     }
 
                     self.checker
@@ -551,14 +563,19 @@ impl Codegen {
                 let ret_ty = match return_type {
                     Some(t) => self.checker.resolve(t),
                     None => {
-                        let inferred = body.iter().find_map(|s| {
-                            if let Statement::Return { value: Some(v), .. } = s {
-                                Some(self.checker.infer(v, None))
-                            } else {
-                                None
-                            }
-                        });
-                        inferred.unwrap_or(Ty::Unit)
+                        if let Some(exp_r) = expected_ret && *exp_r != Ty::Infer && *exp_r != Ty::Error {
+                            exp_r.clone()
+                        } else {
+                            let inferred = body.iter().find_map(|s| {
+                                if let Statement::Return { value: Some(v), .. } = s {
+                                    let t = self.checker.infer(v, None);
+                                    if t != Ty::Error && t != Ty::Infer { Some(t) } else { None }
+                                } else {
+                                    None
+                                }
+                            });
+                            inferred.unwrap_or(Ty::Unit)
+                        }
                     }
                 };
 

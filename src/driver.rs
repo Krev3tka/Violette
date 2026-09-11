@@ -215,7 +215,7 @@ pub fn compile(command: &str, file: &str) {
 
     let status = Command::new(&compiler)
         .arg("-std=gnu99")
-        .arg("-O3")
+        .arg("-O0")
         .arg("-w")
         .arg(&c_path)
         .arg(&str_c_path)

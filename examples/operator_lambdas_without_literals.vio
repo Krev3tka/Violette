@@ -1,0 +1,25 @@
+func calculate_int(a: int, b: int, op: func(int, int) [int]) [int] {
+    return op(a, b)
+}
+
+func calculate_float(a: float64, b: float64, op: func(float64, float64) [float64]) [float64] {
+    return op(a, b)
+}
+
+func calculate_string(a: string, b: string, op: func(string, string) [string]) [string] {
+    return op(a, b)
+}
+
+func main() {
+    println(
+        calculate_float(7.3, 5.5 (-)) // 1.8
+    )
+
+    println(
+        calculate_int(5, 7, (**)) // 78_125
+    )
+
+    println(
+        calculate_string("Hello, ", "Violette", (+)) // Hello, Violette
+    )
+}
