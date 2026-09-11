@@ -390,7 +390,7 @@ impl Parser {
                 Expression::Prefix {
                     operator,
                     right: Box::new(right),
-                    span: start_span,
+                    span: start_span.merge(&self.current_token.span),
                 }
             }
             Token::Match => self.parse_match_expression()?,

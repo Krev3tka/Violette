@@ -96,7 +96,7 @@ impl Diagnostics for TypeError {
 
                 let labels = [Label::primary(
                     *span,
-                    format!("couldn't `{}` word outside of a loop", kind_str),
+                    format!("found `{}` word outside of a loop", kind_str),
                     path.to_string(),
                 )];
 
@@ -163,14 +163,14 @@ impl Diagnostics for TypeError {
             TypeError::NoSuchMethod { ty, method, span } => {
                 let labels = [Label::primary(
                     *span,
-                    format!("method not found on type `{:?}`", ty),
+                    format!("method not found on type `{}`", ty),
                     path.to_string(),
                 )];
 
                 self.report(
                     path.to_string(),
                     *span,
-                    format!("no method named `{}` found for type `{:?}`", method, ty),
+                    format!("no method named `{}` found for type `{}`", method, ty),
                     &labels,
                     match ty {
                         Ty::Int | Ty::Float | Ty::Bool | Ty::String => {
@@ -192,7 +192,7 @@ impl Diagnostics for TypeError {
                         "method not found on type `{}`",
                         match ty {
                             Ty::Struct(s) => s.clone(),
-                            _ => format!("{:?}", ty),
+                            _ => format!("{}", ty),
                         }
                     ),
                     path.to_string(),
@@ -206,14 +206,195 @@ impl Diagnostics for TypeError {
                         method,
                         match ty {
                             Ty::Struct(s) => s.clone(),
-                            _ => format!("{:?}", ty),
+                            _ => format!("{}", ty),
                         }
                     ),
                     &labels,
                     Some(help),
                 )
             }
-            _ => format!("{:?}", self),
+
+            TypeError::UnknownName { name, span } => {
+                let labels = [Label::primary(
+                    *span,
+                    format!("nothing is named like `{}`", name),
+                    path.to_string(),
+                )];
+
+                self.report(
+                    path.to_string(),
+                    *span,
+                    format!("found something undefined: `{}`", name),
+                    &labels,
+                    // somehow to implement searching similar names
+                    None,
+                )
+            }
+            TypeError::NotCallable { name, ty, span } => {
+                let labels = [Label::primary(
+                    *span,
+                    format!("couldn't call `{}` as a function", name),
+                    path.to_string(),
+                )];
+
+                self.report(
+                    path.to_string(),
+                    *span,
+                    format!("`{}` isn't callable cause it has `{}` type", name, ty),
+                    &labels,
+                    None,
+                )
+            }
+            TypeError::ArityMismatch {
+                name,
+                expected,
+                found,
+                span,
+            } => {
+                let labels = [Label::primary(
+                    *span,
+                    format!("expected {} arguments, but found {}", expected, found),
+                    path.to_string(),
+                )];
+
+                self.report(
+                    path.to_string(),
+                    *span,
+                    format!(
+                        "function `{}` takes {} arguments but only {} were found",
+                        name, expected, found
+                    ),
+                    &labels,
+                    None,
+                )
+            }
+            TypeError::UnknownField {
+                struct_name,
+                field,
+                span,
+            } => {
+                let labels = [Label::primary(
+                    *span,
+                    format!("field `{}` isn't found in struct `{}`", field, struct_name),
+                    path.to_string(),
+                )];
+
+                self.report(
+                    path.to_string(),
+                    *span,
+                    format!(
+                        "struct `{}` possibly has no field named `{}`",
+                        struct_name, field
+                    ),
+                    &labels,
+                    None,
+                )
+            }
+            TypeError::NoFields { ty, span } => {
+                let labels = [Label::primary(
+                    *span,
+                    format!("type `{}` can has no fields", ty),
+                    path.to_string(),
+                )];
+
+                self.report(
+                    path.to_string(),
+                    *span,
+                    format!("cannot access field on non-struct type `{}`", ty),
+                    &labels,
+                    Some("field access `.` is only available on struct instances"),
+                )
+            }
+            TypeError::InvalidBinaryOperator {
+                operator,
+                left,
+                right,
+                span,
+            } => {
+                let labels = [Label::primary(
+                    *span,
+                    format!(
+                        "couldn't apply binary operator to `{}` and `{}`",
+                        left, right
+                    ),
+                    path.to_string(),
+                )];
+
+                self.report(
+                    path.to_string(),
+                    *span,
+                    format!(
+                        "operator `{:?}` cannot be applied to types `{}` and `{}`",
+                        operator, left, right
+                    ),
+                    &labels,
+                    None,
+                )
+            }
+            TypeError::InvalidUnaryOperator {
+                operator,
+                operand,
+                span,
+            } => {
+                let labels = [Label::primary(
+                    *span,
+                    format!("couldn't apply unary operator to type `{}`", operand),
+                    path.to_string(),
+                )];
+
+                self.report(
+                    path.to_string(),
+                    *span,
+                    format!(
+                        "operator `{:?}` cannot be applied to type `{}`",
+                        operator, operand
+                    ),
+                    &labels,
+                    None,
+                )
+            }
+            TypeError::Unsupported { desc, span } => {
+                let labels = [Label::primary(*span, desc.clone(), path.to_string())];
+
+                self.report(path.to_string(), *span, desc.clone(), &labels, None)
+            }
+            TypeError::ConflictingEntryPoint {
+                first_decl_span,
+                second_decl_span,
+            } => {
+                let (earlier_span, later_span, is_main_first) =
+                    if first_decl_span.start.line < second_decl_span.start.line {
+                        (first_decl_span, second_decl_span, false)
+                    } else {
+                        (second_decl_span, first_decl_span, true)
+                    };
+
+                let first_msg = if is_main_first {
+                    "explicit `main` function is defined here"
+                } else {
+                    "top-level code starts here"
+                };
+
+                let second_msg = if is_main_first {
+                    "conflicting top-level code cannot work together with `func main()`"
+                } else {
+                    "conflicting `func main()` cannot work together with top-level code"
+                };
+
+                let labels = [
+                    Label::secondary(*earlier_span, first_msg.to_string(), path.to_string()),
+                    Label::primary(*later_span, second_msg.to_string(), path.to_string()),
+                ];
+
+                self.report(
+                    path.to_string(),
+                    *second_decl_span,
+                    "program cannot have both top-level statements and a `main` function"
+                        .to_string(),
+                    &labels,
+                    Some("choose either scripting style or explicit `func main() { ... }`\n\t or just check your code for extra-entry points"),
+                )
+            }
         }
     }
 

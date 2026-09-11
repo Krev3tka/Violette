@@ -39,22 +39,20 @@ impl Parser {
 
         self.skip_terminators();
 
+        let all_statements = self.parse_top_level()?;
+
         let mut declarations = Vec::new();
+        let mut main = Vec::new();
 
-        while matches!(
-            self.current_token.token,
-            Token::Func | Token::Struct | Token::Const | Token::Extern | Token::Extend
-        ) {
-            declarations.push(self.parse_statement()?);
-            self.skip_terminators();
-        }
-
-        self.skip_terminators();
-
-        let mut main = vec![];
-
-        if !matches!(self.current_token.token, Token::Eof) {
-            main = self.parse_top_level()?;
+        for stmt in all_statements {
+            match stmt {
+                Statement::Func { .. }
+                | Statement::Struct { .. }
+                | Statement::Const { .. }
+                | Statement::ExternFunc { .. }
+                | Statement::Extend { .. } => declarations.push(stmt),
+                _ => main.push(stmt),
+            }
         }
 
         Ok(Program {

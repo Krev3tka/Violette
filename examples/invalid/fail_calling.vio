@@ -1,0 +1,6 @@
+let count = 5;
+
+let a = count(5);
+let b = 5(3);
+let c = "literally string"(6)
+let d = 3.14(8)

@@ -70,6 +70,8 @@ impl Codegen {
     }
 
     pub fn emit_program(&mut self, prg: Program) -> Result<String, CodegenError> {
+        // 1. Extern-functions
+
         for s in &prg.declarations {
             if let Statement::ExternFunc { name, .. } = s {
                 self.extern_funcs.insert(name.clone());
@@ -83,6 +85,8 @@ impl Codegen {
         self.checker.collect_signatures(&prg.declarations);
 
         self.checker.env.push();
+
+        // 2. Constant variables (#define)
 
         for s in &prg.declarations {
             if let Statement::Const { name, value, span } = s {
@@ -101,6 +105,8 @@ impl Codegen {
             lines.push("\n".to_string())
         }
 
+        // 3. Structs
+
         for s in &prg.declarations {
             if let Statement::Struct { .. } = s {
                 let struct_str = self.emit_struct(s)?;
@@ -108,6 +114,8 @@ impl Codegen {
                 lines.push(struct_str)
             }
         }
+
+        // 4. First pass over functions && extend-blocks
 
         for s in &prg.declarations {
             if let Statement::Func {
@@ -200,6 +208,8 @@ impl Codegen {
 
         lines.push("\n".to_string());
 
+        // 5. Second pass over functions (no forward declaration)
+
         for s in &prg.declarations {
             if let Statement::Const { .. } = s {
                 continue;
@@ -239,6 +249,8 @@ impl Codegen {
                     .defined(name.clone(), fn_ty.clone(), BindingKind::Var, *span);
             }
         }
+
+        // 6. Main function
 
         for s in &prg.declarations {
             if let Statement::Const { .. } = s {

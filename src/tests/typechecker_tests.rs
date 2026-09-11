@@ -139,6 +139,7 @@ print()
                         span: Span::new(Position { line: 5, col: 1 }, Position { line: 5, col: 6 })
                     },
                     NotCallable {
+                        name: "5".to_string(),
                         ty: Ty::Int,
                         span: Span::new(Position { line: 6, col: 1 }, Position { line: 6, col: 2 })
                     }

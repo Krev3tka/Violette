@@ -44,6 +44,7 @@ pub enum TypeError {
     },
 
     NotCallable {
+        name: String,
         ty: Ty,
         span: Span,
     },

@@ -151,7 +151,7 @@ pub fn compile(command: &str, file: &str) {
         for err in checker.errors {
             println!("{}", err.message(file))
         }
-        return;
+        std::process::exit(1);
     }
 
     let mut codegen = Codegen::new();
