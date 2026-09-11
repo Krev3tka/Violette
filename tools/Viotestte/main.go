@@ -47,6 +47,7 @@ var ExpectedOutputs = map[string]string{
 		"8 16 24 32 40 48 56 64 72 \n" +
 		"9 18 27 36 45 54 63 72 81 ",
     "mutating_parameters.vio": "11\n2\n1",
+    "operator_lambdas_without_literals.vio": "1.8\n78125\nHello, Violette",
 	"point.vio":          "3.5",
 	"sprouting.vio":      "true",
 	"square.vio":         "36",

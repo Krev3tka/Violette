@@ -12,7 +12,7 @@ func calculate_string(a: string, b: string, op: func(string, string) [string]) [
 
 func main() {
     println(
-        calculate_float(7.3, 5.5 (-)) // 1.8
+        calculate_float(7.3, 5.5, (-)) // 1.8
     )
 
     println(

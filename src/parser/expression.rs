@@ -264,7 +264,6 @@ impl Parser {
                     | Token::RightShift => {
                         let operator = self.current_token.token.clone();
                         self.next_token();
-                        self.paren_depth -= 1;
 
                         if matches!(self.current_token.token.clone(), Token::RightParen) {
                             let arg_ident_0 = Expression::Identifier {

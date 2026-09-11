@@ -307,7 +307,11 @@ impl Codegen {
         self.emit_expression_with_expected(expr, None)
     }
 
-    pub fn emit_expression_with_expected(&mut self, expr: &Expression, expected_ty: Option<&Ty>) -> Result<String, CodegenError> {
+    pub fn emit_expression_with_expected(
+        &mut self,
+        expr: &Expression,
+        expected_ty: Option<&Ty>,
+    ) -> Result<String, CodegenError> {
         Ok(match expr {
             Expression::IntLiteral { val: i, .. } => i.to_string(),
             Expression::FloatLiteral { val: f, .. } => {
@@ -443,12 +447,12 @@ impl Codegen {
                 let callee_ty = self.checker.infer(function.as_ref(), None);
                 let expected_params = match &callee_ty {
                     Ty::Fn { params, .. } => Some(params.clone()),
-                    _ => None
+                    _ => None,
                 };
 
                 let f = self.emit_expression(function.as_ref())?;
 
-                let mut c_fn_name =
+                let c_fn_name =
                     if f == "main" || f.starts_with("vio_") || self.extern_funcs.contains(&f) {
                         f.clone()
                     } else if self.checker.funcs.contains_key(&f) {
@@ -456,19 +460,6 @@ impl Codegen {
                     } else {
                         f.clone()
                     };
-
-                // if let Expression::Identifier { name, .. } = function.as_ref()
-                //     && self.checker.env.lookup(name).is_none()
-                //     && !args.is_empty()
-                // {
-                //     let first_arg_ty = self.checker.infer(&args[0], None);
-                //     if let Ty::Struct(ref s_name) = first_arg_ty {
-                //         let method_sig_name = format!("{}.{}", s_name, name);
-                //         if self.checker.funcs.contains_key(&method_sig_name) {
-                //             c_fn_name = format!("vio_user_{}_{}", s_name, name);
-                //         }
-                //     }
-                // }
 
                 let a = args
                     .iter()
@@ -537,7 +528,7 @@ impl Codegen {
 
                 let (expected_params, expected_ret) = match expected_ty {
                     Some(Ty::Fn { params, ret, .. }) => (Some(params), Some(ret.as_ref())),
-                    _ => (None, None)
+                    _ => (None, None),
                 };
 
                 self.checker.env.push();
@@ -563,13 +554,20 @@ impl Codegen {
                 let ret_ty = match return_type {
                     Some(t) => self.checker.resolve(t),
                     None => {
-                        if let Some(exp_r) = expected_ret && *exp_r != Ty::Infer && *exp_r != Ty::Error {
+                        if let Some(exp_r) = expected_ret
+                            && *exp_r != Ty::Infer
+                            && *exp_r != Ty::Error
+                        {
                             exp_r.clone()
                         } else {
                             let inferred = body.iter().find_map(|s| {
                                 if let Statement::Return { value: Some(v), .. } = s {
                                     let t = self.checker.infer(v, None);
-                                    if t != Ty::Error && t != Ty::Infer { Some(t) } else { None }
+                                    if t != Ty::Error && t != Ty::Infer {
+                                        Some(t)
+                                    } else {
+                                        None
+                                    }
                                 } else {
                                     None
                                 }
