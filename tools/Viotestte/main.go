@@ -21,6 +21,12 @@ var ExpectedErrors = map[string]string{
 	"fail_with_no_extend.vio":    "no method named `distance` found for type `Point`",
 	"fail_changing_immutable_parameters.vio": "couldn't assign again to parameter variable `price`",
 	"fail_sprouting_type_mismatch.vio": "found mismatched types",
+	"fail_a_few_entry_points.vio": "program cannot have both top-level statements and a `main` function",
+	"fail_abt_fields.vio": "struct `Color` possibly has no field named `yellow`",
+	"fail_calling.vio": "`count` isn't callable cause it has `int` type",
+	"fail_operator_logic.vio": "operator `Add` cannot be applied to types `int` and `string`",
+	"fail_unknown_name.vio": "found something undefined: `Ponit`",
+	"fail_arity_mismatch.vio": "function `mul_and_add` takes 2 arguments but only 1 were found",
 }
 
 var ExpectedOutputs = map[string]string{
@@ -33,6 +39,7 @@ var ExpectedOutputs = map[string]string{
 	"fibonacci.vio":       "55",
 	"field_assigning.vio": "15",
 	"fizzbuzz.vio":        "1\n2\nfizz\n4\nbuzz\nfizz\n7\n8\nfizz\nbuzz\n11\nfizz\n13\n14\nfizzbuzz",
+	"funcs_with_assignment_syntax.vio": "7",
 	"if_else.vio":         "36\n10.648\n361",
 	"lambdas_like_in_haskell.vio": "10\n42",
 	"long_expr_in_lambda.vio": "true",

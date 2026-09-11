@@ -1,0 +1,8 @@
+var xs = 6
+
+func main() {
+    println("code in `func main()`" + 6.to_string())
+}
+
+let a = 5 + 7
+println("Top-level code: " + a.to_string())

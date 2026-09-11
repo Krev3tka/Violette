@@ -1,0 +1,3 @@
+let first = 1 + "string"
+let second = -"float number i swear"
+let third = !2

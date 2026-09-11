@@ -869,10 +869,20 @@ impl Checker {
                     }
                     Ty::Error => Ty::Error,
                     _ => {
+                        let callee_name = match function.as_ref() {
+                            Expression::Identifier { name, .. } => name.clone(),
+                            Expression::IntLiteral { val, .. } => val.to_string(),
+                            Expression::FloatLiteral { val, .. } => val.to_string(),
+                            Expression::StringLiteral { val, .. } => format!("\"{}\"", val),
+                            _ => format!("{}", callee),
+                        };
+
                         self.errors.push(TypeError::NotCallable {
+                            name: callee_name,
                             ty: callee,
                             span: *span,
                         });
+
                         Ty::Error
                     }
                 }
@@ -1100,7 +1110,7 @@ impl Checker {
                                 method: name.clone(),
                                 span: *span,
                                 help: format!(
-                                    "there is a global function `{}`, did you want to declare it to `extend {} {{ ... }}`?",
+                                    "there is a global function `{}`, did you want to declare it in `extend {} {{ ... }}`?",
                                     name,
                                     match obj_ty {
                                         Ty::Struct(ref s_name) => s_name,

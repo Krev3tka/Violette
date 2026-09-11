@@ -1,0 +1,14 @@
+struct Color {
+    red: uint8,
+    blue: uint8,
+    green: uint8,
+}
+
+let red_color = Color {
+    red: 255,
+    blue: 0,
+    green: 0
+}
+
+println(red_color.yellow)
+println(3.red)

@@ -475,7 +475,7 @@ impl Parser {
         )?;
 
         let return_type = match self.current_token.token {
-            Token::LeftBrace => None,
+            Token::LeftBrace | Token::Assign => None,
             Token::LeftBracket => {
                 let open_bracket_tok = self.current_token.token.clone();
                 let open_bracket_span = self.current_token.span;
@@ -495,6 +495,27 @@ impl Parser {
             }
             _ => return Err(self.unexpected(&self.current_token)),
         };
+
+        if matches!(self.current_token.token.clone(), Token::Assign) {
+            self.next_token();
+
+            let expr = self.parse_expression(Lowest)?;
+            self.next_token();
+
+            let body = vec![Statement::Return {
+                value: Some(expr.clone()),
+                span: expr.span(),
+            }];
+
+            return Ok(Statement::Func {
+                name,
+                params,
+                return_type,
+                body,
+                span,
+                ending_span: self.current_token.span,
+            });
+        }
 
         self.expect(Token::LeftBrace, self.unexpected(&self.current_token))?;
 
