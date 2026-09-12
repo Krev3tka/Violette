@@ -16,18 +16,24 @@ pub enum Statement {
 
     Var {
         name: String,
+        annotated_type: Option<Type>,
+        type_span: Option<Span>,
         value: Expression,
         span: Span,
     },
 
     Let {
         name: String,
+        annotated_type: Option<Type>,
+        type_span: Option<Span>,
         value: Expression,
         span: Span,
     },
 
     Const {
         name: String,
+        annotated_type: Type,
+        type_span: Span,
         value: Expression,
         span: Span,
     },
@@ -95,6 +101,12 @@ pub enum Statement {
         methods: Vec<Statement>,
         span: Span,
     },
+
+    Variant {
+        name: String,
+        cases: Vec<VariantCase>,
+        span: Span,
+    },
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -137,6 +149,13 @@ pub struct MatchArm {
     pub span: Span,
 }
 
+#[derive(Debug, PartialEq, Clone)]
+pub struct VariantCase {
+    pub name: String,
+    pub payload: Option<Type>,
+    pub span: Span,
+}
+
 impl Parser {
     pub fn parse_statement(&mut self) -> Result<Statement, ParseError> {
         self.depth += 1;
@@ -155,7 +174,7 @@ impl Parser {
     fn parse_statement_inner(&mut self) -> Result<Statement, ParseError> {
         let mut span = self.current_token.span;
         match &self.current_token.token {
-            Token::Var | Token::Let | Token::Const => {
+            Token::Var | Token::Let => {
                 let kw_token = self.current_token.token.clone();
                 self.next_token();
                 let name = match &self.current_token.token {
@@ -165,7 +184,6 @@ impl Parser {
                             context: match kw_token {
                                 Token::Var => "after 'var'",
                                 Token::Let => "after 'let'",
-                                Token::Const => "after 'const'",
                                 _ => unreachable!(),
                             },
                             found: self.current_token.token.clone(),
@@ -176,7 +194,20 @@ impl Parser {
 
                 span = self.current_token.span;
 
+                let mut type_span = None;
+                let mut annotated_type = None;
+
                 self.next_token();
+                if matches!(self.current_token.token.clone(), Token::Colon) {
+                    self.next_token();
+
+                    type_span = Some(self.current_token.span);
+                    annotated_type = Some(self.parse_type()?);
+                    type_span = Some(type_span.unwrap().merge(&self.current_token.span));
+
+                    self.next_token();
+                }
+
                 self.expect(
                     Token::Assign,
                     ParseError::ExpectedAssign {
@@ -190,11 +221,73 @@ impl Parser {
                 self.next_token();
 
                 match kw_token {
-                    Token::Var => Ok(Statement::Var { name, value, span }),
-                    Token::Let => Ok(Statement::Let { name, value, span }),
-                    Token::Const => Ok(Statement::Const { name, value, span }),
+                    Token::Var => Ok(Statement::Var {
+                        name,
+                        value,
+                        span,
+                        annotated_type,
+                        type_span,
+                    }),
+                    Token::Let => Ok(Statement::Let {
+                        name,
+                        value,
+                        span,
+                        annotated_type,
+                        type_span,
+                    }),
                     _ => unreachable!(),
                 }
+            }
+            Token::Const => {
+                self.next_token();
+                let name = match &self.current_token.token {
+                    Token::Identifier(var_name) => var_name.clone(),
+                    _ => {
+                        return Err(ParseError::ExpectedIdentifier {
+                            context: "after `const`",
+                            found: self.current_token.token.clone(),
+                            span: self.current_token.span,
+                        });
+                    }
+                };
+
+                span = self.current_token.span;
+
+                self.next_token();
+
+                self.expect(
+                    Token::Colon,
+                    ParseError::ExpectedColon {
+                        context: "after `const` variable name",
+                        found: self.current_token.token.clone(),
+                        span: self.current_token.span,
+                    },
+                )?;
+
+                let mut type_span = self.current_token.span;
+                let annotated_type = self.parse_type()?;
+
+                type_span = type_span.merge(&self.current_token.span);
+
+                self.expect(
+                    Token::Assign,
+                    ParseError::ExpectedAssign {
+                        context: "after const variable name",
+                        found: self.current_token.token.clone(),
+                        span: self.current_token.span,
+                    },
+                )?;
+
+                let value = self.parse_expression(Lowest)?;
+                self.next_token();
+
+                Ok(Statement::Const {
+                    name,
+                    annotated_type,
+                    type_span,
+                    value,
+                    span,
+                })
             }
             Token::If => self.parse_if_statement(),
             Token::While => self.parse_while_statement(),
@@ -238,6 +331,7 @@ impl Parser {
             }
             Token::Struct => self.parse_struct(),
             Token::Extend => self.parse_extend(),
+            Token::Variant => self.parse_variant(),
             _ => {
                 let expr = self.parse_expression(Lowest)?;
                 self.next_token();
@@ -383,7 +477,13 @@ impl Parser {
         let value = self.parse_expression(Lowest)?;
         self.allowed_struct_literal = saved;
 
-        let init = Box::new(Statement::Let { name, value, span });
+        let init = Box::new(Statement::Let {
+            name,
+            value,
+            span,
+            annotated_type: None,
+            type_span: None,
+        });
 
         self.next_token();
         self.expect(Token::Semicolon, self.unexpected(&self.current_token))?;
@@ -673,6 +773,99 @@ impl Parser {
         Ok(Statement::Struct { name, fields, span })
     }
 
+    pub fn parse_variant(&mut self) -> Result<Statement, ParseError> {
+        let start_span = self.current_token.span;
+        self.next_token();
+
+        let name = match self.current_token.token.clone() {
+            Token::Identifier(s) => s,
+            _ => {
+                return Err(ParseError::ExpectedIdentifier {
+                    context: "after `variant`",
+                    found: self.current_token.token.clone(),
+                    span: self.current_token.span,
+                });
+            }
+        };
+
+        self.next_token();
+
+        self.expect(
+            Token::Assign,
+            ParseError::ExpectedAssign {
+                context: "after variant name",
+                found: self.current_token.token.clone(),
+                span: self.current_token.span,
+            },
+        )?;
+
+        self.skip_terminators();
+        if matches!(self.current_token.token.clone(), Token::Pipe) {
+            self.next_token();
+        }
+
+        let mut cases = Vec::new();
+
+        loop {
+            self.skip_terminators();
+            let case_span = self.current_token.span;
+
+            let case_name = match self.current_token.token.clone() {
+                Token::Identifier(s) => s,
+                _ => {
+                    return Err(ParseError::ExpectedIdentifier {
+                        context: "in variant case name",
+                        found: self.current_token.token.clone(),
+                        span: self.current_token.span,
+                    });
+                }
+            };
+
+            self.next_token();
+
+            let payload = if matches!(self.current_token.token.clone(), Token::LeftParen) {
+                let open_tok = self.current_token.token.clone();
+                let open_span = self.current_token.span;
+                self.next_token();
+
+                let p_ty = self.parse_type()?;
+
+                self.expect(
+                    Token::RightParen,
+                    ParseError::UnclosedDelimiter {
+                        open_token: Box::new(open_tok),
+                        open_span,
+                        expected_token: Box::new(Token::RightParen),
+                        found_tok: Box::new(self.current_token.token.clone()),
+                        found_span: self.current_token.span,
+                    },
+                )?;
+                Some(p_ty)
+            } else {
+                None
+            };
+
+            cases.push(VariantCase {
+                name: case_name,
+                payload,
+                span: case_span,
+            });
+
+            self.skip_terminators();
+            if matches!(self.current_token.token, Token::Pipe) {
+                self.next_token();
+            } else {
+                break;
+            }
+        }
+
+        Ok(Statement::Variant {
+            name,
+            cases,
+            span: start_span.merge(&self.current_token.span),
+        })
+    }
+
     pub fn parse_package(&mut self) -> Result<String, ParseError> {
         self.skip_terminators();
         self.expect(Token::Package, self.unexpected(&self.current_token))?;
@@ -939,6 +1132,7 @@ impl Statement {
             Statement::Extend { span, .. } => *span,
             Statement::Break { span } => *span,
             Statement::Continue { span } => *span,
+            Statement::Variant { span, .. } => *span,
         }
     }
 }

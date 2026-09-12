@@ -14,5 +14,6 @@ void vio_println_int(int64_t x);
 void vio_println_float(double x);
 void vio_println_string(VioString s);
 void vio_println_bool(bool b);
+void vio_println_char(uint32_t c);
 
 #endif //VIO_HELPERS_VIO_PRINTLN_H

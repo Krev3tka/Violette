@@ -31,6 +31,7 @@ var ExpectedErrors = map[string]string{
 
 var ExpectedOutputs = map[string]string{
 	"bits.vio":            "452",
+	"characteristics.vio":     "A\nя\n⼆",
 	"demo_showcase.vio":   "3.16228\n8\nIs `Violette` empty?: false",
 	"escape_analysis.vio": "Quotes: \"Hello, Violette!\"\nBackslash: \\",
 	"extern_fun.vio":      "64\n8\n3",
@@ -56,6 +57,7 @@ var ExpectedOutputs = map[string]string{
     "mutating_parameters.vio": "11\n2\n1",
     "operator_lambdas_without_literals.vio": "1.8\n78125\nHello, Violette",
 	"point.vio":          "3.5",
+	"response_variants.vio": "",
 	"sprouting.vio":      "true",
 	"square.vio":         "36",
 	"string_concat.vio":  "Hello, Violette!",

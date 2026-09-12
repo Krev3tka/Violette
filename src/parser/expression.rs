@@ -29,6 +29,11 @@ pub enum Expression {
         span: Span,
     },
 
+    CharLiteral {
+        val: char,
+        span: Span,
+    },
+
     StringLiteral {
         val: String,
         span: Span,
@@ -231,6 +236,10 @@ impl Parser {
             },
             Token::String(s) => Expression::StringLiteral {
                 val: s.clone(),
+                span: start_span,
+            },
+            Token::Char(c) => Expression::CharLiteral {
+                val: *c,
                 span: start_span,
             },
             Token::LeftParen => {
@@ -931,6 +940,7 @@ impl Expression {
             Expression::BoolLiteral { span, .. } => *span,
             Expression::StringLiteral { span, .. } => *span,
             Expression::StructLiteral { span, .. } => *span,
+            Expression::CharLiteral { span, .. } => *span,
             Expression::Prefix { span, .. } => *span,
             Expression::Infix { span, .. } => *span,
             Expression::Postfix { span, .. } => *span,

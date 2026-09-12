@@ -24,6 +24,7 @@ pub enum Ty {
         inner: Box<Ty>,
         is_mut: bool,
     },
+    Char,
 }
 
 impl fmt::Display for Ty {

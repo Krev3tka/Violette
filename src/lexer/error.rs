@@ -57,4 +57,13 @@ pub enum LexError {
 
     /// Used for tracing unexpected characters (general case)
     UnexpectedChar(char),
+
+    /// Used for (>1) char literal length
+    TooLongChar(String),
+
+    /// Used for unclosed char literal
+    UnclosedChar,
+
+    /// Used for empty char literals
+    EmptyChar,
 }

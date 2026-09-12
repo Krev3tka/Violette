@@ -20,7 +20,7 @@ pub mod statements_tests {
         let test_cases = vec![
             ("let x = 5", let_stmt("x", int(5))),
             (
-                "const THREE_HOURS_IN_SECONDS = 3 * 24 * 60 ** 2",
+                "const THREE_HOURS_IN_SECONDS: int = 3 * 24 * 60 ** 2",
                 const_stmt(
                     "THREE_HOURS_IN_SECONDS",
                     infix(
@@ -28,6 +28,7 @@ pub mod statements_tests {
                         Token::Multiply,
                         infix(int(60), Token::Power, int(2)),
                     ),
+                    Primitive(Int),
                 ),
             ),
             (

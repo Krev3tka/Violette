@@ -1,0 +1,14 @@
+variant Response = Win(int) | Fail(string) | Failed
+
+func check(x: int) [Response] {
+    if x > 0 {
+        return Win(x)
+    }
+
+    return Failed
+}
+
+func main() {
+    let a = check(10)
+    let b = check(-1)
+}

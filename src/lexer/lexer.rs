@@ -72,6 +72,71 @@ impl Lexer {
                 }
             }
 
+            '\'' => {
+                self.read_char();
+
+                let mut val = '\0';
+                let mut count = 0;
+                let mut raw = String::new();
+
+                while self.current != '\'' && self.current != '\0' && self.current != '\n' {
+                    let ch = if self.current == '\\' {
+                        self.read_char();
+                        raw.push('\\');
+                        raw.push(self.current);
+                        match self.current {
+                            'n' => '\n',
+                            't' => '\t',
+                            'r' => '\r',
+                            '\\' => '\\',
+                            '\'' => '\'',
+                            '0' => '\0',
+                            other => other,
+                        }
+                    } else {
+                        raw.push(self.current);
+                        self.current
+                    };
+
+                    val = ch;
+                    count += 1;
+                    self.read_char();
+
+                    if count > 1 {
+                        while self.current != '\'' && self.current != '\0' && self.current != '\n' {
+                            raw.push(self.current);
+                            self.read_char();
+                        }
+                        if self.current == '\'' {
+                            self.read_char();
+                        }
+                        let end = self.current_pos();
+                        return SpannedToken {
+                            token: Token::Illegal(LexError::TooLongChar(raw)),
+                            span: Span::new(start, end),
+                        };
+                    }
+                }
+
+                if self.current != '\'' {
+                    return self.make_token(Token::Illegal(LexError::UnclosedChar), start);
+                }
+
+                self.read_char();
+
+                if count == 0 {
+                    SpannedToken {
+                        token: Token::Illegal(LexError::EmptyChar),
+                        span: Span::new(start, self.current_pos()),
+                    }
+                } else {
+                    SpannedToken {
+                        token: Token::Char(val),
+                        span: Span::new(start, self.current_pos()),
+                    }
+                }
+            }
+
             '"' => {
                 self.read_char();
                 let mut string_val = String::new();
@@ -327,10 +392,10 @@ impl Lexer {
                     "extern" => Token::Extern,
                     "func" => Token::Func,
                     "return" => Token::Return,
-                    "bloom" => Token::Bloom,
                     "struct" => Token::Struct,
                     "extend" => Token::Extend,
                     "interface" => Token::Interface,
+                    "variant" => Token::Variant,
                     "type" => Token::Type,
                     "open" => Token::Open,
                     "local" => Token::Local,

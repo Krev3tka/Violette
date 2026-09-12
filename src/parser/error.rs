@@ -15,6 +15,12 @@ pub enum ParseError {
         span: Span,
     },
 
+    ExpectedColon {
+        context: &'static str,
+        found: Token,
+        span: Span,
+    },
+
     UnclosedDelimiter {
         open_token: Box<Token>,
         open_span: Span,

@@ -50,7 +50,8 @@ impl Parser {
                 | Statement::Struct { .. }
                 | Statement::Const { .. }
                 | Statement::ExternFunc { .. }
-                | Statement::Extend { .. } => declarations.push(stmt),
+                | Statement::Extend { .. }
+                | Statement::Variant { .. } => declarations.push(stmt),
                 _ => main.push(stmt),
             }
         }

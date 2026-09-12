@@ -39,6 +39,7 @@ impl Codegen {
             Ty::Int => "int64_t".to_string(),
             Ty::Float => "double".to_string(),
             Ty::Bool => "bool".to_string(),
+            Ty::Char => "uint32_t".to_string(),
             Ty::String => "VioString".to_string(),
             Ty::Struct(s) => s.to_string(),
             Ty::Unit => "void".to_string(),
@@ -89,7 +90,10 @@ impl Codegen {
         // 2. Constant variables (#define)
 
         for s in &prg.declarations {
-            if let Statement::Const { name, value, span } = s {
+            if let Statement::Const {
+                name, value, span, ..
+            } = s
+            {
                 let val_str = self.emit_expression(value)?;
                 let ty = self.checker.infer(value, None);
 
@@ -112,6 +116,9 @@ impl Codegen {
                 let struct_str = self.emit_struct(s)?;
 
                 lines.push(struct_str)
+            } else if let Statement::Variant { .. } = s {
+                let variant_str = self.emit_statement(s)?;
+                lines.push(variant_str);
             }
         }
 
@@ -208,7 +215,7 @@ impl Codegen {
 
         lines.push("\n".to_string());
 
-        // 5. Second pass over functions (no forward declaration)
+        // 5. Second pass over functions (pls don't make forward declaration in your PLs)
 
         for s in &prg.declarations {
             if let Statement::Const { .. } = s {
@@ -270,7 +277,7 @@ impl Codegen {
                 continue;
             }
             let stmt = match s {
-                Statement::Struct { .. } => String::new(),
+                Statement::Struct { .. } | Statement::Variant { .. } => String::new(),
                 _ => self.emit_statement(s)?,
             };
             for line in stmt.lines() {
@@ -286,6 +293,8 @@ impl Codegen {
             self.checker.env.pop();
 
             lines.push("}".to_string());
+        } else if prg.main.is_empty() && prg.declarations.is_empty() {
+            lines.push("int main(void) {\n\t\n}".to_string())
         }
 
         let mut final_lines = Vec::new();
@@ -340,6 +349,9 @@ impl Codegen {
                 let byte_len = s.len();
 
                 format!("vio_str_from_literal(\"{}\", {})", escaped, byte_len)
+            }
+            Expression::CharLiteral { val, .. } => {
+                format!("((uint32_t){:#X}U)", *val as u32)
             }
             Expression::StructLiteral { name, fields, .. } => {
                 if fields.is_empty() {
@@ -417,6 +429,13 @@ impl Codegen {
                 format!("vio_str_get({}, {})", left_str, index_str)
             }
             Expression::Identifier { name: ident, .. } => {
+                if let Some((variant_name, None)) = self.checker.variant_cases.get(ident) {
+                    return Ok(format!(
+                        "({}){{ .tag = VIO_TAG_{}_{} }}",
+                        variant_name, variant_name, ident
+                    ));
+                }
+
                 if let Some(entity) = self.checker.env.lookup(ident)
                     && matches!(entity.ty, Ty::Ref { .. })
                 {
@@ -427,6 +446,17 @@ impl Codegen {
             }
             Expression::Call { function, args, .. } => {
                 if let Expression::Identifier { name, .. } = function.as_ref()
+                    && let Some((variant_name, Some(_))) =
+                        self.checker.variant_cases.get(name).cloned()
+                {
+                    let val_str = self.emit_expression(&args[0])?;
+                    return Ok(format!(
+                        "({}){{ .tag = VIO_TAG_{}_{}, .data = {{ .{} = {} }} }}",
+                        variant_name, variant_name, name, name, val_str
+                    ));
+                }
+
+                if let Expression::Identifier { name, .. } = function.as_ref()
                     && (name == "print" || name == "println")
                     && args.len() == 1
                 {
@@ -436,6 +466,7 @@ impl Codegen {
                         Ty::Float => "float",
                         Ty::Bool => "bool",
                         Ty::String => "string",
+                        Ty::Char => "char",
                         _ => {
                             return Err(CodegenError::Unsupported(format!(
                                 "print for this type: {:?}",
@@ -620,9 +651,15 @@ impl Codegen {
 
     pub fn emit_statement(&mut self, stmt: &Statement) -> Result<String, CodegenError> {
         Ok(match stmt {
-            Statement::Let { name, value, span }
-            | Statement::Const { name, value, span }
-            | Statement::Var { name, value, span } => {
+            Statement::Let {
+                name, value, span, ..
+            }
+            | Statement::Const {
+                name, value, span, ..
+            }
+            | Statement::Var {
+                name, value, span, ..
+            } => {
                 let val_str = self.emit_expression(value)?;
 
                 let ty = self.checker.infer(value, None);
@@ -748,6 +785,56 @@ impl Codegen {
                 }
 
                 lines.join("\n")
+            }
+
+            Statement::Variant { name, cases, .. } => {
+                let mut c_cases = Vec::new();
+
+                for case in cases {
+                    let case_c = format!("VIO_TAG_{}_{}", name, case.name);
+
+                    c_cases.push(case_c);
+                }
+
+                let tag_name = format!("vio_tag_{}", name);
+
+                let mut union_states = Vec::new();
+
+                for case in cases {
+                    let state_c_ty = match &case.payload {
+                        Some(ty) => {
+                            let c_ty = &self.checker.resolve(ty);
+
+                            self.c_type(c_ty)
+                        }
+                        None => continue,
+                    };
+
+                    union_states.push(format!("{} {}", state_c_ty, case.name))
+                }
+
+                let mut res = Vec::new();
+                res.push(format!(
+                    "typedef enum {{\n    {}\n}} {};\n",
+                    c_cases.join(",\n    "),
+                    tag_name
+                ));
+
+                if union_states.is_empty() {
+                    res.push(format!(
+                        "typedef struct {{\n    {} tag\n}} {};\n",
+                        tag_name, name
+                    ));
+                } else {
+                    res.push(format!(
+                        "typedef struct {{\n    {} tag;\n    union {{\n        {};\n    }} data;\n}} {};\n",
+                        tag_name,
+                        union_states.join(";\n        "),
+                        name
+                    ));
+                }
+
+                res.join("\n")
             }
         })
     }

@@ -135,14 +135,18 @@ pub fn let_stmt(name: &str, value: Expression) -> Statement {
         name: name.to_string(),
         value,
         span: dummy_span(),
+        annotated_type: None,
+        type_span: None,
     }
 }
 
-pub fn const_stmt(name: &str, value: Expression) -> Statement {
+pub fn const_stmt(name: &str, value: Expression, ty: Type) -> Statement {
     Statement::Const {
         name: name.to_string(),
         value,
         span: dummy_span(),
+        annotated_type: ty,
+        type_span: dummy_span(),
     }
 }
 

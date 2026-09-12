@@ -178,9 +178,12 @@ pub fn compile(command: &str, file: &str) {
 
     let write_rt = |sub: &str, name: &str, content: &str| -> std::path::PathBuf {
         let dir = temp_dir.join(sub);
-        fs::create_dir_all(&dir).ok();
         let path = dir.join(name);
-        fs::write(&path, content).expect("Failed to write runtime file");
+        if !path.exists() {
+            fs::create_dir_all(&dir).ok();
+            fs::write(&path, content).expect("Failed to write runtime file");
+        }
+
         path
     };
 

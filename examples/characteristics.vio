@@ -1,0 +1,9 @@
+func main() {
+    let a = 'A'
+    let ru = 'я'
+    let two_in_chinese = '⼆'
+
+    println(a)
+    println(ru)
+    println(two_in_chinese)
+}

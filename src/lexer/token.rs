@@ -48,9 +48,6 @@ pub enum Token {
     /// Keyword `return`.
     Return,
 
-    /// Keyword `bloom`.
-    Bloom,
-
     /// Keyword `struct`.
     Struct,
 
@@ -59,6 +56,9 @@ pub enum Token {
 
     /// Keyword `interface`.
     Interface,
+
+    /// Keyword `variant`.
+    Variant,
 
     /// Keyword `type`.
     Type,
@@ -113,6 +113,9 @@ pub enum Token {
 
     /// String literal.
     String(String),
+
+    /// Char literal.
+    Char(char),
 
     /// Assignment operator `=`.
     Assign,
@@ -263,6 +266,7 @@ pub enum Token {
     Illegal(LexError),
 }
 
+#[allow(dead_code)]
 /// Primitive scalar and built-in types supported by Violette.
 #[derive(Debug, PartialEq, Clone)]
 pub enum PrimitiveType {
@@ -298,4 +302,7 @@ pub enum PrimitiveType {
 
     /// Built-in string type.
     String,
+
+    /// 32-bit character.
+    Char,
 }

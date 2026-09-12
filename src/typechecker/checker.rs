@@ -11,7 +11,6 @@ use crate::typechecker::error::{BindingKind, DefinitionKind, LoopControlKind};
 use crate::typechecker::types::Ty;
 use std::collections::HashMap;
 
-#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct FnSig {
     params: Vec<Ty>,
@@ -21,10 +20,17 @@ pub struct FnSig {
 
 pub type StructSig = Vec<(String, Ty, Span)>;
 
+#[allow(dead_code)]
+#[derive(Clone, Debug)]
+pub struct VariantCaseSig {
+    pub payload: Option<Ty>,
+}
+
 #[derive(Default)]
 pub struct Checker {
     pub funcs: HashMap<String, FnSig>,
     pub structs: HashMap<String, StructSig>,
+    pub variant_cases: HashMap<String, (String, Option<Ty>)>,
     pub env: Env,
     current_ret: Ty,
     pub errors: Vec<TypeError>,
@@ -216,6 +222,13 @@ impl Checker {
                         }
                     }
                 }
+                Statement::Variant { name, cases, .. } => {
+                    for case in cases {
+                        let ty = case.payload.clone().map(|ty| self.resolve(&ty));
+                        self.variant_cases
+                            .insert(case.name.clone(), (name.clone(), ty));
+                    }
+                }
                 _ => {}
             };
         }
@@ -238,21 +251,26 @@ impl Checker {
             }
             Type::Primitive(PrimitiveType::String) => Ty::String,
             Type::Primitive(PrimitiveType::Bool) => Ty::Bool,
+            Type::Primitive(PrimitiveType::Char) => Ty::Char,
 
             Type::Named(path) => Ty::Struct(path.segments[path.segments.len() - 1].clone()),
+
             Type::Fn { params, ret } => Ty::Fn {
                 params: params.iter().map(|t| self.resolve(t)).collect(),
                 ret: Box::new(ret.as_ref().map_or(Ty::Unit, |t| self.resolve(t))),
             },
+
             Type::Union(types) => {
                 let resolved = types.iter().map(|v| self.resolve(v)).collect();
 
                 Ty::Union(resolved)
             }
+
             Type::Generic { name, param } => Ty::Generic {
                 name: name.clone(),
                 param: Box::new(self.resolve(param)),
             },
+
             Type::Infer => Ty::Infer,
         }
     }
@@ -353,20 +371,62 @@ impl Checker {
 
     pub fn check_statement(&mut self, stmt: &Statement) {
         match stmt {
-            Statement::Var { name, value, .. } => {
-                let ty = self.infer(value, None);
+            Statement::Var {
+                name,
+                value,
+                annotated_type,
+                type_span,
+                ..
+            } => {
+                let expected = annotated_type.as_ref().map(|t| self.resolve(t));
+                let val_ty = self.infer(value, expected.as_ref());
 
-                self.defined(name.clone(), ty, BindingKind::Var, stmt.span())
+                let final_ty = if let Some(expected_ty) = expected {
+                    let err_span = type_span.unwrap_or(value.span());
+                    self.expect(&val_ty, &expected_ty, err_span);
+
+                    expected_ty
+                } else {
+                    val_ty
+                };
+
+                self.defined(name.clone(), final_ty, BindingKind::Var, stmt.span())
             }
-            Statement::Let { name, value, .. } => {
-                let ty = self.infer(value, None);
+            Statement::Let {
+                name,
+                value,
+                annotated_type,
+                type_span,
+                ..
+            } => {
+                let expected = annotated_type.as_ref().map(|t| self.resolve(t));
+                let val_ty = self.infer(value, expected.as_ref());
 
-                self.defined(name.clone(), ty, BindingKind::Let, stmt.span())
+                let final_ty = if let Some(expected_ty) = expected {
+                    let err_span = type_span.unwrap_or(value.span());
+                    self.expect(&val_ty, &expected_ty, err_span);
+
+                    expected_ty
+                } else {
+                    val_ty
+                };
+
+                self.defined(name.clone(), final_ty, BindingKind::Let, stmt.span())
             }
-            Statement::Const { name, value, .. } => {
-                let ty = self.infer(value, None);
+            Statement::Const {
+                name,
+                value,
+                annotated_type,
+                type_span,
+                ..
+            } => {
+                let expected = self.resolve(annotated_type);
+                let val_ty = self.infer(value, Some(&expected));
 
-                self.defined(name.clone(), ty, BindingKind::Const, stmt.span())
+                let err_span = type_span;
+                self.expect(&val_ty, &expected, *err_span);
+
+                self.defined(name.clone(), expected, BindingKind::Const, stmt.span())
             }
             Statement::If(if_stmt) => {
                 let cond_ty = self.infer(&if_stmt.condition, None);
@@ -605,19 +665,26 @@ impl Checker {
             Expression::BoolLiteral { .. } => Ty::Bool,
             Expression::StringLiteral { .. } => Ty::String,
             Expression::FloatLiteral { .. } => Ty::Float,
-            Expression::Identifier { name, .. } => match self.env.lookup(name) {
-                Some(entity) => match &entity.ty {
-                    Ty::Ref { inner, .. } => *inner.clone(),
-                    t => t.clone(),
-                },
-                None => {
-                    self.errors.push(TypeError::UnknownName {
-                        name: name.clone(),
-                        span: expr.span(),
-                    });
-                    Ty::Error
+            Expression::CharLiteral { .. } => Ty::Char,
+            Expression::Identifier { name, .. } => {
+                if let Some((variant_name, None)) = self.variant_cases.get(name) {
+                    return Ty::Struct(variant_name.clone());
                 }
-            },
+
+                match self.env.lookup(name) {
+                    Some(entity) => match &entity.ty {
+                        Ty::Ref { inner, .. } => *inner.clone(),
+                        t => t.clone(),
+                    },
+                    None => {
+                        self.errors.push(TypeError::UnknownName {
+                            name: name.clone(),
+                            span: expr.span(),
+                        });
+                        Ty::Error
+                    }
+                }
+            }
             Expression::Infix {
                 left,
                 operator,
@@ -807,6 +874,24 @@ impl Checker {
                 args,
                 span,
             } => {
+                if let Expression::Identifier { name, .. } = function.as_ref()
+                    && let Some((variant_name, Some(expected_payload))) =
+                        self.variant_cases.get(name).cloned()
+                {
+                    if args.len() != 1 {
+                        self.errors.push(TypeError::ArityMismatch {
+                            name: name.clone(),
+                            expected: 1,
+                            found: args.len(),
+                            span: *span,
+                        });
+                        return Ty::Struct(variant_name);
+                    }
+                    let arg_ty = self.infer(&args[0], Some(&expected_payload));
+                    self.expect(&arg_ty, &expected_payload, args[0].span());
+                    return Ty::Struct(variant_name);
+                }
+
                 if let Expression::Identifier { name, .. } = function.as_ref()
                     && self.env.lookup(name).is_none()
                     && !args.is_empty()
@@ -1136,7 +1221,13 @@ impl Checker {
         self.defined(
             "print".to_string(),
             Ty::Fn {
-                params: vec![Ty::Union(vec![Ty::Int, Ty::Float, Ty::String, Ty::Bool])],
+                params: vec![Ty::Union(vec![
+                    Ty::Int,
+                    Ty::Float,
+                    Ty::String,
+                    Ty::Bool,
+                    Ty::Char,
+                ])],
                 ret: Box::new(Ty::Unit),
             },
             BindingKind::Let,
@@ -1145,7 +1236,13 @@ impl Checker {
         self.defined(
             "println".to_string(),
             Ty::Fn {
-                params: vec![Ty::Union(vec![Ty::Int, Ty::Float, Ty::String, Ty::Bool])],
+                params: vec![Ty::Union(vec![
+                    Ty::Int,
+                    Ty::Float,
+                    Ty::String,
+                    Ty::Bool,
+                    Ty::Char,
+                ])],
                 ret: Box::new(Ty::Unit),
             },
             BindingKind::Let,
@@ -1258,7 +1355,8 @@ impl Checker {
                 | Statement::Break { .. }
                 | Statement::Continue { .. }
                 | Statement::ExternFunc { .. }
-                | Statement::Extend { .. } => continue,
+                | Statement::Extend { .. }
+                | Statement::Variant { .. } => continue,
                 Statement::If(IfStatement {
                     then_block,
                     else_if,

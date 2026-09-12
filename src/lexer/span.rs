@@ -1,5 +1,5 @@
 use crate::lexer::token::Token;
-use crate::parser::statement::{FuncParam, MatchArm, StructParam};
+use crate::parser::statement::{FuncParam, MatchArm, StructParam, VariantCase};
 use crate::parser::{Expression, Statement};
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Ord, PartialOrd, Default)]
@@ -58,7 +58,8 @@ impl ClearSpan for Expression {
             | Expression::IntLiteral { span, .. }
             | Expression::FloatLiteral { span, .. }
             | Expression::BoolLiteral { span, .. }
-            | Expression::StringLiteral { span, .. } => *span = Span::default(),
+            | Expression::StringLiteral { span, .. }
+            | Expression::CharLiteral { span, .. } => *span = Span::default(),
 
             Expression::Infix {
                 left, right, span, ..
@@ -167,10 +168,35 @@ impl ClearSpan for Statement {
                 expression.clear_span();
                 *span = Span::default();
             }
-            Statement::Var { value, span, .. }
-            | Statement::Let { value, span, .. }
-            | Statement::Const { value, span, .. } => {
+            Statement::Var {
+                value,
+                span,
+                type_span,
+                ..
+            }
+            | Statement::Let {
+                value,
+                span,
+                type_span,
+                ..
+            } => {
                 value.clear_span();
+
+                if let Some(t_span) = type_span {
+                    *t_span = Span::default()
+                };
+
+                *span = Span::default();
+            }
+            Statement::Const {
+                value,
+                span,
+                type_span,
+                ..
+            } => {
+                value.clear_span();
+
+                *type_span = Span::default();
                 *span = Span::default();
             }
             Statement::If(if_stmt) => {
@@ -275,6 +301,13 @@ impl ClearSpan for Statement {
 
                 *span = Span::default();
             }
+            Statement::Variant { cases, span, .. } => {
+                for case in cases {
+                    case.clear_span()
+                }
+
+                *span = Span::default();
+            }
         }
     }
 }
@@ -294,6 +327,12 @@ impl ClearSpan for FuncParam {
 }
 
 impl ClearSpan for StructParam {
+    fn clear_span(&mut self) {
+        self.span = Span::default();
+    }
+}
+
+impl ClearSpan for VariantCase {
     fn clear_span(&mut self) {
         self.span = Span::default();
     }
