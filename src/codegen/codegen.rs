@@ -519,6 +519,17 @@ impl Codegen {
             Expression::MethodCall {
                 object, name, args, ..
             } => {
+                if let Expression::Identifier { name: obj_name, .. } = object.as_ref()
+                    && let Some((variant_name, Some(_))) = self.checker.variant_cases.get(name).cloned()
+                    && variant_name == *obj_name
+                {
+                    let val_str = self.emit_expression(&args[0])?;
+                    return Ok(format!(
+                        "({}){{ .tag = VIO_TAG_{}_{}, .data = {{ .{} = {} }} }}",
+                        variant_name, variant_name, name, name, val_str
+                    ));
+                }
+
                 let (c_fn_name, is_static_or_module) =
                     if let Expression::Identifier { name: obj_name, .. } = object.as_ref() {
                         if self.checker.structs.contains_key(obj_name) {
@@ -558,6 +569,16 @@ impl Codegen {
                 format!("{}({})", c_fn_name, all_args.join(", "))
             }
             Expression::Field { object, name, .. } => {
+                if let Expression::Identifier { name: obj_name, .. } = object.as_ref()
+                    && let Some((var_name, None)) = self.checker.variant_cases.get(name)
+                    && var_name == obj_name
+                {
+                    return Ok(format!(
+                        "({}){{ .tag = VIO_TAG_{}_{} }}",
+                        var_name, var_name, name
+                    ));
+                }
+
                 format!("{}.{}", self.emit_expression(object.as_ref())?, name)
             }
             Expression::Lambda {
@@ -639,6 +660,121 @@ impl Codegen {
                 ));
 
                 lambda_name
+            }
+            Expression::Match { target, arms, .. } => {
+                let target_ty = self.checker.infer(target.as_ref(), None);
+                let variant_name = match &target_ty {
+                    Ty::Struct(name) => name.clone(),
+                    _ => return Err(CodegenError::Unsupported("Non-struct match target".to_string()))
+                };
+
+                let res_ty = match expected_ty {
+                    Some(t) => t.clone(),
+                    None => self.checker.infer(expr, None)
+                };
+
+                let res_c_type = self.c_type(&res_ty);
+
+                let target_var = format!("_vio_match_target_{}", self.lambda_count);
+
+                let res_var = format!("_vio_match_res_{}", self.lambda_count);
+                self.lambda_count += 1;
+
+                let target_val_str = self.emit_expression(target.as_ref())?;
+
+                let mut cases_c = Vec::new();
+
+                for arm in arms {
+                    let (case_name, bind_var) = match &arm.pattern {
+                        Expression::Identifier { name, .. }
+                        | Expression::Field { name, .. } => (name.clone(), None),
+                        Expression::Call { function, args, .. } => {
+                            let name = match function.as_ref() {
+                                Expression::Identifier { name, ..} => name.clone(),
+                                _ => unreachable!()
+                            };
+
+                            let bind = match &args[0] {
+                                Expression::Identifier { name: b, ..} => b.clone(),
+                                _ => unreachable!()
+                            };
+                            (name.clone(), Some(bind))
+                        }
+                        Expression::MethodCall { name, args, .. } => {
+                            let bind = match &args[0] {
+                                Expression::Identifier { name: b, ..} => b.clone(),
+                                _ => unreachable!()
+                            };
+                            (name.clone(), Some(bind))
+                        }
+                        _ => return Err(CodegenError::Unsupported("Pattern shape in codegen".to_string()))
+                    };
+
+                    let tag_name = if case_name != "_".to_string() {
+                        format!("VIO_TAG_{}_{}", variant_name, case_name)
+                    } else {
+                        "default".to_string()
+                    };
+
+                    self.checker.env.push();
+
+                    let mut arm_lines = Vec::new();
+
+                    if let Some(var) = bind_var
+                        && let Some((_, Some(payload_ty))) = self.checker.variant_cases.get(&case_name).cloned() {
+                        let payload_c_ty = self.c_type(&payload_ty);
+
+                        arm_lines.push(format!(
+                            "    {} {} = {}.data.{};", payload_c_ty, var, target_var, case_name)
+                        );
+
+                        self.checker.defined(var, payload_ty, BindingKind::Let, arm.pattern.span());
+                    }
+
+                    match &arm.body {
+                        Expression::Block { body, .. } => {
+                            if let Some((last, init)) = body.split_last() {
+                                for stmt in init {
+                                    arm_lines.push(format!("    {}", self.emit_statement(stmt)?));
+                                }
+
+                                match last {
+                                    Statement::Expression { expression, .. } => {
+                                        let val = self.emit_expression(expression)?;
+                                        arm_lines.push(format!("    {} = {};", res_var, val));
+                                    }
+                                    _ => arm_lines.push(format!("    {}", self.emit_statement(last)?))
+                                }
+                            }
+                        }
+                        _ => {
+                            let val = self.emit_expression(&arm.body)?;
+                            arm_lines.push(format!("   {} = {};", res_var, val));
+                        }
+                    }
+
+                    self.checker.env.pop();
+
+                    arm_lines.push("    break;".to_string());
+
+                    cases_c.push( if tag_name != "default" {
+                        format!("case {}: {{\n{}\n}}", tag_name, arm_lines.join("\n"))
+                    } else {
+                        format!("{}: {{\n{}\n}}", tag_name, arm_lines.join("\n"))
+                    });
+                }
+
+                format!(
+                    "({{\n{} {} = {};\n{} {};\nswitch ({}.tag) {{\n{}\n}}\n{};\n}})",
+                    self.c_type(&target_ty),
+                    target_var,
+                    target_val_str,
+                    res_c_type,
+                    res_var,
+                    target_var,
+                    cases_c.join("\n"),
+                    res_var
+                )
             }
             _ => {
                 return Err(CodegenError::Unsupported(format!(

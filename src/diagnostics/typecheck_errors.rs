@@ -293,7 +293,7 @@ impl Diagnostics for TypeError {
             TypeError::NoFields { ty, span } => {
                 let labels = [Label::primary(
                     *span,
-                    format!("type `{}` can has no fields", ty),
+                    format!("type `{}` can have no fields", ty),
                     path.to_string(),
                 )];
 
@@ -394,6 +394,35 @@ impl Diagnostics for TypeError {
                     &labels,
                     Some("choose either scripting style or explicit `func main() { ... }`\n\t or just check your code for extra-entry points"),
                 )
+            }
+            TypeError::NotFullMatch { target_name: _, missed_patterns, span } => {
+                let labels = [
+                    Label::primary(*span, if missed_patterns.contains(",") {
+                        format!("patterns `{}` are not covered",
+                                missed_patterns
+                                    .split(", ")
+                                    .collect::<Vec<_>>()
+                                    .join("`, `"))
+                    } else {
+                        format!("pattern `{}` is not covered", missed_patterns)
+                    }, path.to_string())
+                ];
+
+                self.report(
+                    path.to_string(),
+                    *span,
+                    "not all cases in `match` expression are covered".to_string(),
+                    &labels,
+                    Some(format!(
+                        "try to add `{} => {{ ... }}` or `_ => {{ ... }} pls`",
+                         missed_patterns
+                             .split(", ")
+                             .collect::<Vec<_>>()[0])
+                        .as_str()
+                    )
+                )
+
+
             }
         }
     }

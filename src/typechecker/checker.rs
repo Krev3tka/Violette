@@ -9,7 +9,7 @@ pub use crate::typechecker::error::TypeError;
 use crate::typechecker::error::TypeError::ConflictingEntryPoint;
 use crate::typechecker::error::{BindingKind, DefinitionKind, LoopControlKind};
 use crate::typechecker::types::Ty;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Debug)]
 pub struct FnSig {
@@ -1067,6 +1067,13 @@ impl Checker {
                 Ty::Struct(name.clone())
             }
             Expression::Field { object, name, span } => {
+                if let Expression::Identifier { name: obj_name, .. } = object.as_ref()
+                    && let Some((var_name, None)) = self.variant_cases.get(name)
+                    && var_name == obj_name
+                {
+                    return Ty::Struct(var_name.clone());
+                }
+
                 let obj_ty = self.infer(object.as_ref(), None);
 
                 match obj_ty {
@@ -1111,6 +1118,23 @@ impl Checker {
                 args,
                 span,
             } => {
+                if let Expression::Identifier { name: obj_name, ..} = object.as_ref()
+                    && let Some((var_name, payload)) = self.variant_cases.clone().get(name)
+                    && var_name == obj_name {
+                        if let Some(payload_ty) = payload {
+                            if args.len() != 1 {
+                                self.errors.push(TypeError::ArityMismatch {
+                                    name: var_name.clone(),
+                                    expected: 1,
+                                    found: args.len(),
+                                    span: *span,
+                                });
+                            }
+                            let a_ty = self.infer(&args[0], Some(payload_ty));
+                            self.expect(&a_ty, payload_ty, args[0].span());
+                        }
+                        return Ty::Struct(var_name.clone())
+                    }
                 let mut found_sig = None;
                 let mut is_static = false;
                 let mut obj_ty = Ty::Error;
@@ -1212,6 +1236,225 @@ impl Checker {
                     }
                     Ty::Error
                 }
+            }
+            Expression::Match { target, arms, span} => {
+                let target_ty = self.infer(target.as_ref(), None);
+                if target_ty == Ty::Error {
+                    return Ty::Error;
+                }
+
+                let target_variant_name = match &target_ty {
+                    Ty::Struct(name) => name.clone(),
+                    _ => {
+                        self.errors.push(TypeError::Unsupported {
+                            desc: format!("Cannot match on non-variant type {}", target_ty),
+                            span: *span,
+                        });
+                        return Ty::Error
+                    }
+                };
+
+                let mut match_ret_ty = expected_ty.cloned();
+
+                let mut must_be_covered = HashSet::new();
+                let mut has_been_covered: HashSet<String> = HashSet::new();
+
+                let mut has_wildcard = false;
+
+                for (case_name, variant) in self.variant_cases.clone() {
+                    if variant.0 == target_variant_name {
+                        must_be_covered.insert(case_name);
+                    }
+                }
+
+                for arm in arms {
+                    self.env.push();
+
+                    let pat_name: String;
+                    let is_wild: bool;
+
+                    (pat_name, is_wild) = self.extract_pattern_case(&arm.pattern);
+
+                    has_wildcard |= is_wild;
+
+                    if pat_name != "_" {
+                        has_been_covered.insert(pat_name);
+                    }
+
+                    match &arm.pattern {
+                        Expression::Identifier { name, span: pat_span} => {
+                            if let Some((var_name, expected_payload)) = self.variant_cases.get(name) {
+                                if var_name != &target_variant_name {
+                                    self.errors.push(TypeError::Mismatch {
+                                        expected: target_ty.clone(),
+                                        found: Ty::Struct(var_name.clone()),
+                                        span: *pat_span
+                                    });
+                                } else if expected_payload.is_some() {
+                                    self.errors.push(TypeError::Unsupported {
+                                        desc: format!("Variant case `{}` expecting a payload without it", name),
+                                        span: *pat_span,
+                                    });
+                                } else if name != "_" {
+                                    self.errors.push(TypeError::UnknownName {
+                                        name: name.clone(),
+                                        span: *pat_span
+                                    });
+                                }
+                            }
+                        }
+
+                        Expression::Field { object, name, span: pat_span } => {
+                            if let Expression::Identifier { name: obj_name, .. } = object.as_ref() {
+                                if let Some((var_name, expected_payload)) = self.variant_cases.get(name) {
+                                    if var_name != obj_name || var_name != &target_variant_name {
+                                        self.errors.push(TypeError::Mismatch {
+                                            expected: target_ty.clone(),
+                                            found: Ty::Struct(var_name.clone()),
+                                            span: *pat_span,
+                                        });
+                                    } else if expected_payload.is_some() {
+                                        self.errors.push(TypeError::Unsupported {
+                                            desc: format!("Variant case `{}` expecting a payload without it", name),
+                                            span: *pat_span,
+                                        });
+                                    }
+                                } else {
+                                    self.errors.push(TypeError::UnknownName {
+                                        name: name.clone(),
+                                        span: *pat_span,
+                                    });
+                                }
+                            } else {
+                                self.errors.push(TypeError::Unsupported {
+                                    desc: "Invalid pattern expression".to_string(),
+                                    span: *pat_span,
+                                });
+                            }
+                        }
+
+                        Expression::Call { function, args, span: pat_span } => {
+                            if let Expression::Identifier { name, .. } = function.as_ref() {
+                                if let Some((var_name, expected_payload)) = self.variant_cases.get(name).cloned() {
+                                    if var_name != target_variant_name {
+                                        self.errors.push(TypeError::Mismatch {
+                                            expected: target_ty.clone(),
+                                            found: Ty::Struct(var_name),
+                                            span: *pat_span,
+                                        });
+                                    } else if let Some(payload_ty) = expected_payload {
+                                        if args.len() != 1 {
+                                            self.errors.push(TypeError::ArityMismatch {
+                                                name: name.clone(),
+                                                expected: 1,
+                                                found: args.len(),
+                                                span: *pat_span,
+                                            });
+                                        } else if let Expression::Identifier { name: bind_name, span: bind_span} = &args[0] {
+                                            self.defined(bind_name.clone(), payload_ty, BindingKind::Let, *bind_span);
+                                        } else {
+                                            self.errors.push(TypeError::Unsupported {
+                                                desc: "Pattern payload not as identifier".to_string(),
+                                                span: args[0].span(),
+                                            });
+                                        }
+                                    } else {
+                                        self.errors.push(TypeError::Unsupported {
+                                            desc: "Invalid pattern shape".to_string(),
+                                            span: *pat_span
+                                        });
+                                    }
+                                } else {
+                                    self.errors.push(TypeError::UnknownName {
+                                        name: name.clone(),
+                                        span: *pat_span,
+                                    })
+                                }
+                            }
+
+                        }
+
+                        Expression::MethodCall { object, name, args, span: pat_span} => {
+                            if let Expression::Identifier { name: obj_name, ..} = object.as_ref() {
+                                if let Some((var_name, expected_payload)) = self.variant_cases.clone().get(name).cloned() {
+                                    if var_name == *obj_name || var_name != target_variant_name {
+                                        self.errors.push(TypeError::Mismatch {
+                                            expected: target_ty.clone(),
+                                            found: Ty::Struct(var_name),
+                                            span: *pat_span,
+                                        });
+                                    } else if let Some(payload_ty) = expected_payload {
+                                        if args.len() != 1 {
+                                            self.errors.push(TypeError::ArityMismatch {
+                                                name: name.clone(),
+                                                expected: 1,
+                                                found: args.len(),
+                                                span: *pat_span,
+                                            });
+                                        } else if let Expression::Identifier { name: bind_name, span: bind_span } = &args[0] {
+                                            self.defined(bind_name.clone(), payload_ty, BindingKind::Let, *bind_span)
+                                        } else {
+                                            self.errors.push(TypeError::Unsupported {
+                                                desc: "Pattern payload not as identifier".to_string(),
+                                                span: args[0].span(),
+                                            });
+                                        }
+                                    } else {
+                                        self.errors.push(TypeError::Unsupported {
+                                            desc: format!("Variant case `{}` does not take a payload", name),
+                                            span: *pat_span,
+                                        });
+                                    }
+                                } else {
+                                    self.errors.push(TypeError::UnknownName {
+                                        name: name.clone(),
+                                        span: *pat_span,
+                                    });
+                                }
+                            } else {
+                                self.errors.push(TypeError::Unsupported {
+                                    desc: "Invalid pattern shape".to_string(),
+                                    span: *pat_span,
+                                });
+                            }
+                        }
+
+                        _ => self.errors.push(TypeError::Unsupported {
+                            desc: "Invalid pattern expression".to_string(),
+                            span: arm.pattern.span(),
+                        })
+                    }
+
+                    let body_ty = self.infer(&arm.body, match_ret_ty.as_ref());
+
+                    if let Some(ref expected) = match_ret_ty {
+                        self.expect(&body_ty, expected, arm.body.span());
+                    } else {
+                        match_ret_ty = Some(body_ty)
+                    }
+
+                    self.env.pop()
+                }
+
+                if !has_wildcard {
+                    let missing: Vec<&String> = must_be_covered.difference(&has_been_covered).collect();
+
+                    if !missing.is_empty() {
+                        let missed_str = missing
+                            .into_iter()
+                            .cloned()
+                            .collect::<Vec<String>>()
+                            .join(", ");
+
+                        self.errors.push(TypeError::NotFullMatch {
+                            target_name: target_variant_name.clone(),
+                            missed_patterns: missed_str,
+                            span: target.span(),
+                        })
+                    }
+                }
+
+                match_ret_ty.unwrap_or(Ty::Unit)
             }
             _ => Ty::Error,
         }
@@ -1395,5 +1638,33 @@ impl Checker {
         }
 
         true
+    }
+
+    fn extract_pattern_case(&mut self, pattern: &Expression) -> (String, bool) {
+        let mut has_wildcard = false;
+
+        let name = match pattern {
+            Expression::Identifier { name, .. } => {
+                if name == "_" {
+                    has_wildcard = true;
+                }
+
+                name
+            },
+            Expression::Call { function, .. } => {
+                if let Expression::Identifier { name, .. } = function.as_ref() {
+                    name
+                } else {
+                    unreachable!()
+                }
+            }
+            Expression::Field { name, .. } |
+            Expression::MethodCall { name, .. } => {
+                name
+            }
+            _ => unreachable!()
+        };
+
+        (name.clone(), has_wildcard)
     }
 }

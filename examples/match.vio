@@ -1,0 +1,19 @@
+variant Response = Win(int) | Fail(string) | Timeout
+
+func main() {
+    let response = Response.Timeout
+
+    let resp = match response {
+        Win(code) => code,
+        Fail(err) => {
+            println(err)
+            404
+        },
+        Response.Timeout => {
+            println("Timeout")
+            400
+        },
+    }
+
+    println(resp)
+}

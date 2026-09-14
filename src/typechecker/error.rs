@@ -126,4 +126,10 @@ pub enum TypeError {
         span: Span,
         help: String,
     },
+
+    NotFullMatch {
+        target_name: String,
+        missed_patterns: String,
+        span: Span,
+    },
 }
