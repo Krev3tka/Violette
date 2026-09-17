@@ -978,7 +978,7 @@ impl Checker {
                 body,
                 ..
             } => {
-                let (expected_fn_params, expected_fn_ret) = match expected_ty {
+                let (expected_fn_params, expected_ret) = match expected_ty {
                     Some(Ty::Fn { params, ret, .. }) => (Some(params), Some(ret.as_ref())),
                     _ => (None, None),
                 };
@@ -1011,20 +1011,33 @@ impl Checker {
                 let ret = match return_type {
                     Some(t) => self.resolve(t),
                     None => {
-                        if let Some(exp_ret) = expected_fn_ret
-                            && *exp_ret != Ty::Infer
+                        if let Some(exp_r) = expected_ret
+                            && *exp_r != Ty::Infer
+                            && *exp_r != Ty::Error
                         {
-                            exp_ret.clone()
+                            exp_r.clone()
                         } else {
-                            body.iter()
-                                .find_map(|s| {
-                                    if let Statement::Return { value: Some(v), .. } = s {
-                                        Some(self.infer(v, None))
-                                    } else {
-                                        None
+                            let explicit_ret = body.iter().find_map(|s| {
+                                if let Statement::Return { value: Some(v), .. } = s {
+                                    Some(self.infer(v, None))
+                                } else {
+                                    None
+                                }
+                            });
+
+                            explicit_ret.or_else(|| {
+                                body.last().and_then(|s| match s {
+                                    Statement::Expression { expression, .. } => {
+                                        let ty = self.infer(expression, None);
+                                        if ty != Ty::Error && ty != Ty::Infer {
+                                            Some(ty)
+                                        } else {
+                                            None
+                                        }
                                     }
+                                    _ => None
                                 })
-                                .unwrap_or(Ty::Unit)
+                            }).unwrap_or(Ty::Unit)
                         }
                     }
                 };
@@ -1377,7 +1390,7 @@ impl Checker {
                         Expression::MethodCall { object, name, args, span: pat_span} => {
                             if let Expression::Identifier { name: obj_name, ..} = object.as_ref() {
                                 if let Some((var_name, expected_payload)) = self.variant_cases.clone().get(name).cloned() {
-                                    if var_name == *obj_name || var_name != target_variant_name {
+                                    if var_name != *obj_name || var_name != target_variant_name {
                                         self.errors.push(TypeError::Mismatch {
                                             expected: target_ty.clone(),
                                             found: Ty::Struct(var_name),
@@ -1455,6 +1468,24 @@ impl Checker {
                 }
 
                 match_ret_ty.unwrap_or(Ty::Unit)
+            }
+            Expression::Block { body, .. } => {
+                self.env.push();
+
+                let mut last_ty = Ty::Unit;
+
+                for stmt in body {
+                    match stmt {
+                        Statement::Expression { expression, .. } => {
+                            last_ty = self.infer(expression, None);
+                        }
+                        _ => self.check_statement(stmt),
+                    }
+                }
+
+                self.env.pop();
+
+                last_ty
             }
             _ => Ty::Error,
         }

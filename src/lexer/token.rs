@@ -250,6 +250,9 @@ pub enum Token {
     /// Bitwise right shift operator `>>`.
     RightShift,
 
+    /// Backslash operator `\`.
+    BackSlash,
+
     /// Keyword `import`.
     Import,
 

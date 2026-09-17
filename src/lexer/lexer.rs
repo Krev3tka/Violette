@@ -137,6 +137,8 @@ impl Lexer {
                 }
             }
 
+            '\\' => self.make_token(Token::BackSlash, start),
+
             '"' => {
                 self.read_char();
                 let mut string_val = String::new();

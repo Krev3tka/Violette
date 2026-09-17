@@ -624,19 +624,39 @@ impl Codegen {
                         {
                             exp_r.clone()
                         } else {
-                            let inferred = body.iter().find_map(|s| {
-                                if let Statement::Return { value: Some(v), .. } = s {
-                                    let t = self.checker.infer(v, None);
-                                    if t != Ty::Error && t != Ty::Infer {
-                                        Some(t)
+                            if let Some(exp_r) = expected_ret
+                                && *exp_r != Ty::Infer
+                                && *exp_r != Ty::Error
+                            {
+                                exp_r.clone()
+                            } else {
+                                let explicit_ret = body.iter().find_map(|s| {
+                                    if let Statement::Return { value: Some(v), .. } = s {
+                                        let t = self.checker.infer(v, None);
+                                        if t != Ty::Error && t != Ty::Infer {
+                                            Some(t)
+                                        } else {
+                                            None
+                                        }
                                     } else {
                                         None
                                     }
-                                } else {
-                                    None
-                                }
-                            });
-                            inferred.unwrap_or(Ty::Unit)
+                                });
+
+                                explicit_ret.or_else(|| {
+                                    body.last().and_then(|s| match s {
+                                        Statement::Expression { expression, .. } => {
+                                            let t = self.checker.infer(expression, None);
+                                            if t != Ty::Error && t != Ty::Infer {
+                                                Some(t)
+                                            } else {
+                                                None
+                                            }
+                                        }
+                                        _ => None,
+                                    })
+                                }).unwrap_or(Ty::Unit)
+                            }
                         }
                     }
                 };
@@ -649,7 +669,30 @@ impl Codegen {
                     param_strs.join(", ")
                 };
 
-                let body_c = self.emit_block(body)?;
+                let body_c = if ret_ty != Ty::Unit {
+                    let has_explicit_return = body.iter().any(|s| matches!(s, Statement::Return { .. }));
+
+                    if !has_explicit_return && let Some((last, init)) = body.split_last() {
+                        let mut lines = Vec::new();
+
+                        for s in init {
+                            lines.push(format!("    {}", self.emit_statement(s)?));
+                        }
+
+                        match last {
+                            Statement::Expression { expression, .. } => {
+                                let val_str = self.emit_expression(expression)?;
+                                lines.push(format!("    return {};", val_str));
+                            }
+                            _ => lines.push(format!("    {}", self.emit_statement(last)?)),
+                        }
+                        lines.join("\n")
+                    } else {
+                        self.emit_block(body)?
+                    }
+                } else {
+                    self.emit_block(body)?
+                };
 
                 self.checker.env.pop();
 
@@ -749,30 +792,30 @@ impl Codegen {
                         }
                         _ => {
                             let val = self.emit_expression(&arm.body)?;
-                            arm_lines.push(format!("   {} = {};", res_var, val));
+                            arm_lines.push(format!("        {} = {};", res_var, val));
                         }
                     }
 
                     self.checker.env.pop();
 
-                    arm_lines.push("    break;".to_string());
+                    arm_lines.push("        break;".to_string());
 
                     cases_c.push( if tag_name != "default" {
-                        format!("case {}: {{\n{}\n}}", tag_name, arm_lines.join("\n"))
+                        format!("case {}: {{\n{}\n    }}", tag_name, arm_lines.join("\n"))
                     } else {
-                        format!("{}: {{\n{}\n}}", tag_name, arm_lines.join("\n"))
+                        format!("    {}: {{\n{}\n    }}", tag_name, arm_lines.join("\n"))
                     });
                 }
 
                 format!(
-                    "({{\n{} {} = {};\n{} {};\nswitch ({}.tag) {{\n{}\n}}\n{};\n}})",
+                    "({{\n{} {} = {};\n{} {};\nswitch ({}.tag) {{\n    {}\n}}\n{};\n}})",
                     self.c_type(&target_ty),
                     target_var,
                     target_val_str,
                     res_c_type,
                     res_var,
                     target_var,
-                    cases_c.join("\n"),
+                    cases_c.join("    \n    "),
                     res_var
                 )
             }
@@ -1139,7 +1182,30 @@ impl Codegen {
                 parameters
             };
 
-            let body_str = self.emit_block(body)?;
+            let body_str = if ret != "void" {
+                let has_explicit_return = body.iter().any(|s| matches!(s, Statement::Return { .. }));
+
+                if !has_explicit_return && let Some((last, init)) = body.split_last() {
+                    let mut lines = Vec::new();
+
+                    for s in init {
+                        lines.push(format!("    {}", self.emit_statement(s)?));
+                    }
+
+                    match last {
+                        Statement::Expression { expression, .. } => {
+                            let val_str = self.emit_expression(expression)?;
+                            lines.push(format!("    return {};", val_str));
+                        }
+                        _ => lines.push(format!("    {}", self.emit_statement(last)?)),
+                    }
+                    lines.join("\n")
+                } else {
+                    self.emit_block(body)?
+                }
+            } else {
+                self.emit_block(body)?
+            };
 
             self.checker.env.pop();
 

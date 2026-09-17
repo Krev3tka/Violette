@@ -403,7 +403,7 @@ impl Parser {
                 }
             }
             Token::Match => self.parse_match_expression()?,
-            Token::Func => self.parse_lambda()?,
+            Token::BackSlash => self.parse_lambda()?,
             _ => return Err(self.unexpected(&self.current_token)),
         };
 
@@ -771,32 +771,91 @@ impl Parser {
     pub fn parse_lambda(&mut self) -> Result<Expression, ParseError> {
         let start_span = self.current_token.span;
 
-        self.expect(Token::Func, self.unexpected(&self.current_token))?;
+        self.expect(Token::BackSlash, self.unexpected(&self.current_token))?;
 
-        let open_paren_tok = self.current_token.token.clone();
-        let open_paren_span = self.current_token.span;
+        let has_parens = matches!(self.current_token.token.clone(), Token::LeftParen);
+        let open_token = self.current_token.token.clone();
+        let open_span = self.current_token.span;
+        if has_parens {
+            self.next_token();
+        }
 
-        self.expect(Token::LeftParen, self.unexpected(&self.current_token))?;
-        let params = self.parse_func_params()?;
-        self.expect(
-            Token::RightParen,
-            ParseError::UnclosedDelimiter {
-                open_token: Box::new(open_paren_tok),
-                open_span: open_paren_span,
-                expected_token: Box::new(Token::RightParen),
-                found_tok: Box::new(self.current_token.token.clone()),
-                found_span: self.current_token.span,
-            },
-        )?;
+        let mut params = Vec::new();
 
         let mut return_type = None;
+
+        while !matches!(self.current_token.token, Token::FatArrow | Token::RightParen | Token::LeftBracket) {
+            let param_start_span = self.current_token.span;
+
+            let mut kind = BindingKind::Param;
+
+            if let Token::Var = self.current_token.token {
+                kind = BindingKind::Var;
+            }
+
+            let name = match self.current_token.token.clone() {
+                Token::Identifier(s) => s,
+                _ => return Err(ParseError::ExpectedIdentifier {
+                    context: "in lambda parameters",
+                    found: self.current_token.token.clone(),
+                    span: self.current_token.span
+                })
+            };
+
+            self.next_token();
+
+            let mut param_type = Type::Infer;
+
+            let mut is_ref = false;
+
+            if matches!(self.current_token.token, Token::Colon) {
+                self.next_token();
+
+                if matches!(self.current_token.token, Token::BitAnd) {
+                    is_ref = true;
+                    self.next_token();
+                }
+
+                param_type = self.parse_type()?;
+            }
+
+            params.push(FuncParam {
+                name,
+                param_type,
+                span: param_start_span.merge(&self.current_token.span),
+                kind,
+                is_ref
+            });
+
+            if matches!(self.current_token.token, Token::Comma) {
+                self.next_token();
+                if matches!(self.current_token.token, Token::RightParen | Token::FatArrow | Token::LeftBracket) {
+                    break;
+                }
+            } else if matches!(self.current_token.token, Token::RightParen | Token::FatArrow | Token::LeftBracket) {
+                break;
+            } else {
+                return Err(self.unexpected(&self.current_token));
+            }
+        }
+
+        if has_parens {
+            self.expect(Token::RightParen, ParseError::UnclosedDelimiter {
+                open_token: Box::new(open_token),
+                open_span,
+                found_tok: Box::new(self.current_token.token.clone()),
+                found_span: self.current_token.span,
+                expected_token: Box::new(Token::RightParen)
+            })?;
+        }
 
         if matches!(self.current_token.token, Token::LeftBracket) {
             let open_bracket_tok = self.current_token.token.clone();
             let open_bracket_span = self.current_token.span;
             self.next_token();
 
-            return_type = Some(self.parse_type()?);
+            let ty = self.parse_type()?;
+
             self.expect(
                 Token::RightBracket,
                 ParseError::UnclosedDelimiter {
@@ -807,11 +866,28 @@ impl Parser {
                     found_span: self.current_token.span,
                 },
             )?;
+
+            return_type = Some(ty);
         }
 
-        self.expect(Token::LeftBrace, self.unexpected(&self.current_token))?;
+        self.expect(Token::FatArrow, ParseError::ExpectedFatArrow {
+            found: self.current_token.token.clone(),
+            span: self.current_token.span,
+        })?;
 
-        let (body, _) = self.parse_block()?;
+
+        let body = if matches!(self.current_token.token, Token::LeftBrace) {
+            self.next_token();
+            let (block_stmts, _) = self.parse_block()?;
+            block_stmts
+        } else {
+            let expr = self.parse_expression(Lowest)?;
+            vec![Statement::Return {
+                span: expr.span(),
+                value: Some(expr),
+            }]
+        };
+
         Ok(Expression::Lambda {
             params,
             return_type,
