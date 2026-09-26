@@ -172,12 +172,7 @@ impl Diagnostics for TypeError {
                     *span,
                     format!("no method named `{}` found for type `{}`", method, ty),
                     &labels,
-                    match ty {
-                        Ty::Int | Ty::Float | Ty::Bool | Ty::String => {
-                            Some("primitive types cannot have custom methods in Violette")
-                        }
-                        _ => None,
-                    },
+                    None
                 )
             }
             TypeError::MethodFoundAsGlobal {

@@ -172,10 +172,6 @@ impl Codegen {
             } = s
             {
                 let target_ty = self.checker.resolve(target);
-                let target_name = match target_ty {
-                    Ty::Struct(name) => name,
-                    _ => format!("{:?}", target_ty),
-                };
 
                 for method in methods {
                     if let Statement::Func {
@@ -185,7 +181,7 @@ impl Codegen {
                         ..
                     } = method
                     {
-                        let c_name = format!("vio_user_{}_{}", target_name, name);
+                        let c_name = format!("vio_user_{}_{}", self.type_to_prefix(&target_ty), name);
 
                         let ret_ty = return_type
                             .as_ref()
@@ -543,16 +539,16 @@ impl Codegen {
                             (format!("vio_user_{}", name), true)
                         } else {
                             let obj_ty = self.checker.infer(object.as_ref(), None);
-                            match obj_ty {
+                            match &obj_ty {
                                 Ty::Struct(s) => (format!("vio_user_{}_{}", s, name), false),
-                                _ => (format!("vio_user_{}", name), false),
+                                _ => (format!("vio_user_{}_{}", self.type_to_prefix(&obj_ty), name), false),
                             }
                         }
                     } else {
                         let obj_ty = self.checker.infer(object.as_ref(), None);
-                        match obj_ty {
+                        match &obj_ty {
                             Ty::Struct(s) => (format!("vio_user_{}_{}", s, name), false),
-                            _ => (format!("vio_user_{}", name), false),
+                            _ => (format!("vio_user_{}_{}", self.type_to_prefix(&obj_ty), name), false),
                         }
                     };
 
@@ -949,16 +945,11 @@ impl Codegen {
             } => {
                 let target_ty = self.checker.resolve(target);
 
-                let target_name = match target_ty {
-                    Ty::Struct(name) => name,
-                    _ => format!("{:?}", target_ty),
-                };
-
                 let mut lines = Vec::new();
 
                 for method in methods {
                     if let Statement::Func { name, .. } = method {
-                        let c_name = format!("vio_user_{}_{}", target_name, name);
+                        let c_name = format!("vio_user_{}_{}", self.type_to_prefix(&target_ty), name);
                         lines.push(self.emit_function_custom(method, &c_name)?);
                     }
                 }
@@ -1321,5 +1312,17 @@ impl Codegen {
 
             _ => return Err(Unexpected("Not an operator".to_string())),
         }))
+    }
+
+    fn type_to_prefix<'a>(&self, ty: &'a Ty) -> &'a str {
+        match ty {
+            Ty::Int => "int",
+            Ty::Float => "float64",
+            Ty::String => "string",
+            Ty::Char => "char",
+            Ty::Bool => "bool",
+            Ty::Struct(name) => name.as_str(),
+            _ => "unknown",
+        }
     }
 }

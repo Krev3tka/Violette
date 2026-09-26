@@ -1,17 +1,18 @@
-struct Config {
-    file: File
-    name: `toml:string`
-    age: `toml:int`
-}
+using os.file (Modes)
 
-funс BuildConfig(c: &Config, name: string, age: int) [Win(Config) | Fail] {
-    // ...
-}
-
-funс main() {
-    let cfg = Config {
-        // ...
+func main() {
+    let handle = file.open("/home/krev3tka/file.csv", .Read) else err {
+        println("Cannot open file: {err}")
+        return
     }
 
-    let cfg = cfg.BuildConfig("debil", 67)
+    let content = handle.read_line()
+
+    let numbers = content
+        .split(", ")
+        .map(\s => s.to_int())
+        .filter((>18))
+        .map((+3))
+
+    println(numbers)
 }

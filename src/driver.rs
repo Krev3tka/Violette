@@ -29,12 +29,27 @@ fn filter_declarations(declarations: Vec<Statement>, symbols: &[String]) -> Vec<
 
     declarations
         .into_iter()
-        .filter(|stmt| match stmt {
-            Statement::ExternFunc { .. } => true,
-            Statement::Func { name, .. }
-            | Statement::Const { name, .. }
-            | Statement::Struct { name, .. } => symbols.contains(name),
-            _ => false,
+        .filter_map(|stmt| match stmt {
+            Statement::ExternFunc { .. } | Statement::Variant { .. } => Some(stmt),
+            Statement::Func { ref name, .. }
+            | Statement::Const { ref name, .. }
+            | Statement::Struct { ref name, .. } => if symbols.contains(&name) { Some(stmt) } else { None },
+            Statement::Extend { target, methods, span } => {
+                let filtered_methods: Vec<_> = methods
+                    .into_iter()
+                    .filter(|m| match m {
+                        Statement::Func { name, .. } => symbols.contains(name),
+                        _ => true
+                    })
+                    .collect();
+
+                if !filtered_methods.is_empty() {
+                    Some(Statement::Extend { target, methods: filtered_methods, span})
+                } else {
+                    None
+                }
+            },
+            _ => None,
         })
         .collect()
 }

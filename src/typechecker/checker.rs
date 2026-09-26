@@ -214,9 +214,65 @@ impl Checker {
                                 }
                             }
                         }
+                        Ty::Int
+                        | Ty::Float
+                        | Ty::String
+                        | Ty::Char
+                        | Ty::Bool => {
+                            for method in methods {
+                                if let Statement::Func {
+                                    name,
+                                    params,
+                                    return_type,
+                                    span,
+                                    ..
+                                } = method {
+
+                                    let first_part = match target_ty {
+                                        Ty::Int => "int",
+                                        Ty::Float => "float64",
+                                        Ty::String => "string",
+                                        Ty::Char => "char",
+                                        Ty::Bool => "bool",
+                                        _ => unreachable!(),
+                                    };
+
+                                    let full_name = format!("{}.{}", first_part, name);
+
+                                    let params_ty: Vec<_> = params
+                                        .iter()
+                                        .map(|p| self.resolve(&p.param_type))
+                                        .collect();
+
+                                    let ret_ty = return_type.as_ref().map_or(Ty::Unit, |t|self.resolve(t));
+
+                                    if self.funcs.contains_key(&full_name) {
+                                        self.errors.push(TypeError::DuplicateDefinition {
+                                            name: full_name.clone(),
+                                            first_span: match self.funcs.get(&full_name) {
+                                                Some(f) => f.span,
+                                                None => unreachable!(),
+                                            },
+                                            second_span: stmt.span(),
+                                            def_kind: DefinitionKind::Fun,
+                                        });
+                                        continue;
+                                    }
+
+                                    self.funcs.insert(
+                                        full_name.clone(),
+                                        FnSig {
+                                            params: params_ty,
+                                            ret: ret_ty,
+                                            span: *span,
+                                        }
+                                    );
+                                }
+                            }
+                        }
                         _ => {
                             self.errors.push(TypeError::Unsupported {
-                                desc: format!("Cannot extend non-struct type {:?}", target_ty),
+                                desc: format!("Cannot extend non-struct or non-primitive type {:?}", target_ty),
                                 span: *span,
                             });
                         }
@@ -1133,21 +1189,22 @@ impl Checker {
             } => {
                 if let Expression::Identifier { name: obj_name, ..} = object.as_ref()
                     && let Some((var_name, payload)) = self.variant_cases.clone().get(name)
-                    && var_name == obj_name {
-                        if let Some(payload_ty) = payload {
-                            if args.len() != 1 {
-                                self.errors.push(TypeError::ArityMismatch {
-                                    name: var_name.clone(),
-                                    expected: 1,
-                                    found: args.len(),
-                                    span: *span,
-                                });
-                            }
-                            let a_ty = self.infer(&args[0], Some(payload_ty));
-                            self.expect(&a_ty, payload_ty, args[0].span());
+                    && var_name == obj_name
+                {
+                    if let Some(payload_ty) = payload {
+                        if args.len() != 1 {
+                            self.errors.push(TypeError::ArityMismatch {
+                                name: var_name.clone(),
+                                expected: 1,
+                                found: args.len(),
+                                span: *span,
+                            });
                         }
-                        return Ty::Struct(var_name.clone())
+                        let a_ty = self.infer(&args[0], Some(payload_ty));
+                        self.expect(&a_ty, payload_ty, args[0].span());
                     }
+                    return Ty::Struct(var_name.clone())
+                }
                 let mut found_sig = None;
                 let mut is_static = false;
                 let mut obj_ty = Ty::Error;
@@ -1169,7 +1226,11 @@ impl Checker {
                     obj_ty = self.infer(object.as_ref(), None);
                     let sig_name = match &obj_ty {
                         Ty::Struct(s) => format!("{}.{}", s, name),
-                        Ty::String | Ty::Int | Ty::Float | Ty::Bool => name.clone(),
+                        Ty::Int => format!("int.{}", name),
+                        Ty::Float => format!("float64.{}", name),
+                        Ty::String => format!("string.{}", name),
+                        Ty::Char => format!("char.{}", name),
+                        Ty::Bool => format!("bool.{}", name),
                         Ty::Error => return Ty::Error,
                         _ => {
                             self.errors.push(TypeError::NoSuchMethod {

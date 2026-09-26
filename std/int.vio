@@ -1,10 +1,14 @@
+package int
+
 extern func vio_to_float(n: int) [float64]
 extern func vio_to_string(n: int) [string]
 
-func to_float(n: int) [float64] {
-    return vio_to_float(n)
-}
+extend int {
+    func to_float(n: int) [float64] {
+        return vio_to_float(n)
+    }
 
-func to_string(n: int) [string] {
-    return vio_to_string(n)
+    func to_string(n: int) [string] {
+        return vio_to_string(n)
+    }
 }

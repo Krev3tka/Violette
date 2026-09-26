@@ -1,4 +1,6 @@
 import math
+import int
+import string
 
 func main() {
     let num = 42

@@ -30,6 +30,7 @@ var ExpectedErrors = map[string]string{
 }
 
 var ExpectedOutputs = map[string]string{
+    "anonymous_functions.vio": "12\n-2\n5\n7\n35\n0\n78125",
 	"bits.vio":            "452",
 	"characteristics.vio":     "A\nя\n⼆",
 	"demo_showcase.vio":   "3.16228\n8\nIs `Violette` empty?: false",
@@ -44,6 +45,7 @@ var ExpectedOutputs = map[string]string{
 	"if_else.vio":         "36\n10.648\n361",
 	"lambdas_like_in_haskell.vio": "10\n42",
 	"long_expr_in_lambda.vio": "true",
+	"match.vio": "Timeout\n400",
 	"moduling.vio":        "17",
 	"multiplication_table_via_ranges.vio": "1 2 3 4 5 6 7 8 9 \n" +
 		"2 4 6 8 10 12 14 16 18 \n" +
