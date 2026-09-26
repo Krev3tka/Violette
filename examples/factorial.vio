@@ -1,6 +1,6 @@
 package main
 
-func factorial(n: int) [int] {
+func factorial(n: Int) -> Int {
     if n <= 1 {
         return 1
     }

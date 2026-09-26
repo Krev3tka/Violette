@@ -1,4 +1,4 @@
-func is_cool(x: int) [bool] {
+func is_cool(x: Int) -> Bool {
     if x > 10 {
         return true
     }

@@ -1,6 +1,6 @@
 package square
 
-func square(x: int) [int] {
+func square(x: Int) -> Int {
     return x ** 2
 }
 

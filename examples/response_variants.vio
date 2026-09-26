@@ -1,6 +1,6 @@
-variant Response = Win(int) | Fail(string) | Failed
+variant Response = Win(Int) | Fail(String) | Failed
 
-func check(x: int) [Response] {
+func check(x: Int) -> Response {
     if x > 0 {
         return Win(x)
     }

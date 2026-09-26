@@ -1,6 +1,6 @@
-extern func fabs(x: float64) [float64]
-extern func sqrt(x: float64) [float64]
-extern func floor(x: float64) [float64]
+extern func fabs(x: Float64) -> Float64
+extern func sqrt(x: Float64) -> Float64
+extern func floor(x: Float64) -> Float64
 
 func main() {
     let negative = -64.0

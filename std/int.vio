@@ -1,14 +1,14 @@
 package int
 
-extern func vio_to_float(n: int) [float64]
-extern func vio_to_string(n: int) [string]
+extern func vio_to_float(n: Int) -> Float64
+extern func vio_to_string(n: Int) -> String
 
-extend int {
-    func to_float(n: int) [float64] {
+extend Int {
+    func to_float(n: Int) -> Float64 {
         return vio_to_float(n)
     }
 
-    func to_string(n: int) [string] {
+    func to_string(n: Int) -> String {
         return vio_to_string(n)
     }
 }

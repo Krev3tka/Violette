@@ -1,14 +1,14 @@
 package main
 
-func fetch(url: string) [string] {
+func fetch(url: String) -> String {
     return "Content-Type: application/json"
 }
 
-func parse(info: string) [string] {
+func parse(info: String) -> String {
     return "data.json { age: 19, uuid: 0x123456 }"
 }
 
-func validate(data: string) [bool] {
+func validate(data: String) -> Bool {
     return true
 }
 

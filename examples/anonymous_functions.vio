@@ -1,18 +1,18 @@
 func main () {
-    let add = \(x: int, y: int,) => x + y
-    let subtract = \x: float64, y: float64 => { x - y }
+    let add = \(x: Int, y: Int,) => x + y
+    let subtract = \x: Float64, y: Float64 => { x - y }
 
-    let multiply = \x: int, y: int, => {
+    let multiply = \x: Int, y: Int, => {
         println(x)
         println(y)
         x * y
     }
 
-    let divide = \(x: int, y: int)  => {
+    let divide = \(x: Int, y: Int)  => {
         return x / y
     }
 
-    let power = \x: float64, y: float64 [float64] => {
+    let power = \x: Float64, y: Float64 -> Float64 => {
         x ** y
     }
 

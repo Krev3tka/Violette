@@ -1,8 +1,8 @@
 package point
 
 struct Point {
-    r: float64,
-    theta: float64
+    r: Float64,
+    theta: Float64
 }
 
 func main() {

@@ -1,16 +1,16 @@
 import math
 
 struct Point {
-    x: float64,
-    y: float64,
+    x: Float64,
+    y: Float64,
 }
 
 extend Point {
-    func new(x: float64, y: float64) [Point] {
+    func new(x: Float64, y: Float64) -> Point {
         return Point { x: x, y: y }
     }
 
-    func distance(p: Point, other: Point) [float64] {
+    func distance(p: Point, other: Point) -> Float64 {
         let dx = p.x - other.x
         let dy = p.y - other.y
         return ((dx * dx) + (dy * dy)).sqrt()

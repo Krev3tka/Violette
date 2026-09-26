@@ -1,7 +1,7 @@
 struct Color {
-    red: uint8,
-    blue: uint8,
-    green: uint8,
+    red: UInt8,
+    blue: UInt8,
+    green: UInt8,
 }
 
 let red_color = Color {

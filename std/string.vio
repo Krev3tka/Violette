@@ -1,32 +1,32 @@
 package string
 
-extern func vio_str_len(s: string) [int]
+extern func vio_str_len(s: String) -> Int
 
-extend string {
-    func len(s: string) [int] {
+extend String {
+    func len(s: String) -> Int {
         return vio_str_len(s)
     }
 
-    func is_empty(s: string) [bool] {
+    func is_empty(s: String) -> Bool {
         return s.len() == 0
     }
 
-    func repeat(s: string, n: int) [string] {
+    func repeat(s: String, n: Int) -> String {
         var res = ""
 
-        for i in 0:n {
+        for i in 0..n {
             res = res + s
         }
 
         return res
     }
 
-    func starts_with(s: string, prefix: string) [bool] {
+    func starts_with(s: String, prefix: String) -> Bool {
         if prefix.len() > s.len() {
             return false
         }
 
-        for i in 0:prefix.len() {
+        for i in 0..prefix.len() {
             if s[i] != prefix[i] {
                 return false
             }
@@ -35,14 +35,14 @@ extend string {
         return true
     }
 
-    func ends_with(s: string, suffix: string) [bool] {
+    func ends_with(s: String, suffix: String) -> Bool {
         if suffix.len() > s.len() {
             return false
         }
 
         let offset = s.len() - suffix.len()
 
-        for i in 0:suffix.len() {
+        for i in 0..suffix.len() {
             if s[offset + i] != suffix[i] {
                 return false
             }

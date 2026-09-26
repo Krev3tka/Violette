@@ -70,7 +70,7 @@ let y = x + 1",
             "\
 package double
 
-func double(x: int) [int] {
+func double(x: Int) -> Int {
     return x * 2
 }
 
@@ -79,7 +79,7 @@ double(6, 7)",
             "\
 package double
 
-func double(x: int) [string] {
+func double(x: Int) -> String {
     return x * 2
 }",
             "\

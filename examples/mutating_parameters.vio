@@ -1,8 +1,8 @@
-func inc(var x: &int) {
+func inc(var x: &Int) {
     x = x + 1
 }
 
-func swap(var a: &int, var b: &int) {
+func swap(var a: &Int, var b: &Int) {
     let temp = a
     a = b
     b = temp

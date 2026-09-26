@@ -1,4 +1,3 @@
-use crate::lexer::token::PrimitiveType;
 use crate::parser::error::ParseError;
 use crate::parser::parser::MAX_DEPTH;
 
@@ -50,8 +49,6 @@ impl std::fmt::Display for ParseError {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Type {
-    Primitive(PrimitiveType),
-
     Named(TypePath),
 
     Fn {

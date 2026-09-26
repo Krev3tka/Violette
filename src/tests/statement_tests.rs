@@ -2,12 +2,11 @@
 pub mod statements_tests {
     use crate::lexer::lexer::Lexer;
     use crate::lexer::span::Span;
-    use crate::lexer::token::PrimitiveType::{Int, String};
-    use crate::lexer::token::{PrimitiveType, Token};
+    use crate::lexer::token::Token;
     use crate::parser::Statement;
     use crate::parser::parser::Parser;
     use crate::parser::statement::{ElseIf, FuncParam, StructParam};
-    use crate::parser::types::Type::{Primitive, Union};
+    use crate::parser::types::Type::Union;
     use crate::parser::types::{Type, TypePath};
     use crate::tests::helpers::{
         assert_stmt_tests, call, const_stmt, expr_stmt, for_counter, for_range, func, ident,
@@ -20,7 +19,7 @@ pub mod statements_tests {
         let test_cases = vec![
             ("let x = 5", let_stmt("x", int(5))),
             (
-                "const THREE_HOURS_IN_SECONDS: int = 3 * 24 * 60 ** 2",
+                "const THREE_HOURS_IN_SECONDS: Int = 3 * 24 * 60 ** 2",
                 const_stmt(
                     "THREE_HOURS_IN_SECONDS",
                     infix(
@@ -28,7 +27,9 @@ pub mod statements_tests {
                         Token::Multiply,
                         infix(int(60), Token::Power, int(2)),
                     ),
-                    Primitive(Int),
+                    Type::Named(TypePath {
+                        segments: vec!["Int".to_string()],
+                    }),
                 ),
             ),
             (
@@ -117,7 +118,7 @@ if a > 7 {
 
     #[test]
     fn func_fetch_user_ii() {
-        let input = "func fetch_user(db: Sql.databases.psql, count: int) [Win(User) | Fail(NotFound) | Fail(NotConnected)] {
+        let input = "func fetch_user(db: Sql.Databases.Psql, count: Int) -> Win(User) | Fail(NotFound) | Fail(NotConnected) {
     return count + 5
 }";
 
@@ -131,8 +132,8 @@ if a > 7 {
                         param_type: Type::Named(TypePath {
                             segments: vec![
                                 "Sql".to_string(),
-                                "databases".to_string(),
-                                "psql".to_string(),
+                                "Databases".to_string(),
+                                "Psql".to_string(),
                             ],
                         }),
                         span: Span::default(),
@@ -141,7 +142,9 @@ if a > 7 {
                     },
                     FuncParam {
                         name: "count".to_string(),
-                        param_type: Type::Primitive(PrimitiveType::Int),
+                        param_type: Type::Named(TypePath {
+                            segments: vec!["Int".to_string()],
+                        }),
                         span: Span::default(),
                         kind: BindingKind::Param,
                         is_ref: false,
@@ -183,7 +186,7 @@ if a > 7 {
                 ),
             ),
             (
-                "func BinarySearch(arr: std.vector, target: int) [Win(int) | Fail(NotFound)] {
+                "func binary_search(arr: Std.Vector, target: Int) -> Win(Int) | Fail(NotFound) {
     let left = 0
     let right = len(arr)
 
@@ -202,12 +205,12 @@ if a > 7 {
     return Fail(NotFound)
 }",
                 func(
-                    "BinarySearch",
+                    "binary_search",
                     vec![
                         FuncParam {
                             name: "arr".to_string(),
                             param_type: Type::Named(TypePath {
-                                segments: vec!["std".to_string(), "vector".to_string()],
+                                segments: vec!["Std".to_string(), "Vector".to_string()],
                             }),
                             span: Span::default(),
                             kind: BindingKind::Param,
@@ -215,7 +218,9 @@ if a > 7 {
                         },
                         FuncParam {
                             name: "target".to_string(),
-                            param_type: Type::Primitive(Int),
+                            param_type: Type::Named(TypePath {
+                                segments: vec!["Int".to_string()],
+                            }),
                             span: Span::default(),
                             kind: BindingKind::Param,
                             is_ref: false,
@@ -224,7 +229,9 @@ if a > 7 {
                     Some(Union(vec![
                         Type::Generic {
                             name: "Win".to_string(),
-                            param: Box::new(Primitive(Int)),
+                            param: Box::new(Type::Named(TypePath {
+                                segments: vec!["Int".to_string()],
+                            })),
                         },
                         Type::Generic {
                             name: "Fail".to_string(),
@@ -311,28 +318,34 @@ if a > 7 {
     fn structuring_answer() {
         let test_cases = vec![(
             "struct Person {
-    name: string,
-    age: int,
-    weight: int
+    name: String,
+    age: Int,
+    weight: Int,
 }",
             struct_def(
                 "Person",
                 vec![
                     StructParam {
                         name: "name".to_string(),
-                        param_type: Primitive(String),
+                        param_type: Type::Named(TypePath {
+                            segments: vec!["String".to_string()],
+                        }),
                         span: Span::default(),
                         kind: BindingKind::Let,
                     },
                     StructParam {
                         name: "age".to_string(),
-                        param_type: Primitive(Int),
+                        param_type: Type::Named(TypePath {
+                            segments: vec!["Int".to_string()],
+                        }),
                         span: Span::default(),
                         kind: BindingKind::Let,
                     },
                     StructParam {
                         name: "weight".to_string(),
-                        param_type: Primitive(Int),
+                        param_type: Type::Named(TypePath {
+                            segments: vec!["Int".to_string()],
+                        }),
                         span: Span::default(),
                         kind: BindingKind::Let,
                     },
@@ -344,7 +357,7 @@ if a > 7 {
     }
 
     #[test]
-    fn funcction_body_keeps_all_statements() {
+    fn function_body_keeps_all_statements() {
         let input = "func outer() {
             if c {
                 y()

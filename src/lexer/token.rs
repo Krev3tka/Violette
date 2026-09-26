@@ -3,8 +3,8 @@ use crate::lexer::error::LexError;
 #[allow(dead_code)]
 #[derive(Debug, PartialEq, Clone)]
 pub enum Token {
-    /// Identifier name (e.g., `foo`, `calculateSum`).
-    Identifier(String),
+    /// Lowercase identifier name (e.g., `foo`, `calculateSum`).
+    LowerIdent(String),
 
     /// Keyword `let`.
     Let,
@@ -69,8 +69,8 @@ pub enum Token {
     /// Keyword `local`.
     Local,
 
-    /// Primitive type kind.
-    PrimitiveType(PrimitiveType),
+    /// Uppercase identifier.
+    UpperIdent(String),
 
     /// Pointer-sized signed integer literal.
     Int(isize),
@@ -145,7 +145,7 @@ pub enum Token {
 
     /// Colon operator `:`.
     ///
-    /// Used for right-exclusive ranges and type annotations.
+    /// Used for type annotations.
     Colon,
 
     /// Semicolon `;`.
@@ -163,8 +163,11 @@ pub enum Token {
     /// Fat arrow operator `=>`.
     FatArrow,
 
-    /// Right-inclusive range operator `..`.
+    /// Right-exclusive range operator `..`.
     DoubleDot,
+
+    /// Right-inclusive range operator `..=`.
+    DoubleDotAssign,
 
     /// Addition operator `+`.
     Add,
@@ -253,6 +256,9 @@ pub enum Token {
     /// Backslash operator `\`.
     BackSlash,
 
+    /// Arrow operator `->`.
+    Arrow,
+
     /// Keyword `import`.
     Import,
 
@@ -267,45 +273,4 @@ pub enum Token {
 
     /// Unrecognized or illegal token.
     Illegal(LexError),
-}
-
-#[allow(dead_code)]
-/// Primitive scalar and built-in types supported by Violette.
-#[derive(Debug, PartialEq, Clone)]
-pub enum PrimitiveType {
-    /// Pointer-sized signed integer.
-    Int,
-    /// 8-bit signed integer.
-    Int8,
-    /// 16-bit signed integer.
-    Int16,
-    /// 32-bit signed integer.
-    Int32,
-    /// 64-bit signed integer.
-    Int64,
-
-    /// Pointer-sized unsigned integer.
-    Uint,
-    /// 8-bit unsigned integer.
-    Uint8,
-    /// 16-bit unsigned integer.
-    Uint16,
-    /// 32-bit unsigned integer.
-    Uint32,
-    /// 64-bit unsigned integer.
-    Uint64,
-
-    /// 32-bit floating-point number.
-    Float32,
-    /// 64-bit floating-point number.
-    Float64,
-
-    /// Boolean true/false value.
-    Bool,
-
-    /// Built-in string type.
-    String,
-
-    /// 32-bit character.
-    Char,
 }

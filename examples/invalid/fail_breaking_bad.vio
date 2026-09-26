@@ -1,5 +1,5 @@
-func continuation(x: int) {
-    for i in 0..x {
+func continuation(x: Int) {
+    for i in 0..=x {
         if i == 5 {
             continue
         }
@@ -12,8 +12,8 @@ func main() {
     continuation(10)
 }
 
-func breaking(x: int) {
-    for i in 0:x {
+func breaking(x: Int) {
+    for i in 0..x {
         if i == 7 {
             break
         }

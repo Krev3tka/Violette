@@ -1,4 +1,4 @@
-func filter_print(x: int, predicate: func (int) [bool]) {
+func filter_print(x: Int, predicate: func (Int) -> Bool) {
     if predicate(x) {
         println(x)
     }

@@ -33,22 +33,36 @@ fn filter_declarations(declarations: Vec<Statement>, symbols: &[String]) -> Vec<
             Statement::ExternFunc { .. } | Statement::Variant { .. } => Some(stmt),
             Statement::Func { ref name, .. }
             | Statement::Const { ref name, .. }
-            | Statement::Struct { ref name, .. } => if symbols.contains(&name) { Some(stmt) } else { None },
-            Statement::Extend { target, methods, span } => {
+            | Statement::Struct { ref name, .. } => {
+                if symbols.contains(name) {
+                    Some(stmt)
+                } else {
+                    None
+                }
+            }
+            Statement::Extend {
+                target,
+                methods,
+                span,
+            } => {
                 let filtered_methods: Vec<_> = methods
                     .into_iter()
                     .filter(|m| match m {
                         Statement::Func { name, .. } => symbols.contains(name),
-                        _ => true
+                        _ => true,
                     })
                     .collect();
 
                 if !filtered_methods.is_empty() {
-                    Some(Statement::Extend { target, methods: filtered_methods, span})
+                    Some(Statement::Extend {
+                        target,
+                        methods: filtered_methods,
+                        span,
+                    })
                 } else {
                     None
                 }
-            },
+            }
             _ => None,
         })
         .collect()
@@ -140,6 +154,34 @@ pub fn compile(command: &str, file: &str) {
                 | Statement::Struct { name, .. } => {
                     if imported_symbols.insert(name.clone()) {
                         all_declarations.push(stmt);
+                    }
+                }
+                Statement::Extend {
+                    target,
+                    methods,
+                    span,
+                } => {
+                    let mut filtered = Vec::new();
+
+                    for s in methods {
+                        match s {
+                            Statement::Func { name, .. } => {
+                                let key = format!("{:?}.{}", target, name);
+
+                                if imported_symbols.insert(key.clone()) {
+                                    filtered.push(s.clone());
+                                }
+                            }
+                            _ => unreachable!(),
+                        };
+                    }
+
+                    if !filtered.is_empty() {
+                        all_declarations.push(Statement::Extend {
+                            target: target.clone(),
+                            methods: filtered,
+                            span: *span,
+                        })
                     }
                 }
                 _ => all_declarations.push(stmt),

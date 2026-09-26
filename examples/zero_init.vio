@@ -1,6 +1,6 @@
 struct Profile {
-    bio: string
-    age: int
+    bio: String
+    age: Int
 }
 
 func main() {

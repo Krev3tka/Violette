@@ -38,8 +38,6 @@ pub fn assert_expr_tests(test_cases: Vec<(&str, Expression)>) {
 }
 
 pub fn ident(s: &str) -> Expression {
-    // Если Identifier — это tuple variant: Identifier(s.to_string(), dummy_span())
-    // Если struct variant:
     Expression::Identifier {
         name: s.to_string(),
         span: dummy_span(),

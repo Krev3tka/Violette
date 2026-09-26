@@ -1,7 +1,7 @@
 use crate::lexer::error::LexError;
 use crate::lexer::error::LexError::UnclosedComment;
 use crate::lexer::span::{Position, Span, SpannedToken};
-use crate::lexer::token::{PrimitiveType, Token};
+use crate::lexer::token::Token;
 
 pub struct Lexer {
     input: Vec<char>,
@@ -66,7 +66,13 @@ impl Lexer {
             '.' => {
                 if self.peek_char() == '.' {
                     self.read_char();
-                    self.make_token(Token::DoubleDot, start)
+
+                    if self.peek_char() == '=' {
+                        self.read_char();
+                        self.make_token(Token::DoubleDotAssign, start)
+                    } else {
+                        self.make_token(Token::DoubleDot, start)
+                    }
                 } else {
                     self.make_token(Token::Dot, start)
                 }
@@ -249,6 +255,9 @@ impl Lexer {
                 } else if self.peek_char() == '-' {
                     self.read_char();
                     self.make_token(Token::Decrement, start)
+                } else if self.peek_char() == '>' {
+                    self.read_char();
+                    self.make_token(Token::Arrow, start)
                 } else {
                     self.make_token(Token::Subtract, start)
                 }
@@ -403,23 +412,17 @@ impl Lexer {
                     "local" => Token::Local,
                     "import" => Token::Import,
                     "package" => Token::Package,
-                    "int" => Token::PrimitiveType(PrimitiveType::Int),
-                    "int8" => Token::PrimitiveType(PrimitiveType::Int8),
-                    "int16" => Token::PrimitiveType(PrimitiveType::Int16),
-                    "int32" => Token::PrimitiveType(PrimitiveType::Int32),
-                    "int64" => Token::PrimitiveType(PrimitiveType::Int64),
-                    "uint" => Token::PrimitiveType(PrimitiveType::Uint),
-                    "uint8" => Token::PrimitiveType(PrimitiveType::Uint8),
-                    "uint16" => Token::PrimitiveType(PrimitiveType::Uint16),
-                    "uint32" => Token::PrimitiveType(PrimitiveType::Uint32),
-                    "uint64" => Token::PrimitiveType(PrimitiveType::Uint64),
-                    "float32" => Token::PrimitiveType(PrimitiveType::Float32),
-                    "float64" => Token::PrimitiveType(PrimitiveType::Float64),
-                    "bool" => Token::PrimitiveType(PrimitiveType::Bool),
-                    "string" => Token::PrimitiveType(PrimitiveType::String),
                     "true" => Token::Bool(true),
                     "false" => Token::Bool(false),
-                    _ => Token::Identifier(ident),
+                    _ => {
+                        if let Some(c) = ident.chars().next()
+                            && c.is_lowercase()
+                        {
+                            Token::LowerIdent(ident)
+                        } else {
+                            Token::UpperIdent(ident)
+                        }
+                    }
                 };
 
                 SpannedToken {

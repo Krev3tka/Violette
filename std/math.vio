@@ -1,7 +1,7 @@
 package math
 
-extend float64 {
-    func abs(n: float64) [float64] {
+extend Float64 {
+    func abs(n: Float64) -> Float64 {
         if n >= 0.0 {
             return n
         }
@@ -9,7 +9,7 @@ extend float64 {
         return -n
     }
 
-    func sqrt(val: float64) [float64] {
+    func sqrt(val: Float64) -> Float64 {
         if val < 0.0 {
             return -1.0
         }
@@ -32,11 +32,11 @@ extend float64 {
         return guess
     }
 
-    func pow(base: float64, exp: float64) [float64] {
+    func pow(base: Float64, exp: Float64) -> Float64 {
         return base ** exp
     }
 
-    func sign(n: float64) [int] {
+    func sign(n: Float64) -> Int {
         if n < 0 {
             return -1
         } else if n == 0 {
@@ -46,33 +46,33 @@ extend float64 {
         return 1
     }
 
-    func hypot(a: float64, b: float64) [float64] {
+    func hypot(a: Float64, b: Float64) -> Float64 {
         return sqrt(a * a + b * b)
     }
 }
 
-extend int {
-    func is_even(n: int) [bool] {
+extend Int {
+    func is_even(n: Int) -> Bool {
         return n % 2 == 0
     }
 
-    func is_odd(n: int) [bool] {
+    func is_odd(n: Int) -> Bool {
         return n % 2 == 1
     }
 
-    func is_positive(n: int) [bool] {
+    func is_positive(n: Int) -> Bool {
         return n > 0
     }
 
-    func is_negative(n: int) [bool] {
+    func is_negative(n: Int) -> Bool {
         return n < 0
     }
 
-    func is_zero(n: int) [bool] {
+    func is_zero(n: Int) -> Bool {
         return n == 0
     }
 
-    func min(this: int, other: int) [int] {
+    func min(this: Int, other: Int) -> Int {
         if this < other {
             return this
         }
@@ -80,7 +80,7 @@ extend int {
         return other
     }
 
-    func max(this: int, other: int) [int] {
+    func max(this: Int, other: Int) -> Int {
         if this >= other {
             return this
         }
@@ -88,7 +88,7 @@ extend int {
         return other
     }
 
-    func clamp(val: int, min: int, max: int) [int] {
+    func clamp(val: Int, min: Int, max: Int) -> Int {
         if val < min {
             return min
         }

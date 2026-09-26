@@ -1,4 +1,4 @@
-variant Response = Win(int) | Fail(string) | Timeout
+variant Response = Win(Int) | Fail(String) | Timeout
 
 func main() {
     let response = Response.Timeout

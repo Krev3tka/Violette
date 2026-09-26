@@ -1,4 +1,4 @@
-func double(x: int) [int] {
+func double(x: Int) -> Int {
     return x * 2
 }
 
@@ -8,6 +8,6 @@ func main() {
     let x = 7
 }
 
-func double(x: float64) [float64] {
+func double(x: Float64) -> Float64 {
     return x * 2.0
 }

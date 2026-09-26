@@ -181,7 +181,8 @@ impl Codegen {
                         ..
                     } = method
                     {
-                        let c_name = format!("vio_user_{}_{}", self.type_to_prefix(&target_ty), name);
+                        let c_name =
+                            format!("vio_user_{}_{}", self.type_to_prefix(&target_ty), name);
 
                         let ret_ty = return_type
                             .as_ref()
@@ -516,7 +517,8 @@ impl Codegen {
                 object, name, args, ..
             } => {
                 if let Expression::Identifier { name: obj_name, .. } = object.as_ref()
-                    && let Some((variant_name, Some(_))) = self.checker.variant_cases.get(name).cloned()
+                    && let Some((variant_name, Some(_))) =
+                        self.checker.variant_cases.get(name).cloned()
                     && variant_name == *obj_name
                 {
                     let val_str = self.emit_expression(&args[0])?;
@@ -541,14 +543,20 @@ impl Codegen {
                             let obj_ty = self.checker.infer(object.as_ref(), None);
                             match &obj_ty {
                                 Ty::Struct(s) => (format!("vio_user_{}_{}", s, name), false),
-                                _ => (format!("vio_user_{}_{}", self.type_to_prefix(&obj_ty), name), false),
+                                _ => (
+                                    format!("vio_user_{}_{}", self.type_to_prefix(&obj_ty), name),
+                                    false,
+                                ),
                             }
                         }
                     } else {
                         let obj_ty = self.checker.infer(object.as_ref(), None);
                         match &obj_ty {
                             Ty::Struct(s) => (format!("vio_user_{}_{}", s, name), false),
-                            _ => (format!("vio_user_{}_{}", self.type_to_prefix(&obj_ty), name), false),
+                            _ => (
+                                format!("vio_user_{}_{}", self.type_to_prefix(&obj_ty), name),
+                                false,
+                            ),
                         }
                     };
 
@@ -639,19 +647,21 @@ impl Codegen {
                                     }
                                 });
 
-                                explicit_ret.or_else(|| {
-                                    body.last().and_then(|s| match s {
-                                        Statement::Expression { expression, .. } => {
-                                            let t = self.checker.infer(expression, None);
-                                            if t != Ty::Error && t != Ty::Infer {
-                                                Some(t)
-                                            } else {
-                                                None
+                                explicit_ret
+                                    .or_else(|| {
+                                        body.last().and_then(|s| match s {
+                                            Statement::Expression { expression, .. } => {
+                                                let t = self.checker.infer(expression, None);
+                                                if t != Ty::Error && t != Ty::Infer {
+                                                    Some(t)
+                                                } else {
+                                                    None
+                                                }
                                             }
-                                        }
-                                        _ => None,
+                                            _ => None,
+                                        })
                                     })
-                                }).unwrap_or(Ty::Unit)
+                                    .unwrap_or(Ty::Unit)
                             }
                         }
                     }
@@ -666,7 +676,8 @@ impl Codegen {
                 };
 
                 let body_c = if ret_ty != Ty::Unit {
-                    let has_explicit_return = body.iter().any(|s| matches!(s, Statement::Return { .. }));
+                    let has_explicit_return =
+                        body.iter().any(|s| matches!(s, Statement::Return { .. }));
 
                     if !has_explicit_return && let Some((last, init)) = body.split_last() {
                         let mut lines = Vec::new();
@@ -704,12 +715,16 @@ impl Codegen {
                 let target_ty = self.checker.infer(target.as_ref(), None);
                 let variant_name = match &target_ty {
                     Ty::Struct(name) => name.clone(),
-                    _ => return Err(CodegenError::Unsupported("Non-struct match target".to_string()))
+                    _ => {
+                        return Err(CodegenError::Unsupported(
+                            "Non-struct match target".to_string(),
+                        ));
+                    }
                 };
 
                 let res_ty = match expected_ty {
                     Some(t) => t.clone(),
-                    None => self.checker.infer(expr, None)
+                    None => self.checker.infer(expr, None),
                 };
 
                 let res_c_type = self.c_type(&res_ty);
@@ -725,31 +740,36 @@ impl Codegen {
 
                 for arm in arms {
                     let (case_name, bind_var) = match &arm.pattern {
-                        Expression::Identifier { name, .. }
-                        | Expression::Field { name, .. } => (name.clone(), None),
+                        Expression::Identifier { name, .. } | Expression::Field { name, .. } => {
+                            (name.clone(), None)
+                        }
                         Expression::Call { function, args, .. } => {
                             let name = match function.as_ref() {
-                                Expression::Identifier { name, ..} => name.clone(),
-                                _ => unreachable!()
+                                Expression::Identifier { name, .. } => name.clone(),
+                                _ => unreachable!(),
                             };
 
                             let bind = match &args[0] {
-                                Expression::Identifier { name: b, ..} => b.clone(),
-                                _ => unreachable!()
+                                Expression::Identifier { name: b, .. } => b.clone(),
+                                _ => unreachable!(),
                             };
                             (name.clone(), Some(bind))
                         }
                         Expression::MethodCall { name, args, .. } => {
                             let bind = match &args[0] {
-                                Expression::Identifier { name: b, ..} => b.clone(),
-                                _ => unreachable!()
+                                Expression::Identifier { name: b, .. } => b.clone(),
+                                _ => unreachable!(),
                             };
                             (name.clone(), Some(bind))
                         }
-                        _ => return Err(CodegenError::Unsupported("Pattern shape in codegen".to_string()))
+                        _ => {
+                            return Err(CodegenError::Unsupported(
+                                "Pattern shape in codegen".to_string(),
+                            ));
+                        }
                     };
 
-                    let tag_name = if case_name != "_".to_string() {
+                    let tag_name = if case_name != "_" {
                         format!("VIO_TAG_{}_{}", variant_name, case_name)
                     } else {
                         "default".to_string()
@@ -760,14 +780,18 @@ impl Codegen {
                     let mut arm_lines = Vec::new();
 
                     if let Some(var) = bind_var
-                        && let Some((_, Some(payload_ty))) = self.checker.variant_cases.get(&case_name).cloned() {
+                        && let Some((_, Some(payload_ty))) =
+                            self.checker.variant_cases.get(&case_name).cloned()
+                    {
                         let payload_c_ty = self.c_type(&payload_ty);
 
                         arm_lines.push(format!(
-                            "    {} {} = {}.data.{};", payload_c_ty, var, target_var, case_name)
-                        );
+                            "    {} {} = {}.data.{};",
+                            payload_c_ty, var, target_var, case_name
+                        ));
 
-                        self.checker.defined(var, payload_ty, BindingKind::Let, arm.pattern.span());
+                        self.checker
+                            .defined(var, payload_ty, BindingKind::Let, arm.pattern.span());
                     }
 
                     match &arm.body {
@@ -782,7 +806,8 @@ impl Codegen {
                                         let val = self.emit_expression(expression)?;
                                         arm_lines.push(format!("    {} = {};", res_var, val));
                                     }
-                                    _ => arm_lines.push(format!("    {}", self.emit_statement(last)?))
+                                    _ => arm_lines
+                                        .push(format!("    {}", self.emit_statement(last)?)),
                                 }
                             }
                         }
@@ -796,7 +821,7 @@ impl Codegen {
 
                     arm_lines.push("        break;".to_string());
 
-                    cases_c.push( if tag_name != "default" {
+                    cases_c.push(if tag_name != "default" {
                         format!("case {}: {{\n{}\n    }}", tag_name, arm_lines.join("\n"))
                     } else {
                         format!("    {}: {{\n{}\n    }}", tag_name, arm_lines.join("\n"))
@@ -949,7 +974,8 @@ impl Codegen {
 
                 for method in methods {
                     if let Statement::Func { name, .. } = method {
-                        let c_name = format!("vio_user_{}_{}", self.type_to_prefix(&target_ty), name);
+                        let c_name =
+                            format!("vio_user_{}_{}", self.type_to_prefix(&target_ty), name);
                         lines.push(self.emit_function_custom(method, &c_name)?);
                     }
                 }
@@ -1174,7 +1200,8 @@ impl Codegen {
             };
 
             let body_str = if ret != "void" {
-                let has_explicit_return = body.iter().any(|s| matches!(s, Statement::Return { .. }));
+                let has_explicit_return =
+                    body.iter().any(|s| matches!(s, Statement::Return { .. }));
 
                 if !has_explicit_return && let Some((last, init)) = body.split_last() {
                     let mut lines = Vec::new();

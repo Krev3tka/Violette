@@ -172,7 +172,7 @@ impl Diagnostics for TypeError {
                     *span,
                     format!("no method named `{}` found for type `{}`", method, ty),
                     &labels,
-                    None
+                    None,
                 )
             }
             TypeError::MethodFoundAsGlobal {
@@ -390,34 +390,37 @@ impl Diagnostics for TypeError {
                     Some("choose either scripting style or explicit `func main() { ... }`\n\t or just check your code for extra-entry points"),
                 )
             }
-            TypeError::NotFullMatch { target_name: _, missed_patterns, span } => {
-                let labels = [
-                    Label::primary(*span, if missed_patterns.contains(",") {
-                        format!("patterns `{}` are not covered",
-                                missed_patterns
-                                    .split(", ")
-                                    .collect::<Vec<_>>()
-                                    .join("`, `"))
+            TypeError::NotFullMatch {
+                target_name: _,
+                missed_patterns,
+                span,
+            } => {
+                let labels = [Label::primary(
+                    *span,
+                    if missed_patterns.contains(",") {
+                        format!(
+                            "patterns `{}` are not covered",
+                            missed_patterns.split(", ").collect::<Vec<_>>().join("`, `")
+                        )
                     } else {
                         format!("pattern `{}` is not covered", missed_patterns)
-                    }, path.to_string())
-                ];
+                    },
+                    path.to_string(),
+                )];
 
                 self.report(
                     path.to_string(),
                     *span,
                     "not all cases in `match` expression are covered".to_string(),
                     &labels,
-                    Some(format!(
-                        "try to add `{} => {{ ... }}` or `_ => {{ ... }} pls`",
-                         missed_patterns
-                             .split(", ")
-                             .collect::<Vec<_>>()[0])
-                        .as_str()
-                    )
+                    Some(
+                        format!(
+                            "try to add `{} => {{ ... }}` or `_ => {{ ... }} pls`",
+                            missed_patterns.split(", ").collect::<Vec<_>>()[0]
+                        )
+                        .as_str(),
+                    ),
                 )
-
-
             }
         }
     }

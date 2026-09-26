@@ -1,6 +1,6 @@
 struct Point {
-    x: int,
-    y: int,
+    x: Int,
+    y: Int,
 }
 
 func main() {

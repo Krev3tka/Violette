@@ -9,6 +9,11 @@ pub enum ParseError {
         span: Span,
     },
 
+    ExpectedLowercaseIdent {
+        context: &'static str,
+        span: Span,
+    },
+
     ExpectedAssign {
         context: &'static str,
         found: Token,

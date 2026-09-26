@@ -1,4 +1,4 @@
-func fib(n: int) [int] {
+func fib(n: Int) [Int] {
     if n <= 1 {
         return n
     }

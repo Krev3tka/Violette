@@ -1,11 +1,13 @@
 import string.{starts_with, ends_with}
 
-func get(s: string, idx: int) [int] {
-    if idx >= s.len() || idx < 0 {
-        return 0
-    }
+extend String {
+    func get(s: String, idx: Int) -> Int {
+        if idx >= s.len() || idx < 0 {
+            return 0
+        }
 
-    return s[idx]
+        return s[idx]
+    }
 }
 
 func main() {

@@ -1,4 +1,4 @@
-func add_five(a: int) [int] {
+func add_five(a: Int) -> Int {
     return a + 5
 }
 

@@ -178,7 +178,17 @@ impl Parser {
                 let kw_token = self.current_token.token.clone();
                 self.next_token();
                 let name = match &self.current_token.token {
-                    Token::Identifier(var_name) => var_name.clone(),
+                    Token::LowerIdent(var_name) => var_name.clone(),
+                    Token::UpperIdent(_) => {
+                        return Err(ParseError::ExpectedLowercaseIdent {
+                            context: match kw_token {
+                                Token::Var => "after 'var'",
+                                Token::Let => "after 'let'",
+                                _ => unreachable!(),
+                            },
+                            span: self.current_token.span,
+                        });
+                    }
                     _ => {
                         return Err(ParseError::ExpectedIdentifier {
                             context: match kw_token {
@@ -241,7 +251,7 @@ impl Parser {
             Token::Const => {
                 self.next_token();
                 let name = match &self.current_token.token {
-                    Token::Identifier(var_name) => var_name.clone(),
+                    Token::LowerIdent(var_name) | Token::UpperIdent(var_name) => var_name.clone(),
                     _ => {
                         return Err(ParseError::ExpectedIdentifier {
                             context: "after `const`",
@@ -292,7 +302,12 @@ impl Parser {
             Token::If => self.parse_if_statement(),
             Token::While => self.parse_while_statement(),
             Token::For => self.parse_for_statement(),
-            Token::Func if matches!(self.peek_token.token, Token::Identifier(_)) => {
+            Token::Func
+                if matches!(
+                    self.peek_token.token,
+                    Token::LowerIdent(_) | Token::UpperIdent(_)
+                ) =>
+            {
                 self.parse_function()
             }
             Token::Break => {
@@ -413,7 +428,7 @@ impl Parser {
     pub fn parse_for_statement(&mut self) -> Result<Statement, ParseError> {
         self.expect(Token::For, self.unexpected(&self.current_token))?;
 
-        if let Token::Identifier(var) = self.current_token.token.clone() {
+        if let Token::LowerIdent(var) = self.current_token.token.clone() {
             if matches!(self.peek_token.token, Token::In) {
                 self.next_token();
                 self.expect(Token::In, self.unexpected(&self.current_token))?;
@@ -544,7 +559,13 @@ impl Parser {
         self.expect(Token::Func, self.unexpected(&self.current_token))?;
 
         let name = match self.current_token.token.clone() {
-            Token::Identifier(fun_name) => fun_name,
+            Token::LowerIdent(fun_name) => fun_name,
+            Token::UpperIdent(_) => {
+                return Err(ParseError::ExpectedLowercaseIdent {
+                    context: "after 'func'",
+                    span: self.current_token.span,
+                });
+            }
             _ => {
                 return Err(ParseError::ExpectedIdentifier {
                     context: "after 'func'",
@@ -576,21 +597,9 @@ impl Parser {
 
         let return_type = match self.current_token.token {
             Token::LeftBrace | Token::Assign => None,
-            Token::LeftBracket => {
-                let open_bracket_tok = self.current_token.token.clone();
-                let open_bracket_span = self.current_token.span;
+            Token::Arrow => {
                 self.next_token();
                 let ty = self.parse_type()?;
-                self.expect(
-                    Token::RightBracket,
-                    ParseError::UnclosedDelimiter {
-                        open_token: Box::new(open_bracket_tok),
-                        open_span: open_bracket_span,
-                        expected_token: Box::new(Token::RightBracket),
-                        found_tok: Box::new(self.current_token.token.clone()),
-                        found_span: self.current_token.span,
-                    },
-                )?;
                 Some(ty)
             }
             _ => return Err(self.unexpected(&self.current_token)),
@@ -639,7 +648,13 @@ impl Parser {
         self.expect(Token::Func, self.unexpected(&self.current_token))?;
 
         let name = match self.current_token.token.clone() {
-            Token::Identifier(fun_name) => fun_name,
+            Token::LowerIdent(fun_name) => fun_name,
+            Token::UpperIdent(_) => {
+                return Err(ParseError::ExpectedLowercaseIdent {
+                    context: "after 'extern func'",
+                    span: self.current_token.span,
+                });
+            }
             _ => {
                 return Err(ParseError::ExpectedIdentifier {
                     context: "after 'extern func'",
@@ -670,21 +685,9 @@ impl Parser {
         )?;
 
         let return_type = match self.current_token.token {
-            Token::LeftBracket => {
-                let open_bracket_tok = self.current_token.token.clone();
-                let open_bracket_span = self.current_token.span;
+            Token::Arrow => {
                 self.next_token();
                 let ty = self.parse_type()?;
-                self.expect(
-                    Token::RightBracket,
-                    ParseError::UnclosedDelimiter {
-                        open_token: Box::new(open_bracket_tok),
-                        open_span: open_bracket_span,
-                        expected_token: Box::new(Token::RightBracket),
-                        found_tok: Box::new(self.current_token.token.clone()),
-                        found_span: self.current_token.span,
-                    },
-                )?;
                 Some(ty)
             }
             _ => None,
@@ -703,7 +706,7 @@ impl Parser {
         let span = self.current_token.span;
 
         let name = match self.current_token.token.clone() {
-            Token::Identifier(struct_name) => struct_name,
+            Token::UpperIdent(struct_name) => struct_name,
             _ => {
                 return Err(ParseError::ExpectedIdentifier {
                     context: "after 'struct'",
@@ -724,7 +727,13 @@ impl Parser {
 
         while !matches!(self.current_token.token, Token::RightBrace) {
             let field_name = match self.current_token.token.clone() {
-                Token::Identifier(name) => name,
+                Token::LowerIdent(name) => name,
+                Token::UpperIdent(_) => {
+                    return Err(ParseError::ExpectedLowercaseIdent {
+                        context: "in struct field name",
+                        span: self.current_token.span,
+                    });
+                }
                 _ => {
                     return Err(ParseError::ExpectedIdentifier {
                         context: "in struct field name",
@@ -778,7 +787,7 @@ impl Parser {
         self.next_token();
 
         let name = match self.current_token.token.clone() {
-            Token::Identifier(s) => s,
+            Token::UpperIdent(s) => s,
             _ => {
                 return Err(ParseError::ExpectedIdentifier {
                     context: "after `variant`",
@@ -811,7 +820,7 @@ impl Parser {
             let case_span = self.current_token.span;
 
             let case_name = match self.current_token.token.clone() {
-                Token::Identifier(s) => s,
+                Token::UpperIdent(s) => s,
                 _ => {
                     return Err(ParseError::ExpectedIdentifier {
                         context: "in variant case name",
@@ -871,8 +880,7 @@ impl Parser {
         self.expect(Token::Package, self.unexpected(&self.current_token))?;
 
         let name = match self.current_token.token.clone() {
-            Token::Identifier(n) => n,
-            Token::PrimitiveType(t) => format!("{:?}", t).to_lowercase(),
+            Token::LowerIdent(n) | Token::UpperIdent(n) => n,
             _ => {
                 return Err(ParseError::ExpectedIdentifier {
                     context: "after 'package'",
@@ -1021,8 +1029,7 @@ impl Parser {
         let span = self.current_token.span;
 
         let first_seg = match self.current_token.token.clone() {
-            Token::Identifier(v) => v,
-            Token::PrimitiveType(t) => format!("{:?}", t).to_lowercase(),
+            Token::LowerIdent(v) | Token::UpperIdent(v) => v,
             _ => {
                 return Err(ParseError::ExpectedIdentifier {
                     context: "in import path",
@@ -1039,14 +1046,13 @@ impl Parser {
         while matches!(self.current_token.token, Token::Dot)
             && matches!(
                 self.peek_token.token,
-                Token::Identifier(_) | Token::PrimitiveType(_)
+                Token::LowerIdent(_) | Token::UpperIdent(_)
             )
         {
             self.expect(Token::Dot, self.unexpected(&self.current_token))?;
 
             let sub_name = match self.current_token.token.clone() {
-                Token::Identifier(v) => v,
-                Token::PrimitiveType(t) => format!("{:?}", t).to_lowercase(),
+                Token::LowerIdent(v) | Token::UpperIdent(v) => v,
                 _ => {
                     return Err(ParseError::ExpectedIdentifier {
                         context: "after '.' in import path",
@@ -1072,7 +1078,7 @@ impl Parser {
 
             while !matches!(self.current_token.token, Token::RightBrace) {
                 let sym = match self.current_token.token.clone() {
-                    Token::Identifier(v) => v,
+                    Token::LowerIdent(v) => v,
                     _ => {
                         return Err(ParseError::ExpectedIdentifier {
                             context: "in import symbol list",

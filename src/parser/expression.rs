@@ -130,7 +130,7 @@ pub enum RangeKind {
     /// # Examples:
     /// ```violette
     /// funс main() {
-    ///     for i in 1:10 {
+    ///     for i in 1..10 {
     ///         print(i, ", ")
     ///     }
     /// }
@@ -145,7 +145,7 @@ pub enum RangeKind {
     /// # Examples:
     /// ```violette
     /// funс main() {
-    ///     for i in 1..10 {
+    ///     for i in 1..=10 {
     ///         print(i, ", ")
     ///     }
     /// }
@@ -174,7 +174,7 @@ pub fn token_precedence(token: &Token) -> Precedence {
         }
         Token::Sprout => Precedence::Sprout,
         Token::LeftShift | Token::RightShift => Precedence::Shift,
-        Token::Colon | Token::DoubleDot => Precedence::Range,
+        Token::DoubleDot | Token::DoubleDotAssign => Precedence::Range,
         Token::Add | Token::Subtract => Precedence::Sum,
         Token::Multiply | Token::Divide | Token::Modulus => Precedence::Product,
         Token::Power => Precedence::Power,
@@ -219,7 +219,12 @@ impl Parser {
                 val: *v,
                 span: start_span,
             },
-            Token::Identifier(s) => {
+            Token::LowerIdent(s) => Expression::Identifier {
+                name: s.clone(),
+                span: start_span,
+            },
+
+            Token::UpperIdent(s) => {
                 if self.allowed_struct_literal && matches!(self.peek_token.token, Token::LeftBrace)
                 {
                     self.parse_struct_literal(start_span)?
@@ -230,6 +235,7 @@ impl Parser {
                     }
                 }
             }
+
             Token::Bool(b) => Expression::BoolLiteral {
                 val: *b,
                 span: start_span,
@@ -512,7 +518,7 @@ impl Parser {
                         span: start_span,
                     }
                 }
-                Token::Colon | Token::DoubleDot => {
+                Token::DoubleDot | Token::DoubleDotAssign => {
                     self.next_token();
                     left = self.parse_infix_range(left)?
                 }
@@ -632,7 +638,7 @@ impl Parser {
         self.skip_terminators();
 
         let name = match self.current_token.token.clone() {
-            Token::Identifier(name) => name,
+            Token::LowerIdent(name) | Token::UpperIdent(name) => name,
             _ => {
                 return Err(ParseError::ExpectedIdentifier {
                     context: "after '.' in field access",
@@ -678,7 +684,7 @@ impl Parser {
 
             let start_span = self.current_token.span;
             let param_name = match self.current_token.token.clone() {
-                Token::Identifier(name) => name,
+                Token::LowerIdent(name) => name,
                 _ => {
                     return Err(ParseError::ExpectedIdentifier {
                         context: "in function parameter",
@@ -784,7 +790,10 @@ impl Parser {
 
         let mut return_type = None;
 
-        while !matches!(self.current_token.token, Token::FatArrow | Token::RightParen | Token::LeftBracket) {
+        while !matches!(
+            self.current_token.token,
+            Token::FatArrow | Token::RightParen | Token::Arrow
+        ) {
             let param_start_span = self.current_token.span;
 
             let mut kind = BindingKind::Param;
@@ -794,12 +803,14 @@ impl Parser {
             }
 
             let name = match self.current_token.token.clone() {
-                Token::Identifier(s) => s,
-                _ => return Err(ParseError::ExpectedIdentifier {
-                    context: "in lambda parameters",
-                    found: self.current_token.token.clone(),
-                    span: self.current_token.span
-                })
+                Token::LowerIdent(s) => s,
+                _ => {
+                    return Err(ParseError::ExpectedIdentifier {
+                        context: "in lambda parameters",
+                        found: self.current_token.token.clone(),
+                        span: self.current_token.span,
+                    });
+                }
             };
 
             self.next_token();
@@ -824,15 +835,21 @@ impl Parser {
                 param_type,
                 span: param_start_span.merge(&self.current_token.span),
                 kind,
-                is_ref
+                is_ref,
             });
 
             if matches!(self.current_token.token, Token::Comma) {
                 self.next_token();
-                if matches!(self.current_token.token, Token::RightParen | Token::FatArrow | Token::LeftBracket) {
+                if matches!(
+                    self.current_token.token,
+                    Token::RightParen | Token::FatArrow | Token::Arrow
+                ) {
                     break;
                 }
-            } else if matches!(self.current_token.token, Token::RightParen | Token::FatArrow | Token::LeftBracket) {
+            } else if matches!(
+                self.current_token.token,
+                Token::RightParen | Token::FatArrow | Token::Arrow
+            ) {
                 break;
             } else {
                 return Err(self.unexpected(&self.current_token));
@@ -840,41 +857,32 @@ impl Parser {
         }
 
         if has_parens {
-            self.expect(Token::RightParen, ParseError::UnclosedDelimiter {
-                open_token: Box::new(open_token),
-                open_span,
-                found_tok: Box::new(self.current_token.token.clone()),
-                found_span: self.current_token.span,
-                expected_token: Box::new(Token::RightParen)
-            })?;
+            self.expect(
+                Token::RightParen,
+                ParseError::UnclosedDelimiter {
+                    open_token: Box::new(open_token),
+                    open_span,
+                    found_tok: Box::new(self.current_token.token.clone()),
+                    found_span: self.current_token.span,
+                    expected_token: Box::new(Token::RightParen),
+                },
+            )?;
         }
 
-        if matches!(self.current_token.token, Token::LeftBracket) {
-            let open_bracket_tok = self.current_token.token.clone();
-            let open_bracket_span = self.current_token.span;
+        if matches!(self.current_token.token, Token::Arrow) {
             self.next_token();
 
             let ty = self.parse_type()?;
-
-            self.expect(
-                Token::RightBracket,
-                ParseError::UnclosedDelimiter {
-                    open_token: Box::new(open_bracket_tok),
-                    open_span: open_bracket_span,
-                    expected_token: Box::new(Token::RightBracket),
-                    found_tok: Box::new(self.current_token.token.clone()),
-                    found_span: self.current_token.span,
-                },
-            )?;
-
             return_type = Some(ty);
         }
 
-        self.expect(Token::FatArrow, ParseError::ExpectedFatArrow {
-            found: self.current_token.token.clone(),
-            span: self.current_token.span,
-        })?;
-
+        self.expect(
+            Token::FatArrow,
+            ParseError::ExpectedFatArrow {
+                found: self.current_token.token.clone(),
+                span: self.current_token.span,
+            },
+        )?;
 
         let body = if matches!(self.current_token.token, Token::LeftBrace) {
             self.next_token();
@@ -900,8 +908,8 @@ impl Parser {
         let start_span = self.current_token.span;
 
         let range_kind = match self.current_token.token {
-            Token::Colon => RangeKind::Exclusive,
-            Token::DoubleDot => RangeKind::Inclusive,
+            Token::DoubleDotAssign => RangeKind::Inclusive,
+            Token::DoubleDot => RangeKind::Exclusive,
             _ => unreachable!(),
         };
         self.next_token();
@@ -929,7 +937,7 @@ impl Parser {
 
     pub fn parse_struct_literal(&mut self, start_span: Span) -> Result<Expression, ParseError> {
         let name = match &self.current_token.token {
-            Token::Identifier(n) => n.clone(),
+            Token::UpperIdent(n) => n.clone(),
             _ => {
                 return Err(ParseError::ExpectedIdentifier {
                     context: "in struct literal name",
@@ -950,7 +958,7 @@ impl Parser {
 
         while !matches!(self.current_token.token, Token::RightBrace) {
             let field_name = match self.current_token.token.clone() {
-                Token::Identifier(n) => n,
+                Token::LowerIdent(n) => n,
                 _ => {
                     return Err(ParseError::ExpectedIdentifier {
                         context: "in struct field name",

@@ -1,4 +1,4 @@
-func mul_and_add(a: int, b: int) [int] {
+func mul_and_add(a: Int, b: Int) -> Int {
     return a * 5 + b
 }
 

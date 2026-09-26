@@ -1,18 +1,11 @@
 use crate::lexer::lexer::Lexer;
 use crate::lexer::span::SpannedToken;
-use crate::lexer::token::{PrimitiveType, Token};
+use crate::lexer::token::Token;
 use crate::parser::expression::token_precedence;
 use crate::parser::types::{Type, TypePath};
 use crate::parser::{ParseError, Precedence};
 
 pub const MAX_DEPTH: u32 = 64;
-
-macro_rules! primitive {
-    ($self:expr, $variant:expr) => {{
-        $self.next_token();
-        Ok(Type::Primitive($variant))
-    }};
-}
 
 pub struct Parser {
     lexer: Lexer,
@@ -107,23 +100,9 @@ impl Parser {
 
             let mut ret = None;
 
-            if matches!(self.current_token.token, Token::LeftBracket) {
-                let open_bracket_tok = self.current_token.token.clone();
-                let open_bracket_span = self.current_token.span;
+            if matches!(self.current_token.token, Token::Arrow) {
                 self.next_token();
-
                 ret = Some(Box::new(self.parse_type()?));
-
-                self.expect(
-                    Token::RightBracket,
-                    ParseError::UnclosedDelimiter {
-                        open_token: Box::new(open_bracket_tok),
-                        open_span: open_bracket_span,
-                        expected_token: Box::new(Token::RightBracket),
-                        found_tok: Box::new(self.current_token.token.clone()),
-                        found_span: self.current_token.span,
-                    },
-                )?;
             }
 
             return Ok(Type::Fn { params: types, ret });
@@ -197,29 +176,7 @@ impl Parser {
 
     fn parse_single_type_inner(&mut self) -> Result<Type, ParseError> {
         match self.current_token.token.clone() {
-            Token::PrimitiveType(PrimitiveType::Int) => primitive!(self, PrimitiveType::Int),
-            Token::PrimitiveType(PrimitiveType::Int8) => primitive!(self, PrimitiveType::Int8),
-            Token::PrimitiveType(PrimitiveType::Int16) => primitive!(self, PrimitiveType::Int16),
-            Token::PrimitiveType(PrimitiveType::Int32) => primitive!(self, PrimitiveType::Int32),
-            Token::PrimitiveType(PrimitiveType::Int64) => primitive!(self, PrimitiveType::Int64),
-
-            Token::PrimitiveType(PrimitiveType::Uint) => primitive!(self, PrimitiveType::Uint),
-            Token::PrimitiveType(PrimitiveType::Uint8) => primitive!(self, PrimitiveType::Uint8),
-            Token::PrimitiveType(PrimitiveType::Uint16) => primitive!(self, PrimitiveType::Uint16),
-            Token::PrimitiveType(PrimitiveType::Uint32) => primitive!(self, PrimitiveType::Uint32),
-            Token::PrimitiveType(PrimitiveType::Uint64) => primitive!(self, PrimitiveType::Uint64),
-
-            Token::PrimitiveType(PrimitiveType::Float32) => {
-                primitive!(self, PrimitiveType::Float32)
-            }
-            Token::PrimitiveType(PrimitiveType::Float64) => {
-                primitive!(self, PrimitiveType::Float64)
-            }
-
-            Token::PrimitiveType(PrimitiveType::Bool) => primitive!(self, PrimitiveType::Bool),
-            Token::PrimitiveType(PrimitiveType::String) => primitive!(self, PrimitiveType::String),
-
-            Token::Identifier(name) => {
+            Token::UpperIdent(name) => {
                 let mut segments = vec![name.clone()];
                 self.next_token();
 
@@ -227,7 +184,7 @@ impl Parser {
                     self.next_token();
 
                     match self.current_token.token.clone() {
-                        Token::Identifier(subname) => segments.push(subname),
+                        Token::UpperIdent(subname) => segments.push(subname),
                         _ => {
                             return Err(ParseError::ExpectedIdentifier {
                                 context: "after '.' in type path",

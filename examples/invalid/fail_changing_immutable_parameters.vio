@@ -1,4 +1,4 @@
-func calculate_price(price: float64) [float64] {
+func calculate_price(price: Float64) -> Float64 {
     price = price * 1.2 // Error: assignment to immutable parameter
 
     return price
