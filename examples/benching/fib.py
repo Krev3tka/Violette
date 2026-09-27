@@ -1,4 +1,4 @@
-import sys
+using sys
 
 def fib(n):
     if n <= 1:

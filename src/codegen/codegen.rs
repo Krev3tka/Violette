@@ -711,6 +711,59 @@ impl Codegen {
 
                 lambda_name
             }
+            Expression::If {
+                condition,
+                then_block,
+                else_if,
+                else_block,
+                ..
+            } => {
+                let res_ty = self.checker.infer(expr, expected_ty);
+                let res_c_type = self.c_type(&res_ty);
+
+                let res_var = format!("_vio_res_{}", self.lambda_count);
+                self.lambda_count += 1;
+
+                let cond_c = self.emit_expression(condition)?;
+
+                let if_branch_c = format!(
+                    "if ({}) {{\n        {}\n    }}",
+                    cond_c,
+                    self.emit_assigning_block(&then_block, &res_var)?
+                );
+
+                let mut elifes_c = Vec::new();
+
+                for elif in else_if {
+                    let cond = self.emit_expression(&elif.condition)?;
+                    let body = self.emit_assigning_block(&elif.block, &res_var)?;
+
+                    elifes_c.push(format!(
+                        "else if ({}) {{\n        {}\n    }}",
+                        cond,
+                        body,
+                    ))
+                }
+
+                let mut else_branch = String::new();
+
+                if !else_block.is_empty() {
+                    else_branch = format!(
+                        "else {{\n        {}\n    }}\n",
+                        self.emit_assigning_block(else_block, &res_var)?
+                    )
+                }
+
+                format!(
+                    "({{\n    {} {};\n\n    {} {} {}\n    {};\n}})",
+                    res_c_type,
+                    res_var,
+                    if_branch_c,
+                    elifes_c.join("\n"),
+                    else_branch,
+                    res_var
+                )
+            },
             Expression::Match { target, arms, .. } => {
                 let target_ty = self.checker.infer(target.as_ref(), None);
                 let variant_name = match &target_ty {
@@ -1350,6 +1403,26 @@ impl Codegen {
             Ty::Bool => "bool",
             Ty::Struct(name) => name.as_str(),
             _ => "unknown",
+        }
+    }
+
+    fn emit_assigning_block(&mut self, stmts: &[Statement], res_var: &str) -> Result<String, CodegenError> {
+        let mut stmts_c = Vec::new();
+
+        if let Some((last, init)) = stmts.split_last() {
+            for s in init {
+            stmts_c.push(self.emit_statement(s)?);
+            }
+
+            if let Statement::Expression { expression: expr, .. } = last {
+                stmts_c.push(format!(
+                    "{} = {};", res_var, self.emit_expression(expr)?
+                ));
+            }
+
+            Ok(stmts_c.join("\n"))
+            } else {
+            Err(CodegenError::Unsupported("empty if-expression branches".to_string()))
         }
     }
 }

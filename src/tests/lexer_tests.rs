@@ -93,7 +93,7 @@ mod lexing_tests {
                 Token::LeftParen,
                 Token::UpperIdent("User".to_string()),
                 Token::RightParen,
-                Token::Pipe,
+                Token::BitOr,
                 Token::UpperIdent("Fail".to_string()),
                 Token::LeftParen,
                 Token::UpperIdent("String".to_string()),
@@ -108,7 +108,7 @@ mod lexing_tests {
 
     #[test]
     fn bit_operations() {
-        let input = "let a = 0b01101 # 0xAF & ~0o75
+        let input = "let a = 0b01101 | 0xAF & ~0o75
         if cond1 && cond2 || !cond3 {
             let res = 0x01
         } else {

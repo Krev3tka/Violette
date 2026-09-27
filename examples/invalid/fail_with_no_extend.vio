@@ -1,4 +1,4 @@
-import math.sqrt
+using math.sqrt
 
 struct Point {
     x: Float64,

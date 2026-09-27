@@ -1,4 +1,4 @@
-import string.{starts_with, ends_with}
+using string (starts_with, ends_with)
 
 extend String {
     func get(s: String, idx: Int) -> Int {

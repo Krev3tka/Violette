@@ -1,4 +1,8 @@
-variant Response = Win(Int) | Fail(String) | Failed
+variant Response {
+    Win(Int),
+    Fail(String),
+    Failed,
+}
 
 func check(x: Int) -> Response {
     if x > 0 {

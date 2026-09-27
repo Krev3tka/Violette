@@ -182,7 +182,7 @@ mod expressions_tests {
                 },
             ),
             (
-                "1 # 2 ^ 3 & 4",
+                "1 | 2 ^ 3 & 4",
                 Expression::Infix {
                     left: Box::new(IntLiteral {
                         val: 1,
@@ -225,7 +225,7 @@ mod expressions_tests {
     }
     #[test]
     fn piper() {
-        let input = "match res {Win(v) => fetch(v)|, Fail(e) => e}";
+        let input = "match res {Win(v) => fetch(v), Fail(e) => e}";
         let expected = Expression::Match {
             target: Box::new(ident("res")),
             arms: vec![
@@ -235,15 +235,11 @@ mod expressions_tests {
                         args: vec![ident("v")],
                         span: Span::default(),
                     },
-                    body: Expression::Postfix {
-                        left: Box::new(Call {
+                    body: Call {
                             function: Box::new(ident("fetch")),
                             args: vec![ident("v")],
                             span: Span::default(),
-                        }),
-                        operator: Token::Pipe,
-                        span: Span::default(),
-                    },
+                        },
                     span: Span::default(),
                 },
                 MatchArm {

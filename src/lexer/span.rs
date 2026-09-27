@@ -157,6 +157,31 @@ impl ClearSpan for Expression {
                 }
                 *span = Span::default();
             }
+            Expression::If {
+                condition,
+                then_block,
+                else_if,
+                else_block,
+                span
+            } => {
+                condition.clear_span();
+                for stmt in then_block {
+                    stmt.clear_span();
+                }
+                for else_if in else_if {
+                    else_if.condition.clear_span();
+                    for stmt in &mut else_if.block {
+                        stmt.clear_span();
+                    }
+                    else_if.span = Span::default();
+                }
+
+                for stmt in else_block {
+                    stmt.clear_span();
+                }
+
+                *span = Span::default();
+            }
         }
     }
 }

@@ -31,7 +31,7 @@ impl Parser {
 
         let mut imports = Vec::new();
 
-        while matches!(self.current_token.token, Token::Import) {
+        while matches!(self.current_token.token, Token::Using) {
             let res = self.parse_imports()?;
             imports.extend(res);
             self.skip_terminators();

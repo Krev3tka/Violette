@@ -1,4 +1,4 @@
-import math
+using math
 
 struct Point {
     x: Float64,

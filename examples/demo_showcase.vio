@@ -1,4 +1,4 @@
-import math.sqrt
+using math.sqrt
 
 func main() {
     let num = 42

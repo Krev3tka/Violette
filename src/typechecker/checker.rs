@@ -1307,6 +1307,25 @@ impl Checker {
                     Ty::Error
                 }
             }
+            Expression::If {
+                condition,
+                then_block,
+                span,
+                ..
+            } => {
+                let cond_ty = self.infer(condition.as_ref(), expected_ty);
+                self.expect(&cond_ty, &Ty::Bool, *span);
+
+                if let Some((last, _)) = then_block.split_last() {
+                    return if let Statement::Expression { expression, .. } = last {
+                        self.infer(expression, expected_ty)
+                    } else {
+                        Ty::Unit
+                    }
+                }
+
+                Ty::Unit
+            },
             Expression::Match { target, arms, span } => {
                 let target_ty = self.infer(target.as_ref(), None);
                 if target_ty == Ty::Error {

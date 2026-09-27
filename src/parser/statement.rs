@@ -115,14 +115,14 @@ pub struct IfStatement {
     pub then_block: Vec<Statement>,
     pub else_if: Vec<ElseIf>,
     pub else_block: Vec<Statement>,
-    pub(crate) span: Span,
+    pub span: Span,
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct ElseIf {
     pub condition: Expression,
     pub block: Vec<Statement>,
-    pub(crate) span: Span,
+    pub span: Span,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -386,12 +386,21 @@ impl Parser {
                 self.next_token();
                 (else_block, _) = self.parse_block()?;
                 break;
+            } else if matches!(self.current_token.token.clone(), Token::Colon) {
+                self.next_token();
+                self.skip_terminators();
+                let e = self.parse_expression(Lowest)?;
+                self.next_token();
+                else_block = vec![Statement::Expression { expression: e, span }];
+                break
             } else {
                 return Err(ParseError::InvalidElseBranch {
                     found: self.current_token.token.clone(),
                     span: self.current_token.span,
                 });
             }
+
+            self.skip_terminators();
         }
 
         Ok(Statement::If(IfStatement {
@@ -414,13 +423,23 @@ impl Parser {
         self.allowed_struct_literal = saved;
 
         self.next_token();
-        self.expect(Token::LeftBrace, self.unexpected(&self.current_token))?;
+        let mut _block = Vec::new();
 
-        let (block, _) = self.parse_block()?;
+        if matches!(self.current_token.token.clone(), Token::LeftBrace) {
+            self.next_token();
+            (_block, _) = self.parse_block()?;
+        } else {
+            self.next_token();
+            _block = vec![Statement::Expression {
+                expression: self.parse_expression(Lowest)?,
+                span
+            }];
+            self.next_token();
+        }
 
         Ok(ElseIf {
             condition,
-            block,
+            block: _block,
             span,
         })
     }
@@ -799,23 +818,14 @@ impl Parser {
 
         self.next_token();
 
-        self.expect(
-            Token::Assign,
-            ParseError::ExpectedAssign {
-                context: "after variant name",
-                found: self.current_token.token.clone(),
-                span: self.current_token.span,
-            },
-        )?;
 
-        self.skip_terminators();
-        if matches!(self.current_token.token.clone(), Token::Pipe) {
-            self.next_token();
-        }
+        let open_brace_tok = self.current_token.token.clone();
+        let open_brace_span = self.current_token.span;
+        self.expect(Token::LeftBrace, self.unexpected(&self.current_token))?;
 
         let mut cases = Vec::new();
 
-        loop {
+        while !matches!(self.current_token.token, Token::RightBrace) {
             self.skip_terminators();
             let case_span = self.current_token.span;
 
@@ -861,12 +871,28 @@ impl Parser {
             });
 
             self.skip_terminators();
-            if matches!(self.current_token.token, Token::Pipe) {
-                self.next_token();
-            } else {
-                break;
-            }
+            match self.current_token.token.clone() {
+                Token::Comma => self.expect(Token::Comma, self.unexpected(&self.current_token)),
+                Token::Newline => {
+                    self.skip_terminators();
+                    continue;
+                }
+                Token::RightBrace => break,
+                _ => return Err(self.unexpected(&self.current_token)),
+            }?;
+            self.skip_terminators();
         }
+
+        self.expect(
+            Token::RightBrace,
+            ParseError::UnclosedDelimiter {
+                open_token: Box::new(open_brace_tok),
+                open_span: open_brace_span,
+                expected_token: Box::new(Token::RightBrace),
+                found_tok: Box::new(self.current_token.token.clone()),
+                found_span: self.current_token.span,
+            },
+        )?;
 
         Ok(Statement::Variant {
             name,
@@ -894,46 +920,12 @@ impl Parser {
     }
 
     pub fn parse_imports(&mut self) -> Result<Vec<ImportItem>, ParseError> {
-        self.expect(Token::Import, self.unexpected(&self.current_token))?;
+        self.expect(Token::Using, self.unexpected(&self.current_token))?;
         let mut packages = Vec::new();
 
-        if matches!(self.current_token.token, Token::LeftParen) {
-            let open_paren_tok = self.current_token.token.clone();
-            let open_paren_span = self.current_token.span;
+        let item = self.parse_single_import_item()?;
 
-            self.expect(Token::LeftParen, self.unexpected(&self.current_token))?;
-            self.skip_terminators();
-
-            while !matches!(self.current_token.token, Token::RightParen) {
-                packages.push(self.parse_single_import_item()?);
-                self.skip_terminators();
-
-                match self.current_token.token.clone() {
-                    Token::Comma => self.expect(Token::Comma, self.unexpected(&self.current_token)),
-                    Token::Newline => {
-                        self.skip_terminators();
-                        continue;
-                    }
-                    Token::RightParen => break,
-                    _ => return Err(self.unexpected(&self.current_token)),
-                }?;
-
-                self.skip_terminators();
-            }
-            self.expect(
-                Token::RightParen,
-                ParseError::UnclosedDelimiter {
-                    open_token: Box::new(open_paren_tok),
-                    open_span: open_paren_span,
-                    expected_token: Box::new(Token::RightParen),
-                    found_tok: Box::new(self.current_token.token.clone()),
-                    found_span: self.current_token.span,
-                },
-            )?;
-        } else {
-            packages.push(self.parse_single_import_item()?);
-            self.skip_terminators();
-        }
+        packages.push(item);
 
         Ok(packages)
     }
@@ -1028,92 +1020,84 @@ impl Parser {
     fn parse_single_import_item(&mut self) -> Result<ImportItem, ParseError> {
         let span = self.current_token.span;
 
-        let first_seg = match self.current_token.token.clone() {
-            Token::LowerIdent(v) | Token::UpperIdent(v) => v,
-            _ => {
-                return Err(ParseError::ExpectedIdentifier {
-                    context: "in import path",
-                    found: self.current_token.token.clone(),
-                    span: self.current_token.span,
-                });
-            }
+        let mut module_name = match self.current_token.token.clone() {
+            Token::LowerIdent(name) | Token::UpperIdent(name) => name,
+            _ => return Err(ParseError::ExpectedIdentifier {
+                context: "after 'using'",
+                found: self.current_token.token.clone(),
+                span: self.current_token.span
+            }),
         };
+
         self.next_token();
 
-        let mut module_path = first_seg;
-        let mut symbols = Vec::new();
-
-        while matches!(self.current_token.token, Token::Dot)
-            && matches!(
-                self.peek_token.token,
-                Token::LowerIdent(_) | Token::UpperIdent(_)
-            )
-        {
-            self.expect(Token::Dot, self.unexpected(&self.current_token))?;
-
-            let sub_name = match self.current_token.token.clone() {
-                Token::LowerIdent(v) | Token::UpperIdent(v) => v,
-                _ => {
-                    return Err(ParseError::ExpectedIdentifier {
-                        context: "after '.' in import path",
-                        found: self.current_token.token.clone(),
-                        span: self.current_token.span,
-                    });
-                }
-            };
+        while matches!(self.current_token.token.clone(), Token::Dot) {
             self.next_token();
 
-            module_path.push('.');
-            module_path.push_str(&sub_name);
+            let sub = match self.current_token.token.clone() {
+                Token::LowerIdent(name) | Token::UpperIdent(name) => name,
+                _ => return Err(ParseError::ExpectedIdentifier {
+                    context: "in module path",
+                    found: self.current_token.token.clone(),
+                    span: self.current_token.span
+                }),
+            };
+
+            self.next_token();
+
+            module_name.push('.');
+            module_name.push_str(&sub);
         }
 
-        if matches!(self.current_token.token, Token::Dot) {
-            self.expect(Token::Dot, self.unexpected(&self.current_token))?;
+        self.skip_terminators();
 
-            let open_brace_tok = self.current_token.token.clone();
-            let open_brace_span = self.current_token.span;
+        let mut symbols = Vec::new();
 
-            self.expect(Token::LeftBrace, self.unexpected(&self.current_token))?;
+        if let Token::LeftParen = self.current_token.token.clone() {
+            let open_paren_tok = self.current_token.token.clone();
+            let open_paren_span = self.current_token.span;
+
+            self.next_token();
+
             self.skip_terminators();
 
-            while !matches!(self.current_token.token, Token::RightBrace) {
-                let sym = match self.current_token.token.clone() {
-                    Token::LowerIdent(v) => v,
-                    _ => {
-                        return Err(ParseError::ExpectedIdentifier {
-                            context: "in import symbol list",
-                            found: self.current_token.token.clone(),
-                            span: self.current_token.span,
-                        });
-                    }
+            while !matches!(self.current_token.token.clone(), Token::RightParen) {
+                let item_name = match self.current_token.token.clone() {
+                    Token::LowerIdent(name) | Token::UpperIdent(name) => name,
+                    _ => return Err(ParseError::ExpectedIdentifier {
+                        context: "in item importing",
+                        found: self.current_token.token.clone(),
+                        span: self.current_token.span
+                    }),
                 };
-                self.next_token();
-                symbols.push(sym);
-                self.skip_terminators();
 
-                match self.current_token.token.clone() {
-                    Token::Comma => {
-                        self.expect(Token::Comma, self.unexpected(&self.current_token))?;
-                        self.skip_terminators();
-                    }
-                    Token::RightBrace => break,
-                    _ => return Err(self.unexpected(&self.current_token)),
+                self.next_token();
+
+                symbols.push(item_name);
+
+                if matches!(self.current_token.token.clone(), Token::Comma) {
+                    self.next_token();
                 }
+
+                self.skip_terminators();
             }
+
             self.expect(
-                Token::RightBrace,
+                Token::RightParen,
                 ParseError::UnclosedDelimiter {
-                    open_token: Box::new(open_brace_tok),
-                    open_span: open_brace_span,
-                    expected_token: Box::new(Token::RightBrace),
+                    open_token: Box::new(open_paren_tok),
+                    open_span: open_paren_span,
+                    expected_token: Box::new(Token::RightParen),
                     found_tok: Box::new(self.current_token.token.clone()),
                     found_span: self.current_token.span,
-                },
+                }
             )?;
+
+            self.skip_terminators();
         }
 
         Ok(ImportItem {
-            module: module_path,
+            module: module_name,
             symbols,
             span,
         })

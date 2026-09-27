@@ -1,4 +1,4 @@
-import math
+using math
 
 func main() {
     println(

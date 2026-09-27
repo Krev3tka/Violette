@@ -43,7 +43,6 @@ impl Lexer {
             '[' => self.make_token(Token::LeftBracket, start),
             ']' => self.make_token(Token::RightBracket, start),
             ',' => self.make_token(Token::Comma, start),
-            '#' => self.make_token(Token::BitOr, start),
             '^' => self.make_token(Token::BitXOR, start),
             '%' => {
                 if self.peek_char() == '=' {
@@ -59,7 +58,7 @@ impl Lexer {
                     self.read_char();
                     self.make_token(Token::LogicOr, start)
                 } else {
-                    self.make_token(Token::Pipe, start)
+                    self.make_token(Token::BitOr, start)
                 }
             }
 
@@ -405,12 +404,12 @@ impl Lexer {
                     "return" => Token::Return,
                     "struct" => Token::Struct,
                     "extend" => Token::Extend,
-                    "interface" => Token::Interface,
+                    "protocol" => Token::Protocol,
                     "variant" => Token::Variant,
                     "type" => Token::Type,
-                    "open" => Token::Open,
+                    "export" => Token::Export,
                     "local" => Token::Local,
-                    "import" => Token::Import,
+                    "using" => Token::Using,
                     "package" => Token::Package,
                     "true" => Token::Bool(true),
                     "false" => Token::Bool(false),

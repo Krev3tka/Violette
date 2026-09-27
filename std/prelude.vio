@@ -1,4 +1,4 @@
-import math.{
+using math (
     abs,
     pow,
     sign,
@@ -10,7 +10,7 @@ import math.{
     min,
     max,
     clamp
-}
+)
 
-import int.{to_float, to_string}
-import string.{len, is_empty}
+using int (to_float, to_string)
+using string (len, is_empty)

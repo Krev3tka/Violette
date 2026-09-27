@@ -1,0 +1,6 @@
+func my_sign(x: Int) -> Int = if x > 0 {1} else if x == 0: 0 else {-1}
+func my_sign2(x: Int) -> Int = if x > 0: 1 else if x == 0 {0} else: -1
+
+println(my_sign(10))
+println(my_sign2(-7))
+println(my_sign2(0))

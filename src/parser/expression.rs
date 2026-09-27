@@ -2,7 +2,7 @@ use crate::lexer::span::Span;
 use crate::lexer::token::Token;
 use crate::parser::Precedence::Lowest;
 use crate::parser::parser::{MAX_DEPTH, Parser};
-use crate::parser::statement::{FuncParam, MatchArm};
+use crate::parser::statement::{ElseIf, FuncParam, MatchArm};
 use crate::parser::types::Type;
 use crate::parser::{ParseError, Precedence, Statement};
 use crate::typechecker::error::BindingKind;
@@ -113,6 +113,14 @@ pub enum Expression {
         range_kind: RangeKind,
         span: Span,
     },
+
+    If {
+        condition: Box<Expression>,
+        then_block: Vec<Statement>,
+        else_if: Vec<ElseIf>,
+        else_block: Vec<Statement>,
+        span: Span,
+    },
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -182,7 +190,6 @@ pub fn token_precedence(token: &Token) -> Precedence {
         | Token::Decrement
         | Token::LeftParen
         | Token::LeftBracket
-        | Token::Pipe
         | Token::Dot => Precedence::Postfix,
         _ => Lowest,
     }
@@ -408,6 +415,7 @@ impl Parser {
                     span: start_span.merge(&self.current_token.span),
                 }
             }
+            Token::If => self.parse_if_expression()?,
             Token::Match => self.parse_match_expression()?,
             Token::BackSlash => self.parse_lambda()?,
             _ => return Err(self.unexpected(&self.current_token)),
@@ -464,7 +472,7 @@ impl Parser {
                         span: left.span().merge(&right.span()),
                     };
                 }
-                Token::Decrement | Token::Increment | Token::Pipe => {
+                Token::Decrement | Token::Increment => {
                     self.next_token();
                     let operator = self.current_token.token.clone();
                     start_span = self.current_token.span;
@@ -555,6 +563,73 @@ impl Parser {
             left: Box::new(left),
             index: Box::new(index),
             span: start_span,
+        })
+    }
+
+    pub fn parse_if_expression(&mut self) -> Result<Expression, ParseError> {
+        let span = self.current_token.span;
+
+        self.expect(Token::If, self.unexpected(&self.current_token))?;
+
+        let saved = self.allowed_struct_literal;
+        self.allowed_struct_literal = false;
+        let cond = self.parse_expression(Lowest)?;
+        self.allowed_struct_literal = saved;
+
+        self.next_token();
+
+        let mut then_block = Vec::new();
+
+        if matches!(&self.current_token.token.clone(), Token::LeftBrace) {
+            self.next_token();
+            self.skip_terminators();
+
+            (then_block, _) = self.parse_block()?;
+        } else if matches!(&self.current_token.token.clone(), Token::Colon) {
+            self.next_token();
+
+            self.skip_terminators();
+
+            let e = self.parse_expression(Lowest)?;
+            self.next_token();
+
+            then_block = vec![Statement::Expression { expression: e, span }]
+        }
+
+        let mut else_if = Vec::new();
+        let mut else_block = vec![];
+
+        while matches!(self.current_token.token, Token::Else) {
+            self.expect(Token::Else, self.unexpected(&self.current_token))?;
+
+            if matches!(self.current_token.token, Token::If) {
+                let else_if_stmt = self.parse_else_if_statement()?;
+                else_if.push(else_if_stmt);
+            } else if matches!(self.current_token.token, Token::LeftBrace) {
+                self.next_token();
+                (else_block, _) = self.parse_block()?;
+                break;
+            } else if matches!(self.current_token.token.clone(), Token::Colon) {
+                self.next_token();
+                self.skip_terminators();
+                let e = self.parse_expression(Lowest)?;
+                else_block = vec![Statement::Expression { expression: e, span }];
+            } else {
+                return Err(ParseError::InvalidElseBranch {
+                    found: self.current_token.token.clone(),
+                    span: self.current_token.span,
+                });
+            }
+
+            self.skip_terminators();
+        }
+
+        Ok(Expression::If {
+            condition: Box::new(cond),
+            then_block,
+            else_if,
+            else_block,
+            span
         })
     }
 
@@ -1036,6 +1111,7 @@ impl Expression {
             Expression::MethodCall { span, .. } => *span,
             Expression::Lambda { span, .. } => *span,
             Expression::Range { span, .. } => *span,
+            Expression::If { span, .. } => *span,
         }
     }
 }

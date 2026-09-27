@@ -3,7 +3,7 @@ use crate::lexer::error::LexError;
 #[allow(dead_code)]
 #[derive(Debug, PartialEq, Clone)]
 pub enum Token {
-    /// Lowercase identifier name (e.g., `foo`, `calculateSum`).
+    /// Lowercase identifier name.
     LowerIdent(String),
 
     /// Keyword `let`.
@@ -54,8 +54,8 @@ pub enum Token {
     /// Keyword `extend`.
     Extend,
 
-    /// Keyword `interface`.
-    Interface,
+    /// Keyword `protocol`.
+    Protocol,
 
     /// Keyword `variant`.
     Variant,
@@ -63,8 +63,8 @@ pub enum Token {
     /// Keyword `type`.
     Type,
 
-    /// Keyword `open`.
-    Open,
+    /// Keyword `export`.
+    Export,
 
     /// Keyword `local`.
     Local,
@@ -137,11 +137,6 @@ pub enum Token {
 
     /// Greater than or equal to operator `>=`.
     GreaterOrEquals,
-
-    /// Pipe operator `|`.
-    ///
-    /// Used for union type enumeration and postfix error propagation.
-    Pipe,
 
     /// Colon operator `:`.
     ///
@@ -238,7 +233,7 @@ pub enum Token {
     /// Bitwise AND operator `&`.
     BitAnd,
 
-    /// Bitwise OR operator `#`.
+    /// Bitwise OR operator `|`.
     BitOr,
 
     /// Bitwise NOT operator `~`.
@@ -259,8 +254,8 @@ pub enum Token {
     /// Arrow operator `->`.
     Arrow,
 
-    /// Keyword `import`.
-    Import,
+    /// Keyword `using`.
+    Using,
 
     /// Keyword `package`.
     Package,

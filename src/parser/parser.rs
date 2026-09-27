@@ -118,7 +118,7 @@ impl Parser {
             variants.push(self.parse_single_type()?);
             self.skip_terminators();
 
-            while matches!(self.current_token.token, Token::Pipe) {
+            while matches!(self.current_token.token, Token::BitOr) {
                 self.next_token();
                 variants.push(self.parse_single_type()?);
                 self.skip_terminators();
@@ -146,13 +146,13 @@ impl Parser {
 
         let first = self.parse_single_type()?;
 
-        if !matches!(self.current_token.token, Token::Pipe) {
+        if !matches!(self.current_token.token, Token::BitOr) {
             return Ok(first);
         }
 
         let mut variants = vec![first];
 
-        while matches!(self.current_token.token, Token::Pipe) {
+        while matches!(self.current_token.token, Token::BitOr) {
             self.next_token();
             variants.push(self.parse_single_type()?);
         }
