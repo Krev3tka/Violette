@@ -162,7 +162,7 @@ impl ClearSpan for Expression {
                 then_block,
                 else_if,
                 else_block,
-                span
+                span,
             } => {
                 condition.clear_span();
                 for stmt in then_block {

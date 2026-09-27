@@ -43,6 +43,7 @@ var ExpectedOutputs = map[string]string{
 	"fizzbuzz.vio":        "1\n2\nfizz\n4\nbuzz\nfizz\n7\n8\nfizz\nbuzz\n11\nfizz\n13\n14\nfizzbuzz",
 	"funcs_with_assignment_syntax.vio": "7",
 	"if_else.vio":         "36\n10.648\n361",
+	"if_if_was_expr.vio":  "1\n-1\n0",
 	"lambdas_like_in_haskell.vio": "10\n42",
 	"long_expr_in_lambda.vio": "true",
 	"match.vio": "Timeout\n400",

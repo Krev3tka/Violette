@@ -593,7 +593,10 @@ impl Parser {
             let e = self.parse_expression(Lowest)?;
             self.next_token();
 
-            then_block = vec![Statement::Expression { expression: e, span }]
+            then_block = vec![Statement::Expression {
+                expression: e,
+                span,
+            }]
         }
 
         let mut else_if = Vec::new();
@@ -613,7 +616,10 @@ impl Parser {
                 self.next_token();
                 self.skip_terminators();
                 let e = self.parse_expression(Lowest)?;
-                else_block = vec![Statement::Expression { expression: e, span }];
+                else_block = vec![Statement::Expression {
+                    expression: e,
+                    span,
+                }];
             } else {
                 return Err(ParseError::InvalidElseBranch {
                     found: self.current_token.token.clone(),
@@ -629,7 +635,7 @@ impl Parser {
             then_block,
             else_if,
             else_block,
-            span
+            span,
         })
     }
 

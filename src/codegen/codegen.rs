@@ -729,7 +729,7 @@ impl Codegen {
                 let if_branch_c = format!(
                     "if ({}) {{\n        {}\n    }}",
                     cond_c,
-                    self.emit_assigning_block(&then_block, &res_var)?
+                    self.emit_assigning_block(then_block, &res_var)?
                 );
 
                 let mut elifes_c = Vec::new();
@@ -738,11 +738,7 @@ impl Codegen {
                     let cond = self.emit_expression(&elif.condition)?;
                     let body = self.emit_assigning_block(&elif.block, &res_var)?;
 
-                    elifes_c.push(format!(
-                        "else if ({}) {{\n        {}\n    }}",
-                        cond,
-                        body,
-                    ))
+                    elifes_c.push(format!("else if ({}) {{\n        {}\n    }}", cond, body,))
                 }
 
                 let mut else_branch = String::new();
@@ -763,7 +759,7 @@ impl Codegen {
                     else_branch,
                     res_var
                 )
-            },
+            }
             Expression::Match { target, arms, .. } => {
                 let target_ty = self.checker.infer(target.as_ref(), None);
                 let variant_name = match &target_ty {
@@ -1406,23 +1402,30 @@ impl Codegen {
         }
     }
 
-    fn emit_assigning_block(&mut self, stmts: &[Statement], res_var: &str) -> Result<String, CodegenError> {
+    fn emit_assigning_block(
+        &mut self,
+        stmts: &[Statement],
+        res_var: &str,
+    ) -> Result<String, CodegenError> {
         let mut stmts_c = Vec::new();
 
         if let Some((last, init)) = stmts.split_last() {
             for s in init {
-            stmts_c.push(self.emit_statement(s)?);
+                stmts_c.push(self.emit_statement(s)?);
             }
 
-            if let Statement::Expression { expression: expr, .. } = last {
-                stmts_c.push(format!(
-                    "{} = {};", res_var, self.emit_expression(expr)?
-                ));
+            if let Statement::Expression {
+                expression: expr, ..
+            } = last
+            {
+                stmts_c.push(format!("{} = {};", res_var, self.emit_expression(expr)?));
             }
 
             Ok(stmts_c.join("\n"))
-            } else {
-            Err(CodegenError::Unsupported("empty if-expression branches".to_string()))
+        } else {
+            Err(CodegenError::Unsupported(
+                "empty if-expression branches".to_string(),
+            ))
         }
     }
 }

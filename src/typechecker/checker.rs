@@ -1321,11 +1321,11 @@ impl Checker {
                         self.infer(expression, expected_ty)
                     } else {
                         Ty::Unit
-                    }
+                    };
                 }
 
                 Ty::Unit
-            },
+            }
             Expression::Match { target, arms, span } => {
                 let target_ty = self.infer(target.as_ref(), None);
                 if target_ty == Ty::Error {

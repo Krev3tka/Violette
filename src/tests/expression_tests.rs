@@ -236,10 +236,10 @@ mod expressions_tests {
                         span: Span::default(),
                     },
                     body: Call {
-                            function: Box::new(ident("fetch")),
-                            args: vec![ident("v")],
-                            span: Span::default(),
-                        },
+                        function: Box::new(ident("fetch")),
+                        args: vec![ident("v")],
+                        span: Span::default(),
+                    },
                     span: Span::default(),
                 },
                 MatchArm {

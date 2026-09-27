@@ -391,8 +391,11 @@ impl Parser {
                 self.skip_terminators();
                 let e = self.parse_expression(Lowest)?;
                 self.next_token();
-                else_block = vec![Statement::Expression { expression: e, span }];
-                break
+                else_block = vec![Statement::Expression {
+                    expression: e,
+                    span,
+                }];
+                break;
             } else {
                 return Err(ParseError::InvalidElseBranch {
                     found: self.current_token.token.clone(),
@@ -432,7 +435,7 @@ impl Parser {
             self.next_token();
             _block = vec![Statement::Expression {
                 expression: self.parse_expression(Lowest)?,
-                span
+                span,
             }];
             self.next_token();
         }
@@ -818,7 +821,6 @@ impl Parser {
 
         self.next_token();
 
-
         let open_brace_tok = self.current_token.token.clone();
         let open_brace_span = self.current_token.span;
         self.expect(Token::LeftBrace, self.unexpected(&self.current_token))?;
@@ -1022,11 +1024,13 @@ impl Parser {
 
         let mut module_name = match self.current_token.token.clone() {
             Token::LowerIdent(name) | Token::UpperIdent(name) => name,
-            _ => return Err(ParseError::ExpectedIdentifier {
-                context: "after 'using'",
-                found: self.current_token.token.clone(),
-                span: self.current_token.span
-            }),
+            _ => {
+                return Err(ParseError::ExpectedIdentifier {
+                    context: "after 'using'",
+                    found: self.current_token.token.clone(),
+                    span: self.current_token.span,
+                });
+            }
         };
 
         self.next_token();
@@ -1036,11 +1040,13 @@ impl Parser {
 
             let sub = match self.current_token.token.clone() {
                 Token::LowerIdent(name) | Token::UpperIdent(name) => name,
-                _ => return Err(ParseError::ExpectedIdentifier {
-                    context: "in module path",
-                    found: self.current_token.token.clone(),
-                    span: self.current_token.span
-                }),
+                _ => {
+                    return Err(ParseError::ExpectedIdentifier {
+                        context: "in module path",
+                        found: self.current_token.token.clone(),
+                        span: self.current_token.span,
+                    });
+                }
             };
 
             self.next_token();
@@ -1064,11 +1070,13 @@ impl Parser {
             while !matches!(self.current_token.token.clone(), Token::RightParen) {
                 let item_name = match self.current_token.token.clone() {
                     Token::LowerIdent(name) | Token::UpperIdent(name) => name,
-                    _ => return Err(ParseError::ExpectedIdentifier {
-                        context: "in item importing",
-                        found: self.current_token.token.clone(),
-                        span: self.current_token.span
-                    }),
+                    _ => {
+                        return Err(ParseError::ExpectedIdentifier {
+                            context: "in item importing",
+                            found: self.current_token.token.clone(),
+                            span: self.current_token.span,
+                        });
+                    }
                 };
 
                 self.next_token();
@@ -1090,7 +1098,7 @@ impl Parser {
                     expected_token: Box::new(Token::RightParen),
                     found_tok: Box::new(self.current_token.token.clone()),
                     found_span: self.current_token.span,
-                }
+                },
             )?;
 
             self.skip_terminators();
