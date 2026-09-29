@@ -34,6 +34,7 @@ var ExpectedOutputs = map[string]string{
 	"bits.vio":            "452",
 	"characteristics.vio":     "A\nя\n⼆",
 	"demo_showcase.vio":   "3.16228\n8\nIs `Violette` empty?: false",
+	"defer_to_my_wishes.vio":  "1\n2\n3\n4",
 	"escape_analysis.vio": "Quotes: \"Hello, Violette!\"\nBackslash: \\",
 	"extern_fun.vio":      "64\n8\n3",
 	"extend_demo.vio":     "5",
