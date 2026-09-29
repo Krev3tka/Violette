@@ -4,6 +4,8 @@
 
 ROADMAP.md
 
+src/typechecker/typed_ast.rs
+
 /bin/
 
 cmake-build-debug/

@@ -242,6 +242,11 @@ impl ClearSpan for Statement {
                 }
                 if_stmt.span = Span::default();
             }
+            Statement::Defer { callee, span } => {
+                callee.clear_span();
+
+                *span = Span::default();
+            }
             Statement::While {
                 condition,
                 body,

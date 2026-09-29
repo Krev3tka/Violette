@@ -1,0 +1,58 @@
+struct Database {
+    address:           String,
+    max_open_conns:    Int,
+    max_idle_conns:    Int,
+    conn_max_lifetime: Int,
+}
+
+func open_database() -> Database {
+    return Database {
+        address: "https://youtu.be/dQw4w9WgXcQ",
+        max_open_conns: 10,
+        max_idle_conns: 5,
+        conn_max_lifetime: 60,
+    }
+}
+
+struct Transaction {
+    is_closed: Bool,
+}
+
+extend Database {
+    func close(db: Database) {}
+
+    func begin_transaction(db: Database) -> Transaction = Transaction { is_closed: true }
+}
+
+extend Transaction {
+    func rollback(tx: Transaction) {}
+
+    func acquire_lock(tx: Transaction) -> Lock = Lock{}
+}
+
+struct Lock {}
+
+extend Lock {
+    func release(l: Lock) {}
+}
+
+func main() {
+    let db = open_database()
+    defer db.close()
+
+    var tx = Transaction{}
+
+    for i in 1..5 {
+        tx = db.begin_transaction()
+        defer tx.rollback()
+
+        println(i)
+    }
+
+    if db.max_open_conns > 3 {
+        return
+    }
+
+    let lock = tx.acquire_lock()
+    defer lock.release()
+}

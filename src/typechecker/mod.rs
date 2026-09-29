@@ -6,4 +6,5 @@
 pub mod checker;
 pub mod env;
 pub mod error;
+mod typed_ast;
 pub mod types;

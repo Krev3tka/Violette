@@ -399,6 +399,7 @@ impl Lexer {
                     "continue" => Token::Continue,
                     "break" => Token::Break,
                     "match" => Token::Match,
+                    "defer" => Token::Defer,
                     "extern" => Token::Extern,
                     "func" => Token::Func,
                     "return" => Token::Return,

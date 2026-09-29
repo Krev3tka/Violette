@@ -81,6 +81,11 @@ pub enum Statement {
         span: Span,
     },
 
+    Defer {
+        callee: Box<Statement>,
+        span: Span,
+    },
+
     Func {
         name: String,
         params: Vec<FuncParam>,
@@ -319,6 +324,15 @@ impl Parser {
                 Ok(Statement::Continue { span })
             }
             Token::Extern => self.parse_extern(),
+            Token::Defer => {
+                self.next_token();
+                let callee = self.parse_statement()?;
+
+                Ok(Statement::Defer {
+                    callee: Box::new(callee),
+                    span,
+                })
+            }
             Token::Return => {
                 self.next_token();
                 let value = match self.parse_expression(Lowest) {
@@ -1131,6 +1145,7 @@ impl Statement {
             Statement::Break { span } => *span,
             Statement::Continue { span } => *span,
             Statement::Variant { span, .. } => *span,
+            Statement::Defer { span, .. } => *span,
         }
     }
 }

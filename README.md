@@ -1,19 +1,19 @@
 # Violette Programming Language
 
-> **Violette** — a statically typed compiled programming language combining the of Go/Kotlin/Swift with the speed of C/Rust.
+> **Violette** — a statically typed compiled programming language combining the ergonomics of Kotlin/Swift, features from functional programming languages like Haskell/Idris and the speed of C/Rust.
 
 [![Language](https://img.shields.io/badge/language-Rust-orange.svg)](https://www.rust-lang.org/)
 [![Backend](https://img.shields.io/badge/backend-C99%20%2F%20GNU99-blue.svg)](#)
-[![Version](https://img.shields.io/badge/version-v0.1.0-purple.svg)](Violettech_v0.4.md)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-v0.2.0-purple.svg)](Violettech_v0.4.md)
+[![License](https://img.shields.io/badge/license-BSD_3--Clause-blue.svg)](LICENSE)
 
 ---
 
 ## Key Features
 
 * Deterministic Memory Model: Fast reference counting (Perceus-style). *(not ready yet)*
+* Dependent types: No difference between expression and types (*not ready yet*)
 * Null-Safety & Zero-Values: No hidden `null` references.
-* UFCS Methods: Any function taking a struct or primitive as its first parameter behaves as a method (`p.distance()`, `"Violette".len()`).
 * Sprout Pipelines (`~>`): Functional dataflow operator for conveyor-style transformations.
 * Modular Standard Library: Embedded zero-cost prelude (`prelude.vio`)
 * Modern Terminal Diagnostics: Card-based error reporting like in Gleam
@@ -24,24 +24,25 @@
 
 ### 1. Methods & Pipeline Chaining
 ```violette
-import math.{sqrt}
+using math (sqrt)
 
 struct Point {
-    x: float64,
-    y: float64,
+    x: Float64,
+    y: Float64,
 }
 
-funс distance(p: Point, other: Point) [float64] {
-    let dx = p.x - other.x
-    let dy = p.y - other.y
-    return sqrt((dx * dx) + (dy * dy))
+extend Point {
+    func distance(self: Point, other: Point) -> Float64 {
+        let dx = self.x - other.x
+        let dy = self.y - other.y
+        return sqrt((dx * dx) + (dy * dy))
+    }
 }
 
-funс main() {
+func main() {
     let p1 = Point { x: 0.0, y: 0.0 }
     let p2 = Point { x: 3.0, y: 4.0 }
 
-    // Uniform Function Call Syntax:
     println(p1.distance(p2)) // 5.0
 
     // Multi-line fluent chaining:
@@ -55,19 +56,19 @@ funс main() {
 
 ### 2. Sprout Operator (`~>`)
 ```violette
-funс fetch(url: string) [string] {
+func fetch(url: String) -> String {
     return "payload"
 }
 
-funс parse(data: string) [string] {
+func parse(data: String) -> String {
     return "json"
 }
 
-funс validate(data: string) [bool] {
+func validate(data: String) -> Bool {
     return true
 }
 
-funс main() {
+func main() {
     // this string is the same as validate(parse(fetch("https://example.com")))
     let is_valid = "https://example.com" ~> fetch ~> parse ~> validate
     println(is_valid) // true
@@ -76,7 +77,7 @@ funс main() {
 
 ### 3. Strings & Prelude
 ```violette
-funс main() {
+func main() {
     let text = "Violette"
     
     if !text.is_empty() {
@@ -88,6 +89,32 @@ funс main() {
 }
 ```
 
+### 4. Variant Types
+```violette
+variant Result {
+    Win(Int),
+    Fail(String),
+}
+
+let res = Result.Win(200)
+
+let code = match res {
+    Win(c) => c,
+    Fail(msg) => 500,
+}
+```
+
+### 5. Defer Statement
+```violette
+let file = open_file("log.txt")
+defer file.close()
+```
+
+### 6. One-line If-Expression Syntactic Sugar
+```violette
+let sign = if x > 0: 1 else if x == 0: 0 else: -1
+```
+
 ---
 
 ## Roadmap
@@ -97,13 +124,14 @@ funс main() {
 - [x] **Typechecker & Semantic Analysis** with immutability by default
 - [x] **Flow Control Analysis**
 - [x] **C-Transpiler Codegen** with FFI
+- [x] Block-scoped LIFO Defer
+- [x] If-expressions with inline colon syntax
+- [x] PascalCase unified type system
+- [x] **Selective & Dotted Imports** (`using math (abs, sqrt)`, `using math (hypot)`)
+- [x] **Tagged Unions** & Pattern Matching expressions (`match` + `Win/Fail`)
 - [ ] **Embedded Standard Library**
-- [x] **Selective & Dotted Imports** (`import math.{abs, sqrt}`, `import math.hypot`)
-- [ ] **Card-based Terminal Diagnostics** with ANSI styling and helpful hints
-- [ ] **Tagged Unions** & Pattern Matching expressions (`match` + `Win/Fail`)
-- [ ] **Error propagation** postfix operator (`|`)
+- [ ] **Card-based Terminal Diagnostics** with helpful hints
 - [ ] **Perceus In-Place Buffer Reuse (FBIP)** optimization
-- [ ] **Native LLVM Backend** (Target v1.0)
 
 ---
 
@@ -158,4 +186,4 @@ Violette is an independent open-source project. If you'd like to support the lan
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the BSD 3-Clause License - see the [LICENSE](LICENSE) file for details.

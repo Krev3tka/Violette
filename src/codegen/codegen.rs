@@ -17,6 +17,8 @@ pub struct Codegen {
     lambda_prototypes: Vec<String>,
     lifted_lambdas: Vec<String>,
     lambda_count: usize,
+    is_main: bool,
+    scope_defers: Vec<Vec<String>>,
 }
 
 impl Codegen {
@@ -31,6 +33,8 @@ impl Codegen {
             lambda_prototypes: Vec::new(),
             lifted_lambdas: Vec::new(),
             lambda_count: 0,
+            is_main: false,
+            scope_defers: Vec::new(),
         }
     }
 
@@ -263,6 +267,8 @@ impl Codegen {
             if let Statement::Func { name, body, .. } = s
                 && name == "main"
             {
+                self.is_main = true;
+
                 lines.push("int main(void) {".to_string());
 
                 lines.push(self.emit_block(body)?);
@@ -270,6 +276,8 @@ impl Codegen {
                 lines.push("    return 0;".to_string());
 
                 lines.push("}".to_string());
+
+                self.is_main = false;
 
                 continue;
             }
@@ -975,8 +983,13 @@ impl Codegen {
                     val_str = format!(" {}", self.emit_expression(expr)?);
                 }
 
-                format!("return{};", val_str)
+                if self.is_main && value.is_none() {
+                    "return 0;".to_string()
+                } else {
+                    format!("return{};", val_str)
+                }
             }
+            Statement::Defer { .. } => String::new(),
             Statement::ExternFunc {
                 name,
                 params,
@@ -1328,6 +1341,7 @@ impl Codegen {
     pub fn emit_block(&mut self, body: &[Statement]) -> Result<String, CodegenError> {
         let mut lines = Vec::new();
         let mut string_vars: Vec<String> = Vec::new();
+        self.scope_defers.push(Vec::new());
 
         for s in body {
             if let Statement::Let { name, value, .. }
@@ -1339,11 +1353,29 @@ impl Codegen {
                 if matches!(ty, Ty::String) {
                     string_vars.push(name.clone());
                 }
+            } else if let Statement::Defer { callee, .. } = s {
+                let c_callee = self.emit_statement(callee.as_ref())?;
+
+                self.scope_defers.last_mut().unwrap().push(c_callee);
+            } else if let Statement::Return { .. } = s {
+                for deferred_stmts in self.scope_defers.iter().rev() {
+                    for stmt in deferred_stmts.iter().rev() {
+                        lines.push(format!("    {}", stmt))
+                    }
+                }
             }
+
             let stmt = self.emit_statement(s)?;
+
             for line in stmt.lines() {
                 lines.push(format!("    {line}"));
             }
+        }
+
+        let defers = self.scope_defers.pop().unwrap();
+
+        for stmt in defers.iter().rev() {
+            lines.push(format!("    {}", stmt));
         }
 
         for name in string_vars.iter().rev() {

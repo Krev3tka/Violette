@@ -4,4 +4,4 @@ func calculate_price(price: Float64) -> Float64 {
     return price
 }
 
-println(1000.0.calculate_price())
+println(calculate_price(1000.0))

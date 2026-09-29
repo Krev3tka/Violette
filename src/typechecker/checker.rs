@@ -1758,7 +1758,8 @@ impl Checker {
                 | Statement::Continue { .. }
                 | Statement::ExternFunc { .. }
                 | Statement::Extend { .. }
-                | Statement::Variant { .. } => continue,
+                | Statement::Variant { .. }
+                | Statement::Defer { .. } => continue,
                 Statement::If(IfStatement {
                     then_block,
                     else_if,

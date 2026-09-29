@@ -39,6 +39,9 @@ pub enum Token {
     /// Keyword `match`.
     Match,
 
+    /// Keyword `defer`.
+    Defer,
+
     /// Keyword `func`.
     Func,
 
