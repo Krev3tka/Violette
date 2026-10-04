@@ -69,7 +69,11 @@ impl Lexer {
                     if self.peek_char() == '=' {
                         self.read_char();
                         self.make_token(Token::DoubleDotAssign, start)
+                    } else if self.peek_char() == '<' {
+                        self.read_char();
+                        self.make_token(Token::DoubleDotLess, start)
                     } else {
+                        self.read_char();
                         self.make_token(Token::DoubleDot, start)
                     }
                 } else {

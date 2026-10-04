@@ -13,6 +13,7 @@ const STD_PRELUDE: &str = include_str!("../std/prelude.vio");
 const STD_MATH: &str = include_str!("../std/math.vio");
 const STD_INT: &str = include_str!("../std/int.vio");
 const STD_STRING: &str = include_str!("../std/string.vio");
+const STD_FLOAT: &str = include_str!("../std/float.vio");
 
 fn parse_module(source: &str, pkg_name: &str) -> Program {
     let lexer = Lexer::new(source);
@@ -81,6 +82,7 @@ fn resolve_import(import_item: &ImportItem, file_path: &Path) -> Vec<Statement> 
         "math" => parse_module(STD_MATH, "math"),
         "int" => parse_module(STD_INT, "int"),
         "string" => parse_module(STD_STRING, "string"),
+        "float" => parse_module(STD_FLOAT, "float"),
         _ => {
             let local_path = file_path
                 .parent()
@@ -232,14 +234,18 @@ pub fn compile(command: &str, file: &str) {
     let scanln_c: &str = include_str!("../vio_helpers/vio_io/vio_scanln.c");
     let int_h: &str = include_str!("../vio_helpers/vio_casting/vio_int.h");
     let int_c: &str = include_str!("../vio_helpers/vio_casting/vio_int.c");
+    let string_h: &str = include_str!("../vio_helpers/vio_casting/vio_string.h");
+    let string_c: &str = include_str!("../vio_helpers/vio_casting/vio_string.c");
+    let float_h: &str = include_str!("../vio_helpers/vio_casting/vio_float.h");
+    let float_c: &str = include_str!("../vio_helpers/vio_casting/vio_float.c");
 
     let write_rt = |sub: &str, name: &str, content: &str| -> std::path::PathBuf {
         let dir = temp_dir.join(sub);
         let path = dir.join(name);
-        if !path.exists() {
+        // if !path.exists() {
             fs::create_dir_all(&dir).ok();
             fs::write(&path, content).expect("Failed to write runtime file");
-        }
+        // }
 
         path
     };
@@ -255,6 +261,10 @@ pub fn compile(command: &str, file: &str) {
     let scanln_c_path = write_rt("vio_io", "vio_scanln.c", scanln_c);
     write_rt("vio_casting", "vio_int.h", int_h);
     let int_c_path = write_rt("vio_casting", "vio_int.c", int_c);
+    write_rt("vio_casting", "vio_string.h", string_h);
+    let string_c_path = write_rt("vio_casting", "vio_string.c", string_c);
+    write_rt("vio_casting", "vio_float.h", float_h);
+    let float_c_path = write_rt("vio_casting", "vio_float.c", float_c);
 
     let c_path = env::temp_dir().join(format!(
         "{}_vio_out.c",
@@ -283,6 +293,8 @@ pub fn compile(command: &str, file: &str) {
         .arg(&println_c_path)
         .arg(&scanln_c_path)
         .arg(&int_c_path)
+        .arg(&string_c_path)
+        .arg(&float_c_path)
         .arg("-I")
         .arg(&temp_dir)
         .arg("-o")

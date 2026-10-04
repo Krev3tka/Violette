@@ -224,24 +224,6 @@ impl ClearSpan for Statement {
                 *type_span = Span::default();
                 *span = Span::default();
             }
-            Statement::If(if_stmt) => {
-                if_stmt.condition.clear_span();
-                for stmt in &mut if_stmt.then_block {
-                    stmt.clear_span();
-                }
-                for else_if in &mut if_stmt.else_if {
-                    else_if.condition.clear_span();
-                    for stmt in &mut else_if.block {
-                        stmt.clear_span();
-                    }
-                    else_if.span = Span::default();
-                }
-
-                for stmt in &mut if_stmt.else_block {
-                    stmt.clear_span();
-                }
-                if_stmt.span = Span::default();
-            }
             Statement::Defer { callee, span } => {
                 callee.clear_span();
 

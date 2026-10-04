@@ -13,4 +13,5 @@ using math (
 )
 
 using int (to_float, to_string)
-using string (len, is_empty)
+using float (to_int, to_string)
+using string (len, is_empty, to_int, to_float)

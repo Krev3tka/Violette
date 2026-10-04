@@ -182,7 +182,7 @@ pub fn token_precedence(token: &Token) -> Precedence {
         }
         Token::Sprout => Precedence::Sprout,
         Token::LeftShift | Token::RightShift => Precedence::Shift,
-        Token::DoubleDot | Token::DoubleDotAssign => Precedence::Range,
+        Token::DoubleDotLess | Token::DoubleDotAssign => Precedence::Range,
         Token::Add | Token::Subtract => Precedence::Sum,
         Token::Multiply | Token::Divide | Token::Modulus => Precedence::Product,
         Token::Power => Precedence::Power,
@@ -504,12 +504,17 @@ impl Parser {
                     self.next_token();
                     self.next_token();
 
-                    let right = self.parse_expression(Precedence::Sprout)?;
+                    let mut right = self.parse_expression(Precedence::Sprout)?;
 
-                    left = Expression::Call {
-                        function: Box::new(right),
-                        args: vec![left],
-                        span: start_span,
+                    if let Expression::Identifier { .. } = right {
+                        left = Expression::Call {
+                            function: Box::new(right),
+                            args: vec![left],
+                            span: start_span,
+                        }
+                    } else if let Expression::Call { ref mut args, .. } = right {
+                        args.insert(0, left);
+                        left = right;
                     }
                 }
                 Token::LeftShift | Token::RightShift => {
@@ -526,7 +531,7 @@ impl Parser {
                         span: start_span,
                     }
                 }
-                Token::DoubleDot | Token::DoubleDotAssign => {
+                Token::DoubleDotLess | Token::DoubleDotAssign => {
                     self.next_token();
                     left = self.parse_infix_range(left)?
                 }
@@ -585,18 +590,6 @@ impl Parser {
             self.skip_terminators();
 
             (then_block, _) = self.parse_block()?;
-        } else if matches!(&self.current_token.token.clone(), Token::Colon) {
-            self.next_token();
-
-            self.skip_terminators();
-
-            let e = self.parse_expression(Lowest)?;
-            self.next_token();
-
-            then_block = vec![Statement::Expression {
-                expression: e,
-                span,
-            }]
         }
 
         let mut else_if = Vec::new();
@@ -612,14 +605,6 @@ impl Parser {
                 self.next_token();
                 (else_block, _) = self.parse_block()?;
                 break;
-            } else if matches!(self.current_token.token.clone(), Token::Colon) {
-                self.next_token();
-                self.skip_terminators();
-                let e = self.parse_expression(Lowest)?;
-                else_block = vec![Statement::Expression {
-                    expression: e,
-                    span,
-                }];
             } else {
                 return Err(ParseError::InvalidElseBranch {
                     found: self.current_token.token.clone(),
@@ -990,7 +975,7 @@ impl Parser {
 
         let range_kind = match self.current_token.token {
             Token::DoubleDotAssign => RangeKind::Inclusive,
-            Token::DoubleDot => RangeKind::Exclusive,
+            Token::DoubleDotLess => RangeKind::Exclusive,
             _ => unreachable!(),
         };
         self.next_token();

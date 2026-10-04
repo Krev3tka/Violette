@@ -3,7 +3,7 @@ use crate::codegen::error::CodegenError::Unexpected;
 use crate::lexer::token::Token;
 use crate::parser::expression::RangeKind;
 use crate::parser::program::Program;
-use crate::parser::statement::{FuncParam, IfStatement, StructParam};
+use crate::parser::statement::{FuncParam, StructParam};
 use crate::parser::{Expression, Statement};
 use crate::typechecker::checker::Checker;
 use crate::typechecker::error::BindingKind;
@@ -935,45 +935,6 @@ impl Codegen {
                 let mut res = String::new();
 
                 res.push_str(format!("{} {} = {};", self.c_type(&ty), name, val_str).as_str());
-
-                res
-            }
-            Statement::If(IfStatement {
-                condition,
-                then_block,
-                else_if,
-                else_block,
-                ..
-            }) => {
-                self.checker.env.push();
-
-                let mut res = String::new();
-
-                let cond = self.emit_expression(condition)?;
-
-                let first_block = self.emit_block(then_block)?;
-
-                res.push_str(format!("if ({}) {{\n{}\n}}\n", cond, first_block).as_str());
-
-                if !else_if.is_empty() {
-                    for if_s in else_if {
-                        let cond = self.emit_expression(&if_s.condition)?;
-
-                        let some_block = self.emit_block(&if_s.block)?;
-
-                        res.push_str(
-                            format!("else if ({}) {{\n{}\n}}\n", cond, some_block).as_str(),
-                        );
-                    }
-                }
-
-                if !else_block.is_empty() {
-                    let el_block = self.emit_block(else_block)?;
-
-                    res.push_str(format!("else {{\n{}\n}}\n", el_block).as_str())
-                }
-
-                self.checker.env.pop();
 
                 res
             }

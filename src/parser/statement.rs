@@ -38,8 +38,6 @@ pub enum Statement {
         span: Span,
     },
 
-    If(IfStatement),
-
     While {
         condition: Expression,
         body: Vec<Statement>,
@@ -112,15 +110,6 @@ pub enum Statement {
         cases: Vec<VariantCase>,
         span: Span,
     },
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct IfStatement {
-    pub condition: Expression,
-    pub then_block: Vec<Statement>,
-    pub else_if: Vec<ElseIf>,
-    pub else_block: Vec<Statement>,
-    pub span: Span,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -304,7 +293,6 @@ impl Parser {
                     span,
                 })
             }
-            Token::If => self.parse_if_statement(),
             Token::While => self.parse_while_statement(),
             Token::For => self.parse_for_statement(),
             Token::Func
@@ -370,63 +358,6 @@ impl Parser {
                 })
             }
         }
-    }
-
-    pub fn parse_if_statement(&mut self) -> Result<Statement, ParseError> {
-        let span = self.current_token.span;
-        self.expect(Token::If, self.unexpected(&self.current_token))?;
-
-        let saved = self.allowed_struct_literal;
-        self.allowed_struct_literal = false;
-        let condition = self.parse_expression(Lowest)?;
-        self.allowed_struct_literal = saved;
-
-        self.next_token();
-
-        self.expect(Token::LeftBrace, self.unexpected(&self.current_token))?;
-
-        let (then_block, _) = self.parse_block()?;
-
-        let mut else_if = Vec::new();
-        let mut else_block = vec![];
-
-        while matches!(self.current_token.token, Token::Else) {
-            self.expect(Token::Else, self.unexpected(&self.current_token))?;
-
-            if matches!(self.current_token.token, Token::If) {
-                let else_if_stmt = self.parse_else_if_statement()?;
-                else_if.push(else_if_stmt);
-            } else if matches!(self.current_token.token, Token::LeftBrace) {
-                self.next_token();
-                (else_block, _) = self.parse_block()?;
-                break;
-            } else if matches!(self.current_token.token.clone(), Token::Colon) {
-                self.next_token();
-                self.skip_terminators();
-                let e = self.parse_expression(Lowest)?;
-                self.next_token();
-                else_block = vec![Statement::Expression {
-                    expression: e,
-                    span,
-                }];
-                break;
-            } else {
-                return Err(ParseError::InvalidElseBranch {
-                    found: self.current_token.token.clone(),
-                    span: self.current_token.span,
-                });
-            }
-
-            self.skip_terminators();
-        }
-
-        Ok(Statement::If(IfStatement {
-            condition,
-            then_block,
-            else_if,
-            else_block,
-            span,
-        }))
     }
 
     pub fn parse_else_if_statement(&mut self) -> Result<ElseIf, ParseError> {
@@ -1133,7 +1064,6 @@ impl Statement {
             Statement::Var { span, .. } => *span,
             Statement::Let { span, .. } => *span,
             Statement::Const { span, .. } => *span,
-            Statement::If(IfStatement { span, .. }) => *span,
             Statement::While { span, .. } => *span,
             Statement::ForRange { span, .. } => *span,
             Statement::ForCounter { span, .. } => *span,

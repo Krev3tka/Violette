@@ -10,6 +10,7 @@
 #include "vio_io/vio_println.h"
 #include "vio_io/vio_scanln.h"
 #include "vio_casting/vio_int.h"
+#include "vio_casting/vio_string.h"
 
 #include <math.h>
 

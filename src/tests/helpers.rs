@@ -4,7 +4,7 @@ use crate::lexer::lexer::Lexer;
 use crate::lexer::span::{ClearSpan, Span};
 use crate::lexer::token::Token;
 use crate::parser::parser::Parser;
-use crate::parser::statement::{ElseIf, FuncParam, IfStatement, MatchArm, StructParam};
+use crate::parser::statement::{ElseIf, FuncParam, MatchArm, StructParam};
 use crate::parser::types::Type;
 use crate::parser::{Expression, Precedence, Statement};
 
@@ -90,6 +90,16 @@ pub fn postfix(l: Expression, op: Token) -> Expression {
     }
 }
 
+pub fn if_expr(cond: Expression, then: Vec<Statement>, else_if: Vec<ElseIf>, else_block: Vec<Statement>) -> Expression {
+    Expression::If {
+        condition: Box::new(cond),
+        then_block: then,
+        else_if,
+        else_block,
+        span: dummy_span(),
+    }
+}
+
 pub fn index(l: Expression, i: Expression) -> Expression {
     Expression::Index {
         left: Box::new(l),
@@ -146,21 +156,6 @@ pub fn const_stmt(name: &str, value: Expression, ty: Type) -> Statement {
         annotated_type: ty,
         type_span: dummy_span(),
     }
-}
-
-pub fn if_stmt(
-    cond: Expression,
-    then: Vec<Statement>,
-    elif: Vec<ElseIf>,
-    else_block: Vec<Statement>,
-) -> Statement {
-    Statement::If(IfStatement {
-        condition: cond,
-        then_block: then,
-        else_if: elif,
-        else_block,
-        span: dummy_span(),
-    })
 }
 
 pub fn while_loop(condition: Expression, body: Vec<Statement>) -> Statement {

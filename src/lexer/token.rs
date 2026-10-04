@@ -161,8 +161,11 @@ pub enum Token {
     /// Fat arrow operator `=>`.
     FatArrow,
 
-    /// Right-exclusive range operator `..`.
+    /// Double dot operator. Used for error output.
     DoubleDot,
+
+    /// Right-exclusive range operator `..<`.
+    DoubleDotLess,
 
     /// Right-inclusive range operator `..=`.
     DoubleDotAssign,

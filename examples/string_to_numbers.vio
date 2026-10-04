@@ -1,0 +1,5 @@
+let int_num = "65387".to_int()
+let float_num = "375.28".to_float()
+
+println(int_num)
+println(float_num)

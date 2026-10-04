@@ -3,3 +3,4 @@ pub mod helpers;
 mod lexer_tests;
 pub mod statement_tests;
 mod typechecker_tests;
+mod hir_tests;

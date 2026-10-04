@@ -1,0 +1,5 @@
+let int_num = 134.27.to_int()
+let str_num = 542.96.to_string()
+
+println(int_num)
+println(str_num)

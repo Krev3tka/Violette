@@ -8,10 +8,7 @@ pub mod statements_tests {
     use crate::parser::statement::{ElseIf, FuncParam, StructParam};
     use crate::parser::types::Type::Union;
     use crate::parser::types::{Type, TypePath};
-    use crate::tests::helpers::{
-        assert_stmt_tests, call, const_stmt, expr_stmt, for_counter, for_range, func, ident,
-        if_stmt, index, infix, int, let_stmt, postfix, ret, struct_def, while_loop,
-    };
+    use crate::tests::helpers::{assert_stmt_tests, call, const_stmt, expr_stmt, for_counter, for_range, func, ident, if_expr, index, infix, int, let_stmt, postfix, ret, struct_def, while_loop};
     use crate::typechecker::error::BindingKind;
 
     #[test]
@@ -43,7 +40,7 @@ if a > 7 {
 } else {
     let b = a + 5
 }",
-                if_stmt(
+                expr_stmt(if_expr(
                     infix(ident("a"), Token::Greater, int(7)),
                     vec![let_stmt("b", infix(ident("a"), Token::Subtract, int(3)))],
                     vec![
@@ -60,7 +57,7 @@ if a > 7 {
                     ],
                     vec![let_stmt("b", infix(ident("a"), Token::Add, int(5)))],
                 ),
-            ),
+            ),)
         ];
 
         assert_stmt_tests(test_cases);
@@ -258,7 +255,7 @@ if a > 7 {
                                         ),
                                     ),
                                 ),
-                                if_stmt(
+                                expr_stmt(if_expr(
                                     infix(
                                         index(ident("arr"), ident("mid")),
                                         Token::Less,
@@ -284,6 +281,7 @@ if a > 7 {
                                     }],
                                     vec![ret(Some(call(ident("Win"), vec![ident("mid")])))],
                                 ),
+                                )
                             ],
                         ),
                         ret(Some(call(ident("Fail"), vec![ident("NotFound")]))),

@@ -10,6 +10,7 @@ use crate::typechecker::error::TypeError::ConflictingEntryPoint;
 use crate::typechecker::error::{BindingKind, DefinitionKind, LoopControlKind};
 use crate::typechecker::types::Ty;
 use std::collections::{HashMap, HashSet};
+use crate::hir::typed_ast::{TypedExpr, TypedExprKind, TypedMatchArm, TypedStmt, TypedStmtKind};
 
 #[derive(Clone, Debug)]
 pub struct FnSig {
@@ -419,64 +420,95 @@ impl Checker {
         self.in_loop = false;
     }
 
-    pub fn check_statement(&mut self, stmt: &Statement) {
+    pub fn check_statement(&mut self, stmt: &Statement) -> TypedStmt {
         match stmt {
             Statement::Var {
                 name,
                 value,
                 annotated_type,
                 type_span,
-                ..
+                span,
             } => {
                 let expected = annotated_type.as_ref().map(|t| self.resolve(t));
-                let val_ty = self.infer(value, expected.as_ref());
+                let typed_val = self.check_expr(value, expected.as_ref());
 
                 let final_ty = if let Some(expected_ty) = expected {
                     let err_span = type_span.unwrap_or(value.span());
-                    self.expect(&val_ty, &expected_ty, err_span);
+
+                    self.expect(&typed_val.ty, &expected_ty, err_span);
 
                     expected_ty
                 } else {
-                    val_ty
+                    typed_val.ty
                 };
 
-                self.defined(name.clone(), final_ty, BindingKind::Var, stmt.span())
+                self.defined(name.clone(), final_ty, BindingKind::Var, stmt.span());
+
+                TypedStmt {
+                    kind: TypedStmtKind::Var {
+                        name: name.clone(),
+                        ty: final_ty,
+                        value: typed_val,
+                    },
+                    ty: Ty::Unit,
+                    span: *span
+                }
             }
             Statement::Let {
                 name,
                 value,
                 annotated_type,
                 type_span,
-                ..
+                span,
             } => {
                 let expected = annotated_type.as_ref().map(|t| self.resolve(t));
-                let val_ty = self.infer(value, expected.as_ref());
+                let typed_val = self.check_expr(value, expected.as_ref());
 
                 let final_ty = if let Some(expected_ty) = expected {
                     let err_span = type_span.unwrap_or(value.span());
-                    self.expect(&val_ty, &expected_ty, err_span);
+                    self.expect(&typed_val.ty, &expected_ty, err_span);
 
                     expected_ty
                 } else {
-                    val_ty
+                    typed_val.ty
                 };
 
-                self.defined(name.clone(), final_ty, BindingKind::Let, stmt.span())
+                self.defined(name.clone(), final_ty, BindingKind::Let, stmt.span());
+
+                TypedStmt {
+                    kind: TypedStmtKind::Let {
+                        name: name.clone(),
+                        ty: final_ty,
+                        value: typed_val,
+                    },
+                    ty: Ty::Unit,
+                    span: *span
+                }
             }
             Statement::Const {
                 name,
                 value,
                 annotated_type,
                 type_span,
-                ..
+                span,
             } => {
                 let expected = self.resolve(annotated_type);
-                let val_ty = self.infer(value, Some(&expected));
+                let typed_val = self.check_expr(value, Some(&expected));
 
                 let err_span = type_span;
-                self.expect(&val_ty, &expected, *err_span);
+                self.expect(&typed_val.ty, &expected, *err_span);
 
-                self.defined(name.clone(), expected, BindingKind::Const, stmt.span())
+                self.defined(name.clone(), expected, BindingKind::Const, stmt.span());
+
+                TypedStmt {
+                    kind: TypedStmtKind::Const {
+                        name: name.clone(),
+                        ty: typed_val.ty,
+                        value: typed_val,
+                    },
+                    ty: Ty::Unit,
+                    span: *span
+                }
             }
             Statement::If(if_stmt) => {
                 let cond_ty = self.infer(&if_stmt.condition, None);
@@ -710,41 +742,84 @@ impl Checker {
     }
 
     pub fn infer(&mut self, expr: &Expression, expected_ty: Option<&Ty>) -> Ty {
+        self.check_expr(expr, expected_ty).ty
+    }
+
+    #[allow(dead_code)]
+    pub fn check_expr(&mut self, expr: &Expression, expected: Option<&Ty>) -> TypedExpr {
         match expr {
-            Expression::IntLiteral { .. } => Ty::Int,
-            Expression::BoolLiteral { .. } => Ty::Bool,
-            Expression::StringLiteral { .. } => Ty::String,
-            Expression::FloatLiteral { .. } => Ty::Float,
-            Expression::CharLiteral { .. } => Ty::Char,
-            Expression::Identifier { name, .. } => {
+            Expression::IntLiteral { val, span } => {
+                TypedExpr {
+                    kind: TypedExprKind::IntLiteral { val: *val },
+                    ty: Ty::Int,
+                    span: *span,
+                }
+            }
+            Expression::FloatLiteral { val, span } => {
+                TypedExpr {
+                    kind: TypedExprKind::FloatLiteral { val: *val },
+                    ty: Ty::Float,
+                    span: *span,
+                }
+            }
+            Expression::BoolLiteral { val, span } => {
+                TypedExpr {
+                    kind: TypedExprKind::BoolLiteral { val: *val },
+                    ty: Ty::Bool,
+                    span: *span,
+                }
+            }
+            Expression::CharLiteral { val, span } => {
+                TypedExpr {
+                    kind: TypedExprKind::CharLiteral { val: *val },
+                    ty: Ty::Char,
+                    span: *span,
+                }
+            }
+            Expression::StringLiteral { val, span } => {
+                TypedExpr {
+                    kind: TypedExprKind::StringLiteral { val: val.clone() },
+                    ty: Ty::String,
+                    span: *span,
+                }
+            }
+            Expression::Identifier { name, span } => {
                 if let Some((variant_name, None)) = self.variant_cases.get(name) {
-                    return Ty::Struct(variant_name.clone());
+                    return TypedExpr {
+                        kind: TypedExprKind::Identifier { name: name.clone() },
+                        ty: Ty::Struct(variant_name.clone()),
+                        span: *span,
+                    }
                 }
 
-                match self.env.lookup(name) {
-                    Some(entity) => match &entity.ty {
-                        Ty::Ref { inner, .. } => *inner.clone(),
-                        t => t.clone(),
+                TypedExpr {
+                    kind: TypedExprKind::Identifier { name: name.clone() },
+                    ty: match self.env.lookup(name) {
+                        Some(entity) => match &entity.ty {
+                            Ty::Ref { inner, .. } => *inner.clone(),
+                            t => t.clone(),
+                        },
+                        None => {
+                            self.errors.push(TypeError::UnknownName {
+                                name: name.clone(),
+                                span: expr.span(),
+                            });
+                            Ty::Error
+                        }
                     },
-                    None => {
-                        self.errors.push(TypeError::UnknownName {
-                            name: name.clone(),
-                            span: expr.span(),
-                        });
-                        Ty::Error
-                    }
+                    span: *span,
                 }
             }
             Expression::Infix {
                 left,
                 operator,
                 right,
-                span,
+                span
             } => {
                 let left_ty = self.infer(left, None);
                 let right_ty = self.infer(right, None);
 
-                match operator {
+                let ty = match operator {
                     Token::Add => match (&left_ty, &right_ty) {
                         (Ty::Int, Ty::Int) => Ty::Int,
                         (Ty::Float, Ty::Float) => Ty::Float,
@@ -753,8 +828,8 @@ impl Checker {
                         _ => {
                             self.errors.push(TypeError::InvalidBinaryOperator {
                                 operator: operator.clone(),
-                                left: Box::new(left_ty),
-                                right: Box::new(right_ty),
+                                left: Box::new(left_ty.clone()),
+                                right: Box::new(right_ty.clone()),
                                 span: *span,
                             });
                             Ty::Error
@@ -768,8 +843,8 @@ impl Checker {
                             _ => {
                                 self.errors.push(TypeError::InvalidBinaryOperator {
                                     operator: operator.clone(),
-                                    left: Box::new(left_ty),
-                                    right: Box::new(right_ty),
+                                    left: Box::new(left_ty.clone()),
+                                    right: Box::new(right_ty.clone()),
                                     span: *span,
                                 });
                                 Ty::Error
@@ -782,8 +857,8 @@ impl Checker {
                         _ => {
                             self.errors.push(TypeError::InvalidBinaryOperator {
                                 operator: operator.clone(),
-                                left: Box::new(left_ty),
-                                right: Box::new(right_ty),
+                                left: Box::new(left_ty.clone()),
+                                right: Box::new(right_ty.clone()),
                                 span: *span,
                             });
                             Ty::Error
@@ -792,11 +867,10 @@ impl Checker {
                     Token::Less | Token::Greater | Token::LessOrEquals | Token::GreaterOrEquals => {
                         match (&left_ty, &right_ty) {
                             (Ty::Int, Ty::Int) | (Ty::Float, Ty::Float) => {}
-                            (Ty::Error, _) | (_, Ty::Error) => return Ty::Error,
                             _ => self.errors.push(TypeError::InvalidBinaryOperator {
                                 operator: operator.clone(),
-                                left: Box::new(left_ty),
-                                right: Box::new(right_ty),
+                                left: Box::new(left_ty.clone()),
+                                right: Box::new(right_ty.clone()),
                                 span: *span,
                             }),
                         };
@@ -808,11 +882,16 @@ impl Checker {
                             if left_ty != right_ty {
                                 self.errors.push(TypeError::InvalidBinaryOperator {
                                     operator: operator.clone(),
-                                    left: Box::new(left_ty),
-                                    right: Box::new(right_ty),
+                                    left: Box::new(left_ty.clone()),
+                                    right: Box::new(right_ty.clone()),
                                     span: *span,
                                 });
-                                return Ty::Error;
+                                return TypedExpr::error(*span, TypeError::InvalidBinaryOperator {
+                                    operator: operator.clone(),
+                                    left: Box::new(left_ty.clone()),
+                                    right: Box::new(right_ty.clone()),
+                                    span: *span,
+                                })
                             }
                             Ty::Bool
                         }
@@ -828,6 +907,16 @@ impl Checker {
                         Ty::Int
                     }
                     _ => Ty::Error,
+                };
+
+                TypedExpr {
+                    kind: TypedExprKind::Infix {
+                        left: Box::new(self.check_expr(left, expected)),
+                        operator: operator.clone(),
+                        right: Box::new(self.check_expr(right, expected))
+                    },
+                    ty,
+                    span: *span
                 }
             }
             Expression::Prefix {
@@ -837,7 +926,7 @@ impl Checker {
             } => {
                 let right_ty = self.infer(right.as_ref(), None);
 
-                match operator {
+                let ty = match operator {
                     Token::LogicNot => {
                         self.expect(&right_ty, &Ty::Bool, expr.span());
 
@@ -886,18 +975,38 @@ impl Checker {
                         }
                     },
                     _ => Ty::Error,
+                };
+
+                TypedExpr {
+                    kind: TypedExprKind::Prefix {
+                        operator: operator.clone(),
+                        right: Box::new(self.check_expr(right, expected)),
+                    },
+                    ty,
+                    span: *span
                 }
             }
-            Expression::Range { start, end, .. } => {
+            Expression::Range { start, end, range_kind, span } => {
                 let start_ty = start.as_ref().map_or(Ty::Int, |s| self.infer(s, None));
                 let end_ty = end.as_ref().map_or(Ty::Int, |e| self.infer(e, None));
 
                 self.expect(&start_ty, &Ty::Int, expr.span());
                 self.expect(&end_ty, &Ty::Int, expr.span());
 
-                Ty::Generic {
-                    name: "Range".to_string(),
-                    param: Box::new(Ty::Int),
+                let typed_start = Some(Box::new(self.check_expr(start.clone().unwrap().as_ref(), expected)));
+                let typed_end = Some(Box::new(self.check_expr(end.clone().unwrap().as_ref(), expected)));
+
+                TypedExpr {
+                    kind: TypedExprKind::Range {
+                        start: typed_start,
+                        end: typed_end,
+                        range_kind: range_kind.clone()
+                    },
+                    ty: Ty::Generic {
+                        name: "Range".to_string(),
+                        param: Box::new(Ty::Int),
+                    },
+                    span: *span
                 }
             }
             Expression::Index { left, index, span } => {
@@ -906,8 +1015,8 @@ impl Checker {
 
                 self.expect(&index_ty, &Ty::Int, *span);
 
-                match left_ty {
-                    Ty::String => Ty::Int,
+                let el_ty = match left_ty {
+                    Ty::String => Ty::Char,
                     Ty::Error => Ty::Error,
                     _ => {
                         self.errors.push(TypeError::Unsupported {
@@ -917,7 +1026,17 @@ impl Checker {
 
                         Ty::Error
                     }
+                };
+
+                TypedExpr {
+                    kind: TypedExprKind::Index {
+                        left: Box::new(self.check_expr(left.as_ref(), expected)),
+                        index: Box::new(self.check_expr(index.as_ref(), expected)),
+                    },
+                    ty: el_ty,
+                    span: *span,
                 }
+
             }
             Expression::Call {
                 function,
@@ -926,7 +1045,7 @@ impl Checker {
             } => {
                 if let Expression::Identifier { name, .. } = function.as_ref()
                     && let Some((variant_name, Some(expected_payload))) =
-                        self.variant_cases.get(name).cloned()
+                    self.variant_cases.get(name).cloned()
                 {
                     if args.len() != 1 {
                         self.errors.push(TypeError::ArityMismatch {
@@ -935,11 +1054,31 @@ impl Checker {
                             found: args.len(),
                             span: *span,
                         });
-                        return Ty::Struct(variant_name);
+                        return TypedExpr {
+                            kind: TypedExprKind::Call {
+                                function: Box::new(self.check_expr(function.as_ref(), None)),
+                                args: args
+                                    .iter()
+                                    .map(|e| self.check_expr(e, None))
+                                    .collect()
+                            },
+                            ty: Ty::Struct(variant_name),
+                            span: *span,
+                        }
                     }
                     let arg_ty = self.infer(&args[0], Some(&expected_payload));
                     self.expect(&arg_ty, &expected_payload, args[0].span());
-                    return Ty::Struct(variant_name);
+                    return TypedExpr {
+                        kind: TypedExprKind::Call {
+                            function: Box::new(self.check_expr(function.as_ref(), None)),
+                            args: args
+                                .iter()
+                                .map(|e| self.check_expr(e, None))
+                                .collect()
+                        },
+                        ty: Ty::Struct(variant_name),
+                        span: *span,
+                    }
                 }
 
                 if let Expression::Identifier { name, .. } = function.as_ref()
@@ -957,14 +1096,36 @@ impl Checker {
                                     found: args.len(),
                                     span: *span,
                                 });
-                                return sig.ret;
+                                return TypedExpr {
+                                    kind: TypedExprKind::Call {
+                                        function: Box::new(self.check_expr(function.as_ref(), None)),
+                                        args: args
+                                            .iter()
+                                            .zip(sig.params.iter())
+                                            .map(|(e, param_ty)| self.check_expr(e, Some(param_ty)))
+                                            .collect()
+                                    },
+                                    ty: sig.ret,
+                                    span: *span,
+                                };
                             }
 
                             for (arg, param) in args.iter().zip(sig.params.iter()) {
                                 let a_ty = self.infer(arg, Some(param));
                                 self.expect(&a_ty, param, arg.span());
                             }
-                            return sig.ret;
+                            return TypedExpr {
+                                kind: TypedExprKind::Call {
+                                    function: Box::new(self.check_expr(function.as_ref(), None)),
+                                    args: args
+                                        .iter()
+                                        .zip(sig.params.iter())
+                                        .map(|(e, param_ty)| self.check_expr(e, Some(param_ty)))
+                                        .collect()
+                                },
+                                ty: sig.ret,
+                                span: *span,
+                            };
                         }
                     }
                 }
@@ -993,16 +1154,44 @@ impl Checker {
                                 found: args.len(),
                                 span: *span,
                             });
-                            return *ret;
+                            return TypedExpr {
+                                kind: TypedExprKind::Call {
+                                    function: Box::new(self.check_expr(function.as_ref(), None)),
+                                    args: args
+                                        .iter()
+                                        .zip(params.iter())
+                                        .map(|(e, param_ty)| self.check_expr(e, Some(param_ty)))
+                                        .collect()
+                                },
+                                ty: *ret,
+                                span: *span,
+                            };
                         }
 
-                        for (arg, param) in args.iter().zip(params.iter()) {
-                            let a_ty = self.infer(arg, Some(param));
-                            self.expect(&a_ty, param, arg.span());
+                        TypedExpr {
+                            kind: TypedExprKind::Call {
+                                function: Box::new(self.check_expr(function.as_ref(), None)),
+                                args: args
+                                    .iter()
+                                    .zip(params.iter())
+                                    .map(|(e, param_ty)| self.check_expr(e, Some(param_ty)))
+                                    .collect()
+                            },
+                            ty: *ret,
+                            span: *span,
                         }
-                        *ret
                     }
-                    Ty::Error => Ty::Error,
+                    Ty::Error => TypedExpr {
+                        kind: TypedExprKind::Call {
+                            function: Box::new(self.check_expr(function.as_ref(), None)),
+                            args: args
+                                .iter()
+                                .map(|e| self.check_expr(e, None))
+                                .collect()
+                        },
+                        ty: Ty::Error,
+                        span: *span,
+                    },
                     _ => {
                         let callee_name = match function.as_ref() {
                             Expression::Identifier { name, .. } => name.clone(),
@@ -1018,7 +1207,17 @@ impl Checker {
                             span: *span,
                         });
 
-                        Ty::Error
+                        TypedExpr {
+                            kind: TypedExprKind::Call {
+                                function: Box::new(self.check_expr(function.as_ref(), expected)),
+                                args: args
+                                    .iter()
+                                    .map(|e| self.check_expr(e, None))
+                                    .collect()
+                            },
+                            ty: Ty::Error,
+                            span: *span,
+                        }
                     }
                 }
             }
@@ -1026,9 +1225,9 @@ impl Checker {
                 params,
                 return_type,
                 body,
-                ..
+                span
             } => {
-                let (expected_fn_params, expected_ret) = match expected_ty {
+                let (expected_fn_params, expected_ret) = match expected {
                     Some(Ty::Fn { params, ret, .. }) => (Some(params), Some(ret.as_ref())),
                     _ => (None, None),
                 };
@@ -1104,9 +1303,20 @@ impl Checker {
 
                 self.current_ret = saved_ret;
 
-                Ty::Fn {
-                    params: param_tys,
-                    ret: Box::new(ret),
+                TypedExpr {
+                    kind: TypedExprKind::Lambda {
+                        params: params.clone(),
+                        return_ty: Some(ret),
+                        body: body
+                            .iter()
+                            .map(|s| self.check_statement(s))
+                            .collect()
+                    },
+                    ty: Ty::Fn {
+                        params: param_tys,
+                        ret: Box::new(ret),
+                    },
+                    span: *span,
                 }
             }
             Expression::StructLiteral { name, fields, span } => {
@@ -1115,33 +1325,70 @@ impl Checker {
                         name: name.clone(),
                         span: *span,
                     });
-                    return Ty::Error;
+                    return TypedExpr {
+                        kind: TypedExprKind::StructLiteral {
+                            name: name.clone(),
+                            fields: fields.clone(),
+                        },
+                        ty: Ty::Error,
+                        span: *span,
+                    }
                 }
 
                 if fields.is_empty() {
-                    return Ty::Struct(name.clone());
+                    return TypedExpr {
+                        kind: TypedExprKind::StructLiteral {
+                            name: name.clone(),
+                            fields: fields.clone(),
+                        },
+                        ty: Ty::Struct(name.clone()),
+                        span: *span,
+                    }
                 }
 
                 for f in fields {
                     match self.infer(f.field_val.as_ref(), None) {
-                        Ty::Error => return Ty::Error,
+                        Ty::Error => {
+                            return TypedExpr {
+                                kind: TypedExprKind::StructLiteral {
+                                    name: name.clone(),
+                                    fields: fields.clone(),
+                                },
+                                ty: Ty::Error,
+                                span: *span,
+                            }
+                        },
                         _ => continue,
                     }
                 }
 
-                Ty::Struct(name.clone())
+                return TypedExpr {
+                    kind: TypedExprKind::StructLiteral {
+                        name: name.clone(),
+                        fields: fields.clone(),
+                    },
+                    ty: Ty::Struct(name.clone()),
+                    span: *span,
+                }
             }
             Expression::Field { object, name, span } => {
                 if let Expression::Identifier { name: obj_name, .. } = object.as_ref()
                     && let Some((var_name, None)) = self.variant_cases.get(name)
                     && var_name == obj_name
                 {
-                    return Ty::Struct(var_name.clone());
+                    return TypedExpr {
+                        kind: TypedExprKind::Field {
+                            object: Box::new(self.check_expr(object.as_ref(), expected)),
+                            name: name.clone(),
+                        },
+                        ty: Ty::Struct(var_name.clone()),
+                        span: *span,
+                    };
                 }
 
                 let obj_ty = self.infer(object.as_ref(), None);
 
-                match obj_ty {
+                let res_ty = match obj_ty {
                     Ty::Struct(s) => match self.structs.get(&s) {
                         Some(struct_sig) => {
                             match struct_sig
@@ -1175,6 +1422,15 @@ impl Checker {
                         });
                         Ty::Error
                     }
+                };
+
+                return TypedExpr {
+                    kind: TypedExprKind::Field {
+                        object: Box::new(self.check_expr(object.as_ref(), expected)),
+                        name: name.clone(),
+                    },
+                    ty: res_ty,
+                    span: *span,
                 }
             }
             Expression::MethodCall {
@@ -1199,7 +1455,18 @@ impl Checker {
                         let a_ty = self.infer(&args[0], Some(payload_ty));
                         self.expect(&a_ty, payload_ty, args[0].span());
                     }
-                    return Ty::Struct(var_name.clone());
+                    return TypedExpr {
+                        kind: TypedExprKind::MethodCall {
+                            object: Box::new(self.check_expr(object.as_ref(), expected)),
+                            args: args
+                                .iter()
+                                .map(|a| self.check_expr(a, None))
+                                .collect(),
+                            name: name.clone(),
+                        },
+                        ty: Ty::Struct(var_name.clone()),
+                        span: *span,
+                    };
                 }
                 let mut found_sig = None;
                 let mut is_static = false;
@@ -1227,14 +1494,36 @@ impl Checker {
                         Ty::String => format!("string.{}", name),
                         Ty::Char => format!("char.{}", name),
                         Ty::Bool => format!("bool.{}", name),
-                        Ty::Error => return Ty::Error,
+                        Ty::Error => return TypedExpr {
+                            kind: TypedExprKind::MethodCall {
+                                object: Box::new(self.check_expr(object.as_ref(), expected)),
+                                args: args
+                                    .iter()
+                                    .map(|a| self.check_expr(a, None))
+                                    .collect(),
+                                name: name.clone(),
+                            },
+                            ty: Ty::Error,
+                            span: *span,
+                        },
                         _ => {
                             self.errors.push(TypeError::NoSuchMethod {
                                 ty: obj_ty.clone(),
                                 method: name.clone(),
                                 span: *span,
                             });
-                            return Ty::Error;
+                            return TypedExpr {
+                                kind: TypedExprKind::MethodCall {
+                                    object: Box::new(self.check_expr(object.as_ref(), expected)),
+                                    args: args
+                                        .iter()
+                                        .map(|a| self.check_expr(a, None))
+                                        .collect(),
+                                    name: name.clone(),
+                                },
+                                ty: Ty::Error,
+                                span: *span,
+                            };
                         }
                     };
                     found_sig = self.funcs.get(&sig_name).cloned();
@@ -1251,7 +1540,18 @@ impl Checker {
                                 found: 0,
                                 span: *span,
                             });
-                            return Ty::Error;
+                            return TypedExpr {
+                                kind: TypedExprKind::MethodCall {
+                                    object: Box::new(self.check_expr(object.as_ref(), expected)),
+                                    args: args
+                                        .iter()
+                                        .map(|a| self.check_expr(a, None))
+                                        .collect(),
+                                    name: name.clone(),
+                                },
+                                ty: Ty::Error,
+                                span: *span,
+                            };
                         }
                         self.expect(&obj_ty, &sig.params[0], object.span());
                         &sig.params[1..]
@@ -1264,7 +1564,18 @@ impl Checker {
                             found: args.len(),
                             span: *span,
                         });
-                        return sig.ret;
+                        return TypedExpr {
+                            kind: TypedExprKind::MethodCall {
+                                object: Box::new(self.check_expr(object.as_ref(), expected)),
+                                args: args
+                                    .iter()
+                                    .map(|a| self.check_expr(a, None))
+                                    .collect(),
+                                name: name.clone(),
+                            },
+                            ty: sig.ret,
+                            span: *span,
+                        };
                     }
 
                     for (arg, param_ty) in args.iter().zip(expected_args.iter()) {
@@ -1272,7 +1583,18 @@ impl Checker {
                         self.expect(&a_ty, param_ty, arg.span());
                     }
 
-                    sig.ret
+                    return TypedExpr {
+                        kind: TypedExprKind::MethodCall {
+                            object: Box::new(self.check_expr(object.as_ref(), expected)),
+                            args: args
+                                .iter()
+                                .map(|a| self.check_expr(a, None))
+                                .collect(),
+                            name: name.clone(),
+                        },
+                        ty: sig.ret,
+                        span: *span,
+                    };
                 } else {
                     if is_static {
                         self.errors.push(TypeError::UnknownName {
@@ -1296,7 +1618,18 @@ impl Checker {
                                         _ => "Type"
                                     }),
                             });
-                            return Ty::Error;
+                            return TypedExpr {
+                                kind: TypedExprKind::MethodCall {
+                                    object: Box::new(self.check_expr(object.as_ref(), expected)),
+                                    args: args
+                                        .iter()
+                                        .map(|a| self.check_expr(a, None))
+                                        .collect(),
+                                    name: name.clone(),
+                                },
+                                ty: Ty::Error,
+                                span: *span,
+                            };
                         }
                         self.errors.push(TypeError::NoSuchMethod {
                             ty: obj_ty,
@@ -1304,32 +1637,126 @@ impl Checker {
                             span: *span,
                         });
                     }
-                    Ty::Error
+
+                    TypedExpr {
+                        kind: TypedExprKind::MethodCall {
+                            object: Box::new(self.check_expr(object.as_ref(), expected)),
+                            args: args
+                                .iter()
+                                .map(|a| self.check_expr(a, None))
+                                .collect(),
+                            name: name.clone(),
+                        },
+                        ty: Ty::Error,
+                        span: *span,
+                    }
                 }
             }
             Expression::If {
                 condition,
                 then_block,
+                else_if,
+                else_block,
                 span,
                 ..
             } => {
-                let cond_ty = self.infer(condition.as_ref(), expected_ty);
+                let cond_ty = self.infer(condition.as_ref(), expected);
                 self.expect(&cond_ty, &Ty::Bool, *span);
 
                 if let Some((last, _)) = then_block.split_last() {
                     return if let Statement::Expression { expression, .. } = last {
-                        self.infer(expression, expected_ty)
+                        TypedExpr {
+                            kind: TypedExprKind::If {
+                                condition: Box::new(self.check_expr(condition.as_ref(), expected)),
+                                then_block: then_block
+                                    .iter()
+                                    .map(|s| self.check_statement(s))
+                                    .collect(),
+                                else_if: else_if
+                                    .iter()
+                                    .map(|s| s
+                                        .block
+                                        .iter()
+                                        .map(|s| self.check_statement(s))
+                                        .collect()
+                                    )
+                                    .collect(),
+                                else_block: else_block
+                                    .iter()
+                                    .map(|s| self.check_statement(s))
+                                    .collect(),
+                            },
+                            ty: self.infer(expression, expected),
+                            span: *span,
+                        }
                     } else {
-                        Ty::Unit
+                        TypedExpr {
+                            kind: TypedExprKind::If {
+                                condition: Box::new(self.check_expr(condition.as_ref(), expected)),
+                                then_block: then_block
+                                    .iter()
+                                    .map(|s| self.check_statement(s))
+                                    .collect(),
+                                else_if: else_if
+                                    .iter()
+                                    .map(|s| s
+                                        .block
+                                        .iter()
+                                        .map(|s| self.check_statement(s))
+                                        .collect()
+                                    )
+                                    .collect(),
+                                else_block: else_block
+                                    .iter()
+                                    .map(|s| self.check_statement(s))
+                                    .collect(),
+                            },
+                            ty: Ty::Unit,
+                            span: *span,
+                        }
                     };
                 }
 
-                Ty::Unit
+                TypedExpr {
+                    kind: TypedExprKind::If {
+                        condition: Box::new(self.check_expr(condition.as_ref(), expected)),
+                        then_block: then_block
+                            .iter()
+                            .map(|s| self.check_statement(s))
+                            .collect(),
+                        else_if: else_if
+                            .iter()
+                            .map(|s| s
+                                .block
+                                .iter()
+                                .map(|s| self.check_statement(s))
+                                .collect()
+                            )
+                            .collect(),
+                        else_block: else_block
+                            .iter()
+                            .map(|s| self.check_statement(s))
+                            .collect(),
+                    },
+                    ty: Ty::Unit,
+                    span: *span,
+                }
             }
             Expression::Match { target, arms, span } => {
                 let target_ty = self.infer(target.as_ref(), None);
                 if target_ty == Ty::Error {
-                    return Ty::Error;
+                    return TypedExpr {
+                        kind: TypedExprKind::Match {
+                            target: Box::new(self.check_expr(target.as_ref(), None)),
+                            arms: arms
+                                .iter()
+                                .map(|a| TypedMatchArm {
+                                    pattern: self.check_expr(&a.pattern, None),
+                                    body: self.check_expr(&a.body, None),
+                                })
+                                .collect()
+                        }
+                    }
                 }
 
                 let target_variant_name = match &target_ty {
@@ -1339,11 +1766,14 @@ impl Checker {
                             desc: format!("Cannot match on non-variant type {}", target_ty),
                             span: *span,
                         });
-                        return Ty::Error;
+                        return TypedExpr::error(*span, TypeError::Unsupported {
+                            desc: format!("Cannot match on non-variant type {}", target_ty),
+                            span: *span,
+                        });
                     }
                 };
 
-                let mut match_ret_ty = expected_ty.cloned();
+                let mut match_ret_ty = expected.cloned();
 
                 let mut must_be_covered = HashSet::new();
                 let mut has_been_covered: HashSet<String> = HashSet::new();
@@ -1595,9 +2025,20 @@ impl Checker {
                     }
                 }
 
-                match_ret_ty.unwrap_or(Ty::Unit)
+                TypedExpr {
+                    kind: TypedExprKind::Match {
+                        target: Box::new(self.check_expr(target.as_ref(), None)),
+                        arms: arms.iter().map(|a| TypedMatchArm {
+                            pattern: self.check_expr(&a.pattern, None),
+                            body: self.check_expr(&a.body, None),
+                        })
+                            .collect()
+                    },
+                    ty: match_ret_ty.unwrap_or(Ty::Unit),
+                    span: *span
+                }
             }
-            Expression::Block { body, .. } => {
+            Expression::Block { body, span } => {
                 self.env.push();
 
                 let mut last_ty = Ty::Unit;
@@ -1613,9 +2054,21 @@ impl Checker {
 
                 self.env.pop();
 
-                last_ty
+                TypedExpr {
+                    kind: TypedExprKind::Block {
+                        body: body
+                            .iter()
+                            .map(|s| self.check_statement(s))
+                            .collect()
+                    },
+                    ty: last_ty,
+                    span: *span,
+                }
             }
-            _ => Ty::Error,
+            _ => TypedExpr::error(expr.span(), TypeError::Unsupported {
+                desc: format!("expression: {:?}", expr),
+                span: expr.span(),
+            }),
         }
     }
 

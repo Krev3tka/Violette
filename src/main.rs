@@ -12,6 +12,7 @@ mod driver;
 #[cfg(test)]
 mod tests;
 mod typechecker;
+pub mod hir;
 
 fn main() {
     let args: Vec<String> = env::args().collect();

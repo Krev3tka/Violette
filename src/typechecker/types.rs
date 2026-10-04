@@ -51,7 +51,7 @@ impl fmt::Display for Ty {
                     .collect::<Vec<_>>()
                     .join(", ");
 
-                write!(f, "func({}) [{}]", p, ret)
+                write!(f, "func({}) -> {}", p, ret)
             }
             Ty::Union(variants) => {
                 let v = variants
