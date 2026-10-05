@@ -356,7 +356,7 @@ impl Checker {
                 }
             }
 
-            let ret = return_type.as_ref().map_or(Ty::Unit, |t| self.resolve(&t));
+            let ret = return_type.as_ref().map_or(Ty::Unit, |t| self.resolve(t));
 
             let body = self.check_block(body);
 
@@ -614,11 +614,7 @@ impl Checker {
 
                 self.expect(&ty, cur_ref, stmt.span());
 
-                let val = if let Some(expr) = value.as_ref() {
-                    Some(self.check_expr(expr, None))
-                } else {
-                    None
-                };
+                let val = value.as_ref().map(|expr| self.check_expr(expr, None));
 
                 TypedStmt {
                     kind: TypedStmtKind::Return { value: val },
@@ -627,7 +623,10 @@ impl Checker {
                 }
             }
             Statement::ExternFunc {
-                name, params, span, return_type,
+                name,
+                params,
+                span,
+                return_type,
             } => {
                 let ret = return_type.as_ref().map_or(Ty::Unit, |t| self.resolve(t));
                 let sig = FnSig {
@@ -690,7 +689,6 @@ impl Checker {
                                 desc: "Invalid assignment target (non as l-value)".to_string(),
                                 span: left.span(),
                             });
-
                         }
                     }
                     let assign_expr = TypedExpr {
@@ -743,16 +741,14 @@ impl Checker {
                     span: *span,
                 }
             }
-            Statement::Variant { name, cases, span } => {
-                TypedStmt {
-                    kind: TypedStmtKind::Variant {
-                        name: name.clone(),
-                        cases: cases.clone()
-                    },
-                    ty: Ty::Unit,
-                    span: *span,
-                }
-            }
+            Statement::Variant { name, cases, span } => TypedStmt {
+                kind: TypedStmtKind::Variant {
+                    name: name.clone(),
+                    cases: cases.clone(),
+                },
+                ty: Ty::Unit,
+                span: *span,
+            },
             Statement::Defer { callee, span } => {
                 let typed_callee = self.check_stmt(callee.as_ref());
 
@@ -962,7 +958,10 @@ impl Checker {
             Expression::Identifier { name, span } => {
                 if let Some((variant_name, None)) = self.variant_cases.get(name) {
                     return TypedExpr {
-                        kind: TypedExprKind::Identifier { name: name.clone(), is_ref: false },
+                        kind: TypedExprKind::Identifier {
+                            name: name.clone(),
+                            is_ref: false,
+                        },
                         ty: Ty::Struct(variant_name.clone()),
                         span: *span,
                     };
@@ -983,7 +982,10 @@ impl Checker {
                 };
 
                 TypedExpr {
-                    kind: TypedExprKind::Identifier { name: name.clone(), is_ref },
+                    kind: TypedExprKind::Identifier {
+                        name: name.clone(),
+                        is_ref,
+                    },
                     ty,
                     span: *span,
                 }
@@ -1232,7 +1234,11 @@ impl Checker {
                 args,
                 span,
             } => {
-                if let Expression::Identifier { name, span: fn_span, .. } = function.as_ref()
+                if let Expression::Identifier {
+                    name,
+                    span: fn_span,
+                    ..
+                } = function.as_ref()
                     && let Some((variant_name, Some(expected_payload))) =
                         self.variant_cases.get(name).cloned()
                 {
@@ -1248,12 +1254,15 @@ impl Checker {
                         self.expect(&typed_arg.ty, &expected_payload, args[0].span());
 
                         let typed_fn = TypedExpr {
-                            kind: TypedExprKind::Identifier { name: name.clone(), is_ref: false },
+                            kind: TypedExprKind::Identifier {
+                                name: name.clone(),
+                                is_ref: false,
+                            },
                             ty: Ty::Fn {
                                 params: vec![expected_payload.clone()],
                                 ret: Box::new(Ty::Struct(variant_name.clone())),
                             },
-                            span: *fn_span
+                            span: *fn_span,
                         };
 
                         return TypedExpr {
@@ -1364,16 +1373,16 @@ impl Checker {
                             typed_args.push(typed_arg);
                         }
 
-                        let typed_function = if matches!(function.as_ref(), Expression::Lambda { .. }) {
-                            let expected_fn = Ty::Fn {
-                                params: params.clone(),
-                                ret: ret.clone(),
+                        let typed_function =
+                            if matches!(function.as_ref(), Expression::Lambda { .. }) {
+                                let expected_fn = Ty::Fn {
+                                    params: params.clone(),
+                                    ret: ret.clone(),
+                                };
+                                self.check_expr(function.as_ref(), Some(&expected_fn))
+                            } else {
+                                self.check_expr(function.as_ref(), None)
                             };
-                            self.check_expr(function.as_ref(), Some(&expected_fn))
-                        } else {
-                            self.check_expr(function.as_ref(), None)
-                        };
-
 
                         TypedExpr {
                             kind: TypedExprKind::Call {
@@ -1497,10 +1506,7 @@ impl Checker {
                 let saved_ret = self.current_ret.clone();
                 self.current_ret = ret.clone();
 
-                let typed_body = body
-                    .iter()
-                    .map(|s| self.check_stmt(s))
-                    .collect();
+                let typed_body = body.iter().map(|s| self.check_stmt(s)).collect();
 
                 self.env.pop();
 
@@ -1602,14 +1608,20 @@ impl Checker {
                 }
             }
             Expression::Field { object, name, span } => {
-                if let Expression::Identifier { name: obj_name, span: obj_span } = object.as_ref()
+                if let Expression::Identifier {
+                    name: obj_name,
+                    span: obj_span,
+                } = object.as_ref()
                     && let Some((var_name, None)) = self.variant_cases.get(name)
                     && var_name == obj_name
                 {
                     return TypedExpr {
                         kind: TypedExprKind::Field {
                             object: Box::new(TypedExpr {
-                                kind: TypedExprKind::Identifier { name: obj_name.clone(), is_ref: false },
+                                kind: TypedExprKind::Identifier {
+                                    name: obj_name.clone(),
+                                    is_ref: false,
+                                },
                                 ty: Ty::Struct(var_name.clone()),
                                 span: *obj_span,
                             }),
@@ -1688,7 +1700,11 @@ impl Checker {
                 args,
                 span,
             } => {
-                if let Expression::Identifier { name: obj_name, span: obj_span, .. } = object.as_ref()
+                if let Expression::Identifier {
+                    name: obj_name,
+                    span: obj_span,
+                    ..
+                } = object.as_ref()
                     && let Some((var_name, payload)) = self.variant_cases.clone().get(name)
                     && var_name == obj_name
                 {
@@ -1718,7 +1734,7 @@ impl Checker {
                             is_ref: false,
                         },
                         ty: Ty::Struct(obj_name.clone()),
-                        span: *obj_span
+                        span: *obj_span,
                     };
 
                     return TypedExpr {
@@ -1835,9 +1851,16 @@ impl Checker {
                     }
 
                     let typed_object = if is_static {
-                        if let Expression::Identifier { name: obj_name, span: obj_span } = object.as_ref() {
+                        if let Expression::Identifier {
+                            name: obj_name,
+                            span: obj_span,
+                        } = object.as_ref()
+                        {
                             TypedExpr {
-                                kind: TypedExprKind::Identifier { name: obj_name.clone(), is_ref: false },
+                                kind: TypedExprKind::Identifier {
+                                    name: obj_name.clone(),
+                                    is_ref: false,
+                                },
                                 ty: Ty::Struct(obj_name.clone()),
                                 span: *obj_span,
                             }
@@ -2156,7 +2179,13 @@ impl Checker {
                                                 *bind_span,
                                             );
 
-                                            payload_var_info = Some((name.clone(), bind_name.clone(), payload_ty, *bind_span, *pat_span));
+                                            payload_var_info = Some((
+                                                name.clone(),
+                                                bind_name.clone(),
+                                                payload_ty,
+                                                *bind_span,
+                                                *pat_span,
+                                            ));
                                         } else {
                                             self.errors.push(TypeError::Unsupported {
                                                 desc: "Pattern payload not as identifier"
@@ -2250,22 +2279,24 @@ impl Checker {
                         }),
                     }
 
-                    let typed_pattern = if let Some(
-                        (case_name,
-                            bind_name,
-                            p_ty,
-                            b_span,
-                            p_span)
-                    ) = payload_var_info {
+                    let typed_pattern = if let Some((case_name, bind_name, p_ty, b_span, p_span)) =
+                        payload_var_info
+                    {
                         TypedExpr {
                             kind: TypedExprKind::Call {
                                 function: Box::new(TypedExpr {
-                                    kind: TypedExprKind::Identifier { name: case_name, is_ref: false },
+                                    kind: TypedExprKind::Identifier {
+                                        name: case_name,
+                                        is_ref: false,
+                                    },
                                     ty: Ty::Struct(target_variant_name.clone()),
                                     span: p_span,
                                 }),
                                 args: vec![TypedExpr {
-                                    kind: TypedExprKind::Identifier { name: bind_name, is_ref: false },
+                                    kind: TypedExprKind::Identifier {
+                                        name: bind_name,
+                                        is_ref: false,
+                                    },
                                     ty: p_ty,
                                     span: b_span,
                                 }],
@@ -2276,8 +2307,14 @@ impl Checker {
                     } else {
                         TypedExpr {
                             kind: match &arm.pattern {
-                                Expression::Identifier { name, .. } => TypedExprKind::Identifier { name: name.clone(), is_ref: false },
-                                _ => TypedExprKind::Identifier { name: "_".to_string(), is_ref: false },
+                                Expression::Identifier { name, .. } => TypedExprKind::Identifier {
+                                    name: name.clone(),
+                                    is_ref: false,
+                                },
+                                _ => TypedExprKind::Identifier {
+                                    name: "_".to_string(),
+                                    is_ref: false,
+                                },
                             },
                             ty: target_ty.clone(),
                             span: arm.pattern.span(),

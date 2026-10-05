@@ -4,10 +4,10 @@ use crate::hir::typed_ast::{TypedExpr, TypedExprKind, TypedProgram, TypedStmt, T
 use crate::lexer::token::Token;
 use crate::parser::expression::RangeKind;
 use crate::parser::statement::FuncParam;
+use crate::parser::types::Type;
 use crate::typechecker::checker::Checker;
 use crate::typechecker::types::Ty;
 use std::collections::{HashMap, HashSet};
-use crate::parser::types::Type;
 
 pub struct Codegen {
     extern_funcs: HashSet<String>,
@@ -20,7 +20,7 @@ pub struct Codegen {
     scope_defers: Vec<Vec<String>>,
     struct_names: HashSet<String>,
     variant_cases: HashMap<String, (String, bool)>,
-    user_funcs: HashSet<String>
+    user_funcs: HashSet<String>,
 }
 
 impl Codegen {
@@ -256,7 +256,7 @@ impl Codegen {
                 format!("vio_str_from_literal(\"{}\", {})", escaped, byte_len)
             }
             TypedExprKind::CharLiteral { val } => {
-                format!("((uint32_t){:#X}U)", val.clone() as u32)
+                format!("((uint32_t){:#X}U)", *val as u32)
             }
             TypedExprKind::StructLiteral { name, fields } => {
                 if fields.is_empty() {
@@ -275,7 +275,7 @@ impl Codegen {
                 }
                 format!(
                     "{}{}",
-                    self.correlate_operator(&operator)?,
+                    self.correlate_operator(operator)?,
                     self.emit_expression(right.as_ref())?
                 )
             }
@@ -304,7 +304,7 @@ impl Codegen {
                 format!(
                     "({} {} {})",
                     self.emit_expression(left.as_ref())?,
-                    self.correlate_operator(&operator)?,
+                    self.correlate_operator(operator)?,
                     self.emit_expression(right.as_ref())?
                 )
             }
@@ -312,7 +312,7 @@ impl Codegen {
                 format!(
                     "{}{}",
                     self.emit_expression(left.as_ref())?,
-                    self.correlate_operator(&operator)?
+                    self.correlate_operator(operator)?
                 )
             }
             TypedExprKind::Index { left, index } => {
@@ -376,12 +376,11 @@ impl Codegen {
                 }
 
                 let f = self.emit_expression(function.as_ref())?;
-                let c_fn_name =
-                    if self.user_funcs.contains(&f) {
-                        format!("vio_user_{}", f)
-                    } else {
-                        f
-                    };
+                let c_fn_name = if self.user_funcs.contains(&f) {
+                    format!("vio_user_{}", f)
+                } else {
+                    f
+                };
 
                 let a = args
                     .iter()
@@ -424,7 +423,7 @@ impl Codegen {
                     all_args.push(self.emit_expression(object.as_ref())?);
                 }
                 for a in args {
-                    all_args.push(self.emit_expression(&a)?);
+                    all_args.push(self.emit_expression(a)?);
                 }
 
                 format!("{}({})", c_fn_name, all_args.join(", "))
@@ -439,7 +438,7 @@ impl Codegen {
                         var_name, var_name, name
                     ));
                 }
-                format!("{}.{}", self.emit_expression(&object)?, name)
+                format!("{}.{}", self.emit_expression(object)?, name)
             }
             TypedExprKind::Lambda {
                 params,
@@ -459,7 +458,11 @@ impl Codegen {
 
                 let mut param_strs = Vec::new();
                 for (p, ty) in params.iter().zip(param_tys.iter()) {
-                    param_strs.push(format!("{} {}", self.c_type(ty), p.name.replace("$", "_arg_")));
+                    param_strs.push(format!(
+                        "{} {}",
+                        self.c_type(ty),
+                        p.name.replace("$", "_arg_")
+                    ));
                 }
                 let param_list = if param_strs.is_empty() {
                     "void".to_string()
@@ -482,10 +485,10 @@ impl Codegen {
                         }
                         lines.join("\n")
                     } else {
-                        self.emit_block(&body)?
+                        self.emit_block(body)?
                     }
                 } else {
-                    self.emit_block(&body)?
+                    self.emit_block(body)?
                 };
 
                 self.lambda_prototypes
@@ -502,7 +505,6 @@ impl Codegen {
                 else_if,
                 else_block,
             } => {
-
                 let cond_c = self.emit_expression(condition)?;
 
                 if expr.ty == Ty::Unit {
@@ -518,18 +520,24 @@ impl Codegen {
                     } else {
                         String::new()
                     };
-                    return Ok(format!("({{\n    if ({}) {{\n{}\n    }} {} {}\n}})", cond_c, then_c, elifs_c.join(" "), else_c));
+                    return Ok(format!(
+                        "({{\n    if ({}) {{\n{}\n    }} {} {}\n}})",
+                        cond_c,
+                        then_c,
+                        elifs_c.join(" "),
+                        else_c
+                    ));
                 }
 
                 let res_c_type = self.c_type(&expr.ty);
                 let res_var = format!("_vio_res_{}", self.lambda_count);
                 self.lambda_count += 1;
 
-                let cond_c = self.emit_expression(&condition)?;
+                let cond_c = self.emit_expression(condition)?;
                 let if_branch_c = format!(
                     "if ({}) {{\n        {}\n    }}",
                     cond_c,
-                    self.emit_assigning_block(&then_block, &res_var)?
+                    self.emit_assigning_block(then_block, &res_var)?
                 );
 
                 let mut elifes_c = Vec::new();
@@ -545,7 +553,7 @@ impl Codegen {
                 if !else_block.is_empty() {
                     else_branch = format!(
                         "else {{\n        {}\n    }}\n",
-                        self.emit_assigning_block(&else_block, &res_var)?
+                        self.emit_assigning_block(else_block, &res_var)?
                     );
                 }
 
@@ -581,9 +589,8 @@ impl Codegen {
 
                 for arm in arms {
                     let (case_name, bind_var) = match &arm.pattern.kind {
-                        TypedExprKind::Identifier { name, .. } | TypedExprKind::Field { name, .. } => {
-                            (name.clone(), None)
-                        }
+                        TypedExprKind::Identifier { name, .. }
+                        | TypedExprKind::Field { name, .. } => (name.clone(), None),
                         TypedExprKind::Call { function, args } => {
                             let name = match &function.kind {
                                 TypedExprKind::Identifier { name, .. } => name.clone(),
@@ -675,7 +682,7 @@ impl Codegen {
                 self.lambda_count += 1;
                 let res_c_ty = self.c_type(&expr.ty);
 
-                let body_c = self.emit_assigning_block(&body, &res_var)?;
+                let body_c = self.emit_assigning_block(body, &res_var)?;
                 format!(
                     "({{\n    {} {};\n{}\n    {};\n}})",
                     res_c_ty, res_var, body_c, res_var
@@ -730,10 +737,11 @@ impl Codegen {
                     then_block,
                     else_if,
                     else_block,
-                } = &expr.kind {
+                } = &expr.kind
+                {
                     let cond_c = self.emit_expression(condition.as_ref())?;
 
-                    let then_c= self.emit_block(then_block)?;
+                    let then_c = self.emit_block(then_block)?;
 
                     let mut res = format!("if ({}) {{\n{}\n}}", cond_c, then_c);
 
@@ -1033,17 +1041,11 @@ impl Codegen {
                 }
             }
             Type::Fn { params, ret } => Ty::Fn {
-                params: params
-                    .iter()
-                    .map(|p| self.type_param_to_ty(p))
-                    .collect(),
+                params: params.iter().map(|p| self.type_param_to_ty(p)).collect(),
                 ret: Box::new(
-                    ret
-                        .as_ref()
-                        .map_or(Ty::Unit, |r|
-                            self.type_param_to_ty(r.as_ref())
-                        )
-                )
+                    ret.as_ref()
+                        .map_or(Ty::Unit, |r| self.type_param_to_ty(r.as_ref())),
+                ),
             },
             _ => Ty::Unit,
         }
@@ -1111,10 +1113,16 @@ impl Codegen {
                     } = &expr.kind
                     {
                         let does_return_if = Self::does_block_return(then_block);
-                        let do_return_elifs = else_if.iter().all(|elif| Self::does_block_return(&elif.block));
+                        let do_return_elifs = else_if
+                            .iter()
+                            .all(|elif| Self::does_block_return(&elif.block));
                         let does_return_else = Self::does_block_return(else_block);
 
-                        if does_return_if && do_return_elifs && does_return_else && !else_block.is_empty() {
+                        if does_return_if
+                            && do_return_elifs
+                            && does_return_else
+                            && !else_block.is_empty()
+                        {
                             return true;
                         }
                     }

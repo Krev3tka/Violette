@@ -692,6 +692,8 @@ impl Parser {
             });
         }
 
+        self.next_token();
+
         Ok(Expression::Match {
             target: Box::new(target),
             arms,

@@ -31,7 +31,7 @@ pub struct TypedStmt {
 pub enum TypedExprKind {
     Identifier {
         name: String,
-        is_ref: bool
+        is_ref: bool,
     },
 
     IntLiteral {

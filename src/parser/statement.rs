@@ -353,10 +353,8 @@ impl Parser {
                 let expr = self.parse_expression(Lowest)?;
                 if !matches!(
                     expr,
-                    Expression::If { .. }
-                    | Expression::Block { .. }
-                    | Expression::Match { .. })
-                {
+                    Expression::If { .. } | Expression::Block { .. } | Expression::Match { .. }
+                ) {
                     self.next_token();
                 }
                 Ok(Statement::Expression {
