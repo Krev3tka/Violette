@@ -90,7 +90,12 @@ pub fn postfix(l: Expression, op: Token) -> Expression {
     }
 }
 
-pub fn if_expr(cond: Expression, then: Vec<Statement>, else_if: Vec<ElseIf>, else_block: Vec<Statement>) -> Expression {
+pub fn if_expr(
+    cond: Expression,
+    then: Vec<Statement>,
+    else_if: Vec<ElseIf>,
+    else_block: Vec<Statement>,
+) -> Expression {
     Expression::If {
         condition: Box::new(cond),
         then_block: then,

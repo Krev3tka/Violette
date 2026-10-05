@@ -42,7 +42,7 @@ func main() {
 
     var tx = Transaction{}
 
-    for i in 1..5 {
+    for i in 1..<5 {
         tx = db.begin_transaction()
         defer tx.rollback()
 

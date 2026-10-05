@@ -1,9 +1,9 @@
 using string (starts_with, ends_with)
 
 extend String {
-    func get(s: String, idx: Int) -> Int {
+    func get(s: String, idx: Int) -> Char {
         if idx >= s.len() || idx < 0 {
-            return 0
+            return 'a'
         }
 
         return s[idx]

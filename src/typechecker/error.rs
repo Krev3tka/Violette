@@ -120,6 +120,7 @@ pub enum TypeError {
         method: String,
         span: Span,
     },
+
     MethodFoundAsGlobal {
         ty: Ty,
         method: String,
@@ -130,6 +131,10 @@ pub enum TypeError {
     NotFullMatch {
         target_name: String,
         missed_patterns: String,
+        span: Span,
+    },
+
+    Unreachable {
         span: Span,
     },
 }

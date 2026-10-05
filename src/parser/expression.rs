@@ -506,15 +506,15 @@ impl Parser {
 
                     let mut right = self.parse_expression(Precedence::Sprout)?;
 
-                    if let Expression::Identifier { .. } = right {
+                    if let Expression::Call { ref mut args, .. } = right {
+                        args.insert(0, left);
+                        left = right;
+                    } else {
                         left = Expression::Call {
                             function: Box::new(right),
                             args: vec![left],
                             span: start_span,
                         }
-                    } else if let Expression::Call { ref mut args, .. } = right {
-                        args.insert(0, left);
-                        left = right;
                     }
                 }
                 Token::LeftShift | Token::RightShift => {

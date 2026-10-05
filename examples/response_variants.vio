@@ -6,7 +6,7 @@ variant Response {
 
 func check(x: Int) -> Response {
     if x > 0 {
-        return Win(x)
+        return Response.Win(x)
     }
 
     return Failed

@@ -1,24 +1,26 @@
 use crate::codegen::error::CodegenError;
 use crate::codegen::error::CodegenError::Unexpected;
+use crate::hir::typed_ast::{TypedExpr, TypedExprKind, TypedProgram, TypedStmt, TypedStmtKind};
 use crate::lexer::token::Token;
 use crate::parser::expression::RangeKind;
-use crate::parser::program::Program;
-use crate::parser::statement::{FuncParam, StructParam};
-use crate::parser::{Expression, Statement};
+use crate::parser::statement::FuncParam;
 use crate::typechecker::checker::Checker;
-use crate::typechecker::error::BindingKind;
 use crate::typechecker::types::Ty;
+use std::collections::{HashMap, HashSet};
+use crate::parser::types::Type;
 
 pub struct Codegen {
-    checker: Checker,
-    extern_funcs: std::collections::HashSet<String>,
+    extern_funcs: HashSet<String>,
     typedefs: Vec<String>,
-    fn_type_names: std::collections::HashMap<String, String>,
+    fn_type_names: HashMap<String, String>,
     lambda_prototypes: Vec<String>,
     lifted_lambdas: Vec<String>,
     lambda_count: usize,
     is_main: bool,
     scope_defers: Vec<Vec<String>>,
+    struct_names: HashSet<String>,
+    variant_cases: HashMap<String, (String, bool)>,
+    user_funcs: HashSet<String>
 }
 
 impl Codegen {
@@ -26,15 +28,17 @@ impl Codegen {
         let mut checker = Checker::default();
         checker.define_builtins();
         Codegen {
-            checker,
-            extern_funcs: std::collections::HashSet::new(),
+            extern_funcs: HashSet::new(),
             typedefs: Vec::new(),
-            fn_type_names: std::collections::HashMap::new(),
+            fn_type_names: HashMap::new(),
             lambda_prototypes: Vec::new(),
             lifted_lambdas: Vec::new(),
             lambda_count: 0,
             is_main: false,
             scope_defers: Vec::new(),
+            struct_names: HashSet::new(),
+            variant_cases: HashMap::new(),
+            user_funcs: HashSet::new(),
         }
     }
 
@@ -74,35 +78,39 @@ impl Codegen {
         }
     }
 
-    pub fn emit_program(&mut self, prg: Program) -> Result<String, CodegenError> {
+    pub fn emit_program(&mut self, prg: TypedProgram) -> Result<String, CodegenError> {
         // 1. Extern-functions
 
         for s in &prg.declarations {
-            if let Statement::ExternFunc { name, .. } = s {
-                self.extern_funcs.insert(name.clone());
+            if let TypedStmtKind::Func { name, .. } = &s.kind {
+                self.user_funcs.insert(name.clone());
+            }
+
+            match &s.kind {
+                TypedStmtKind::ExternFunc { name, .. } => {
+                    self.extern_funcs.insert(name.clone());
+                }
+                TypedStmtKind::Struct { name, .. } => {
+                    self.struct_names.insert(name.clone());
+                }
+                TypedStmtKind::Variant { name, cases } => {
+                    for c in cases {
+                        self.variant_cases
+                            .insert(c.name.clone(), (name.clone(), c.payload.is_some()));
+                    }
+                }
+                _ => {}
             }
         }
 
         let mut lines: Vec<String> = vec!["#include \"vio_runtime.h\"\n".to_string()];
-
         let mut global_defines: Vec<String> = Vec::new();
-
-        self.checker.collect_signatures(&prg.declarations);
-
-        self.checker.env.push();
 
         // 2. Constant variables (#define)
 
         for s in &prg.declarations {
-            if let Statement::Const {
-                name, value, span, ..
-            } = s
-            {
-                let val_str = self.emit_expression(value)?;
-                let ty = self.checker.infer(value, None);
-
-                self.checker
-                    .defined(name.clone(), ty, BindingKind::Const, *span);
+            if let TypedStmtKind::Const { name, value, .. } = s.kind.clone() {
+                let val_str = self.emit_expression(&value)?;
 
                 global_defines.push(format!("#define {} {}", name, val_str))
             }
@@ -113,104 +121,54 @@ impl Codegen {
             lines.push("\n".to_string())
         }
 
-        // 3. Structs
+        // 3. Structs and Variants
 
         for s in &prg.declarations {
-            if let Statement::Struct { .. } = s {
-                let struct_str = self.emit_struct(s)?;
-
-                lines.push(struct_str)
-            } else if let Statement::Variant { .. } = s {
-                let variant_str = self.emit_statement(s)?;
-                lines.push(variant_str);
+            match s.kind {
+                TypedStmtKind::Struct { .. } | TypedStmtKind::Variant { .. } => {
+                    lines.push(self.emit_statement(s)?)
+                }
+                _ => {}
             }
         }
 
-        // 4. First pass over functions && extend-blocks
+        // 4. First pass over functions and extend-blocks
 
         for s in &prg.declarations {
-            if let Statement::Func {
-                name,
-                params,
-                return_type,
-                ..
-            } = s
-                && name != "main"
-            {
-                let c_name = if name.starts_with("vio_") {
-                    name.clone()
-                } else {
-                    format!("vio_user_{}", name)
-                };
-
-                let ret_ty = return_type
-                    .as_ref()
-                    .map_or(Ty::Unit, |t| self.checker.resolve(t));
-                let ret_str = self.c_type(&ret_ty);
-
-                let params_str = params
-                    .iter()
-                    .map(|p| {
-                        let mut ty = self.checker.resolve(&p.param_type);
-
-                        if p.is_ref {
-                            ty = Ty::Ref {
-                                inner: Box::new(ty),
-                                is_mut: p.kind.is_mutable(),
-                            }
+            match &s.kind {
+                TypedStmtKind::Func {
+                    name,
+                    params,
+                    return_type,
+                    ..
+                } if name != "main" => {
+                    let c_name = if name.starts_with("vio_") {
+                        name.clone()
+                    } else {
+                        format!("vio_user_{}", name)
+                    };
+                    let ret_str = self.c_type(return_type);
+                    let params_str = self.format_params(params);
+                    lines.push(format!("{ret_str} {c_name}({params_str});"));
+                }
+                TypedStmtKind::Extend { target, methods } => {
+                    for method in methods {
+                        if let TypedStmtKind::Func {
+                            name,
+                            params,
+                            return_type,
+                            ..
+                        } = &method.kind
+                        {
+                            let c_name =
+                                format!("vio_user_{}_{}", self.type_to_prefix(target), name);
+                            let ret_str = self.c_type(return_type);
+                            let params_str = self.format_params(params);
+                            lines.push(format!("{ret_str} {c_name}({params_str});"));
                         }
-
-                        format!("{} {}", self.c_type(&ty), p.name)
-                    })
-                    .collect::<Vec<_>>()
-                    .join(", ");
-
-                let params_str = if params_str.is_empty() {
-                    "void".to_string()
-                } else {
-                    params_str
-                };
-                lines.push(format!("{ret_str} {c_name}({params_str});"))
-            } else if let Statement::Extend {
-                target, methods, ..
-            } = s
-            {
-                let target_ty = self.checker.resolve(target);
-
-                for method in methods {
-                    if let Statement::Func {
-                        name,
-                        params,
-                        return_type,
-                        ..
-                    } = method
-                    {
-                        let c_name =
-                            format!("vio_user_{}_{}", self.type_to_prefix(&target_ty), name);
-
-                        let ret_ty = return_type
-                            .as_ref()
-                            .map_or(Ty::Unit, |t| self.checker.resolve(t));
-
-                        let ret_str = self.c_type(&ret_ty);
-
-                        let params_str = params
-                            .iter()
-                            .map(|p| {
-                                let ty = self.checker.resolve(&p.param_type);
-                                format!("{} {}", self.c_type(&ty), p.name)
-                            })
-                            .collect::<Vec<_>>()
-                            .join(", ");
-
-                        let params_str = if params_str.is_empty() {
-                            "void".to_string()
-                        } else {
-                            params_str
-                        };
-                        lines.push(format!("{ret_str} {c_name}({params_str});"));
                     }
                 }
+                _ => {}
             }
         }
 
@@ -219,87 +177,41 @@ impl Codegen {
         // 5. Second pass over functions (pls don't make forward declaration in your PLs)
 
         for s in &prg.declarations {
-            if let Statement::Const { .. } = s {
-                continue;
-            }
-            if let Statement::Func {
-                name,
-                params,
-                return_type,
-                span,
-                ..
-            } = s
-            {
-                let p: Vec<Ty> = params
-                    .iter()
-                    .map(|p| {
-                        let mut ty = self.checker.resolve(&p.param_type);
-                        if p.is_ref {
-                            ty = Ty::Ref {
-                                inner: Box::new(ty),
-                                is_mut: p.kind.is_mutable(),
-                            }
-                        }
-                        ty
-                    })
-                    .collect();
-
-                let ret = return_type
-                    .as_ref()
-                    .map_or(Ty::Unit, |t| self.checker.resolve(t));
-
-                let fn_ty = Ty::Fn {
-                    params: p,
-                    ret: Box::new(ret),
-                };
-
-                self.checker
-                    .defined(name.clone(), fn_ty.clone(), BindingKind::Var, *span);
+            match &s.kind {
+                TypedStmtKind::Const { .. }
+                | TypedStmtKind::Struct { .. }
+                | TypedStmtKind::Variant { .. } => continue,
+                TypedStmtKind::Func { name, body, .. } if name == "main" => {
+                    self.is_main = true;
+                    lines.push("int main(void) {".to_string());
+                    lines.push(self.emit_block(body)?);
+                    lines.push("    return 0;".to_string());
+                    lines.push("}".to_string());
+                    self.is_main = false;
+                }
+                _ => {
+                    let stmt = self.emit_statement(s)?;
+                    for line in stmt.lines() {
+                        lines.push(line.to_string());
+                    }
+                }
             }
         }
 
         // 6. Main function
 
-        for s in &prg.declarations {
-            if let Statement::Const { .. } = s {
-                continue;
-            }
-            if let Statement::Func { name, body, .. } = s
-                && name == "main"
-            {
-                self.is_main = true;
-
-                lines.push("int main(void) {".to_string());
-
-                lines.push(self.emit_block(body)?);
-
-                lines.push("    return 0;".to_string());
-
-                lines.push("}".to_string());
-
-                self.is_main = false;
-
-                continue;
-            }
-            let stmt = match s {
-                Statement::Struct { .. } | Statement::Variant { .. } => String::new(),
-                _ => self.emit_statement(s)?,
-            };
-            for line in stmt.lines() {
-                lines.push(line.to_string());
-            }
-        }
-
         if !prg.main.is_empty() {
             lines.push("int main(void) {".to_string());
-
-            self.checker.env.push();
             lines.push(self.emit_block(&prg.main)?);
-            self.checker.env.pop();
-
+            lines.push("    return 0;".to_string());
             lines.push("}".to_string());
-        } else if prg.main.is_empty() && prg.declarations.is_empty() {
-            lines.push("int main(void) {\n\t\n}".to_string())
+        } else if prg.main.is_empty()
+            && !prg
+                .declarations
+                .iter()
+                .any(|d| matches!(&d.kind, TypedStmtKind::Func { name, .. } if name == "main"))
+        {
+            lines.push("int main(void) {\n    return 0;\n}".to_string());
         }
 
         let mut final_lines = Vec::new();
@@ -323,79 +235,56 @@ impl Codegen {
         }
 
         let mut res = final_lines.join("\n");
-
         res.push('\n');
-
         Ok(res)
     }
 
-    pub fn emit_expression(&mut self, expr: &Expression) -> Result<String, CodegenError> {
-        self.emit_expression_with_expected(expr, None)
-    }
-
-    pub fn emit_expression_with_expected(
-        &mut self,
-        expr: &Expression,
-        expected_ty: Option<&Ty>,
-    ) -> Result<String, CodegenError> {
-        Ok(match expr {
-            Expression::IntLiteral { val: i, .. } => i.to_string(),
-            Expression::FloatLiteral { val: f, .. } => {
-                if f.fract() == 0.0 {
-                    format!("{f:.1}")
+    pub fn emit_expression(&mut self, expr: &TypedExpr) -> Result<String, CodegenError> {
+        Ok(match &expr.kind {
+            TypedExprKind::IntLiteral { val } => val.to_string(),
+            TypedExprKind::FloatLiteral { val } => {
+                if val.fract() == 0.0 {
+                    format!("{val:.1}")
                 } else {
-                    f.to_string()
+                    val.to_string()
                 }
             }
-            Expression::BoolLiteral { val: b, .. } => b.to_string(),
-            Expression::StringLiteral { val: s, .. } => {
-                let escaped = s.escape_default().to_string();
-
-                let byte_len = s.len();
-
+            TypedExprKind::BoolLiteral { val } => val.to_string(),
+            TypedExprKind::StringLiteral { val } => {
+                let escaped = val.escape_default().to_string();
+                let byte_len = val.len();
                 format!("vio_str_from_literal(\"{}\", {})", escaped, byte_len)
             }
-            Expression::CharLiteral { val, .. } => {
-                format!("((uint32_t){:#X}U)", *val as u32)
+            TypedExprKind::CharLiteral { val } => {
+                format!("((uint32_t){:#X}U)", val.clone() as u32)
             }
-            Expression::StructLiteral { name, fields, .. } => {
+            TypedExprKind::StructLiteral { name, fields } => {
                 if fields.is_empty() {
                     return Ok(format!("({}){{0}}", name));
                 }
-
-                let c_fields = fields
-                    .iter()
-                    .map(|f| {
-                        let f_val = self.emit_expression(f.field_val.as_ref()).unwrap();
-
-                        Ok(format!("{} = {}", f.field_name, f_val))
-                    })
-                    .collect::<Result<Vec<_>, _>>()?
-                    .join(", .");
-
-                format!("({}){{ .{} }}", name.clone(), c_fields)
+                let mut c_fields = Vec::new();
+                for f in fields {
+                    let f_val = self.emit_expression(&f.field_val)?;
+                    c_fields.push(format!(".{} = {}", f.field_name, f_val));
+                }
+                format!("({}){{ {} }}", name, c_fields.join(", "))
             }
-            Expression::Prefix {
-                operator, right, ..
-            } => {
+            TypedExprKind::Prefix { operator, right } => {
                 if matches!(operator, Token::BitAnd) {
                     return Ok(format!("&{}", self.emit_expression(right.as_ref())?));
                 }
                 format!(
                     "{}{}",
-                    self.correlate_operator(operator)?,
+                    self.correlate_operator(&operator)?,
                     self.emit_expression(right.as_ref())?
                 )
             }
-            Expression::Infix {
+            TypedExprKind::Infix {
                 left,
                 operator,
                 right,
-                ..
             } => {
-                if matches!(operator, Token::Add)
-                    && matches!(self.checker.infer(left.as_ref(), None), Ty::String)
-                    && matches!(self.checker.infer(right.as_ref(), None), Ty::String)
+                if matches!(operator, Token::Add) && left.ty == Ty::String && right.ty == Ty::String
                 {
                     return Ok(format!(
                         "vio_str_concat({}, {})",
@@ -415,44 +304,41 @@ impl Codegen {
                 format!(
                     "({} {} {})",
                     self.emit_expression(left.as_ref())?,
-                    self.correlate_operator(operator)?,
+                    self.correlate_operator(&operator)?,
                     self.emit_expression(right.as_ref())?
                 )
             }
-            Expression::Postfix { left, operator, .. } => {
+            TypedExprKind::Postfix { left, operator } => {
                 format!(
                     "{}{}",
                     self.emit_expression(left.as_ref())?,
-                    self.correlate_operator(operator)?
+                    self.correlate_operator(&operator)?
                 )
             }
-            Expression::Index { left, index, .. } => {
+            TypedExprKind::Index { left, index } => {
                 let left_str = self.emit_expression(left.as_ref())?;
-
                 let index_str = self.emit_expression(index.as_ref())?;
-
                 format!("vio_str_get({}, {})", left_str, index_str)
             }
-            Expression::Identifier { name: ident, .. } => {
-                if let Some((variant_name, None)) = self.checker.variant_cases.get(ident) {
+            TypedExprKind::Identifier { name, is_ref } => {
+                if let Some((variant_name, false)) = self.variant_cases.get(name) {
                     return Ok(format!(
                         "({}){{ .tag = VIO_TAG_{}_{} }}",
-                        variant_name, variant_name, ident
+                        variant_name, variant_name, name
                     ));
                 }
 
-                if let Some(entity) = self.checker.env.lookup(ident)
-                    && matches!(entity.ty, Ty::Ref { .. })
-                {
-                    return Ok(format!("(*{})", ident.replace("$", "_arg_")));
-                }
+                let clean = name.replace("$", "_arg_");
 
-                ident.replace("$", "_arg_")
+                if *is_ref {
+                    format!("(*{})", clean)
+                } else {
+                    clean
+                }
             }
-            Expression::Call { function, args, .. } => {
-                if let Expression::Identifier { name, .. } = function.as_ref()
-                    && let Some((variant_name, Some(_))) =
-                        self.checker.variant_cases.get(name).cloned()
+            TypedExprKind::Call { function, args } => {
+                if let TypedExprKind::Identifier { name, .. } = &function.kind
+                    && let Some((variant_name, true)) = self.variant_cases.get(name).cloned()
                 {
                     let val_str = self.emit_expression(&args[0])?;
                     return Ok(format!(
@@ -461,12 +347,11 @@ impl Codegen {
                     ));
                 }
 
-                if let Expression::Identifier { name, .. } = function.as_ref()
+                if let TypedExprKind::Identifier { name, .. } = &function.kind
                     && (name == "print" || name == "println")
                     && args.len() == 1
                 {
-                    let arg_ty = self.checker.infer(&args[0], None);
-                    let suffix = match arg_ty {
+                    let suffix = match &args[0].ty {
                         Ty::Int => "int",
                         Ty::Float => "float",
                         Ty::Bool => "bool",
@@ -474,59 +359,40 @@ impl Codegen {
                         Ty::Char => "char",
                         _ => {
                             return Err(CodegenError::Unsupported(format!(
-                                "print for this type: {:?}",
-                                arg_ty
+                                "print for {:?}",
+                                args[0].ty
                             )));
                         }
                     };
-
                     let a = self.emit_expression(&args[0])?;
-
                     return Ok(format!("vio_{name}_{suffix}({a})"));
                 }
 
-                if let Expression::Identifier { name, .. } = function.as_ref()
+                if let TypedExprKind::Identifier { name, .. } = &function.kind
                     && name == "scanln"
                     && args.is_empty()
                 {
-                    return Ok(format!("vio_{name}()"));
+                    return Ok("vio_scanln()".to_string());
                 }
 
-                let callee_ty = self.checker.infer(function.as_ref(), None);
-                let expected_params = match &callee_ty {
-                    Ty::Fn { params, .. } => Some(params.clone()),
-                    _ => None,
-                };
-
                 let f = self.emit_expression(function.as_ref())?;
-
                 let c_fn_name =
-                    if f == "main" || f.starts_with("vio_") || self.extern_funcs.contains(&f) {
-                        f.clone()
-                    } else if self.checker.funcs.contains_key(&f) {
+                    if self.user_funcs.contains(&f) {
                         format!("vio_user_{}", f)
                     } else {
-                        f.clone()
+                        f
                     };
 
                 let a = args
                     .iter()
-                    .enumerate()
-                    .map(|(i, arg)| {
-                        let exp = expected_params.as_ref().and_then(|p| p.get(i));
-                        self.emit_expression_with_expected(arg, exp)
-                    })
+                    .map(|arg| self.emit_expression(arg))
                     .collect::<Result<Vec<_>, _>>()?
                     .join(", ");
-
                 format!("{}({})", c_fn_name, a)
             }
-            Expression::MethodCall {
-                object, name, args, ..
-            } => {
-                if let Expression::Identifier { name: obj_name, .. } = object.as_ref()
-                    && let Some((variant_name, Some(_))) =
-                        self.checker.variant_cases.get(name).cloned()
+            TypedExprKind::MethodCall { object, name, args } => {
+                if let TypedExprKind::Identifier { name: obj_name, .. } = &object.kind
+                    && let Some((variant_name, true)) = self.variant_cases.get(name).cloned()
                     && variant_name == *obj_name
                 {
                     let val_str = self.emit_expression(&args[0])?;
@@ -536,53 +402,36 @@ impl Codegen {
                     ));
                 }
 
-                let (c_fn_name, is_static_or_module) =
-                    if let Expression::Identifier { name: obj_name, .. } = object.as_ref() {
-                        if self.checker.structs.contains_key(obj_name) {
+                let (c_fn_name, is_static) =
+                    if let TypedExprKind::Identifier { name: obj_name, .. } = &object.kind {
+                        if self.struct_names.contains(obj_name) {
                             (format!("vio_user_{}_{}", obj_name, name), true)
-                        } else if name == "main"
-                            || name.starts_with("vio_")
-                            || self.extern_funcs.contains(name)
-                        {
-                            (name.clone(), false)
-                        } else if self.checker.env.lookup(obj_name).is_none() {
-                            (format!("vio_user_{}", name), true)
                         } else {
-                            let obj_ty = self.checker.infer(object.as_ref(), None);
-                            match &obj_ty {
-                                Ty::Struct(s) => (format!("vio_user_{}_{}", s, name), false),
-                                _ => (
-                                    format!("vio_user_{}_{}", self.type_to_prefix(&obj_ty), name),
-                                    false,
-                                ),
-                            }
+                            (
+                                format!("vio_user_{}_{}", self.type_to_prefix(&object.ty), name),
+                                false,
+                            )
                         }
                     } else {
-                        let obj_ty = self.checker.infer(object.as_ref(), None);
-                        match &obj_ty {
-                            Ty::Struct(s) => (format!("vio_user_{}_{}", s, name), false),
-                            _ => (
-                                format!("vio_user_{}_{}", self.type_to_prefix(&obj_ty), name),
-                                false,
-                            ),
-                        }
+                        (
+                            format!("vio_user_{}_{}", self.type_to_prefix(&object.ty), name),
+                            false,
+                        )
                     };
 
                 let mut all_args = Vec::new();
-
-                if !is_static_or_module {
+                if !is_static {
                     all_args.push(self.emit_expression(object.as_ref())?);
                 }
-
                 for a in args {
-                    all_args.push(self.emit_expression(a)?)
+                    all_args.push(self.emit_expression(&a)?);
                 }
 
                 format!("{}({})", c_fn_name, all_args.join(", "))
             }
-            Expression::Field { object, name, .. } => {
-                if let Expression::Identifier { name: obj_name, .. } = object.as_ref()
-                    && let Some((var_name, None)) = self.checker.variant_cases.get(name)
+            TypedExprKind::Field { object, name } => {
+                if let TypedExprKind::Identifier { name: obj_name, .. } = &object.kind
+                    && let Some((var_name, false)) = self.variant_cases.get(name)
                     && var_name == obj_name
                 {
                     return Ok(format!(
@@ -590,93 +439,28 @@ impl Codegen {
                         var_name, var_name, name
                     ));
                 }
-
-                format!("{}.{}", self.emit_expression(object.as_ref())?, name)
+                format!("{}.{}", self.emit_expression(&object)?, name)
             }
-            Expression::Lambda {
+            TypedExprKind::Lambda {
                 params,
-                return_type,
+                return_ty,
                 body,
-                ..
             } => {
                 let lambda_name = format!("vio_lambda_{}", self.lambda_count);
                 self.lambda_count += 1;
 
-                let (expected_params, expected_ret) = match expected_ty {
-                    Some(Ty::Fn { params, ret, .. }) => (Some(params), Some(ret.as_ref())),
-                    _ => (None, None),
-                };
-
-                self.checker.env.push();
-
-                let mut param_strs = Vec::new();
-                for (i, p) in params.iter().enumerate() {
-                    let clean_name = p.name.replace("$", "_arg_");
-
-                    let mut ty = self.checker.resolve(&p.param_type);
-                    if ty == Ty::Infer || ty == Ty::Error {
-                        if let Some(exp_p) = expected_params.and_then(|ep| ep.get(i)) {
-                            ty = exp_p.clone();
-                        } else {
-                            ty = Ty::Int
-                        }
-                    }
-
-                    self.checker
-                        .defined(p.name.clone(), ty.clone(), BindingKind::Let, p.span);
-                    param_strs.push(format!("{} {}", self.c_type(&ty), clean_name))
-                }
-
-                let ret_ty = match return_type {
-                    Some(t) => self.checker.resolve(t),
-                    None => {
-                        if let Some(exp_r) = expected_ret
-                            && *exp_r != Ty::Infer
-                            && *exp_r != Ty::Error
-                        {
-                            exp_r.clone()
-                        } else {
-                            if let Some(exp_r) = expected_ret
-                                && *exp_r != Ty::Infer
-                                && *exp_r != Ty::Error
-                            {
-                                exp_r.clone()
-                            } else {
-                                let explicit_ret = body.iter().find_map(|s| {
-                                    if let Statement::Return { value: Some(v), .. } = s {
-                                        let t = self.checker.infer(v, None);
-                                        if t != Ty::Error && t != Ty::Infer {
-                                            Some(t)
-                                        } else {
-                                            None
-                                        }
-                                    } else {
-                                        None
-                                    }
-                                });
-
-                                explicit_ret
-                                    .or_else(|| {
-                                        body.last().and_then(|s| match s {
-                                            Statement::Expression { expression, .. } => {
-                                                let t = self.checker.infer(expression, None);
-                                                if t != Ty::Error && t != Ty::Infer {
-                                                    Some(t)
-                                                } else {
-                                                    None
-                                                }
-                                            }
-                                            _ => None,
-                                        })
-                                    })
-                                    .unwrap_or(Ty::Unit)
-                            }
-                        }
-                    }
-                };
-
+                let ret_ty = return_ty.clone().unwrap_or(Ty::Unit);
                 let ret_c = self.c_type(&ret_ty);
 
+                let param_tys = match &expr.ty {
+                    Ty::Fn { params, .. } => params.clone(),
+                    _ => vec![Ty::Int; params.len()],
+                };
+
+                let mut param_strs = Vec::new();
+                for (p, ty) in params.iter().zip(param_tys.iter()) {
+                    param_strs.push(format!("{} {}", self.c_type(ty), p.name.replace("$", "_arg_")));
+                }
                 let param_list = if param_strs.is_empty() {
                     "void".to_string()
                 } else {
@@ -684,32 +468,25 @@ impl Codegen {
                 };
 
                 let body_c = if ret_ty != Ty::Unit {
-                    let has_explicit_return =
-                        body.iter().any(|s| matches!(s, Statement::Return { .. }));
+                    let has_explicit_return = Self::does_block_return(body);
 
                     if !has_explicit_return && let Some((last, init)) = body.split_last() {
                         let mut lines = Vec::new();
-
                         for s in init {
                             lines.push(format!("    {}", self.emit_statement(s)?));
                         }
-
-                        match last {
-                            Statement::Expression { expression, .. } => {
-                                let val_str = self.emit_expression(expression)?;
-                                lines.push(format!("    return {};", val_str));
-                            }
-                            _ => lines.push(format!("    {}", self.emit_statement(last)?)),
+                        if let TypedStmtKind::Expression(expr) = &last.kind {
+                            lines.push(format!("    return {};", self.emit_expression(expr)?));
+                        } else {
+                            lines.push(format!("    {}", self.emit_statement(last)?));
                         }
                         lines.join("\n")
                     } else {
-                        self.emit_block(body)?
+                        self.emit_block(&body)?
                     }
                 } else {
-                    self.emit_block(body)?
+                    self.emit_block(&body)?
                 };
-
-                self.checker.env.pop();
 
                 self.lambda_prototypes
                     .push(format!("static {ret_c} {lambda_name}({param_list});"));
@@ -719,43 +496,57 @@ impl Codegen {
 
                 lambda_name
             }
-            Expression::If {
+            TypedExprKind::If {
                 condition,
                 then_block,
                 else_if,
                 else_block,
-                ..
             } => {
-                let res_ty = self.checker.infer(expr, expected_ty);
-                let res_c_type = self.c_type(&res_ty);
-
-                let res_var = format!("_vio_res_{}", self.lambda_count);
-                self.lambda_count += 1;
 
                 let cond_c = self.emit_expression(condition)?;
 
+                if expr.ty == Ty::Unit {
+                    let then_c = self.emit_block(then_block)?;
+                    let mut elifs_c = Vec::new();
+                    for elif in else_if {
+                        let cond = self.emit_expression(&elif.condition)?;
+                        let body = self.emit_block(&elif.block)?;
+                        elifs_c.push(format!("else if ({}) {{\n{}\n}}", cond, body));
+                    }
+                    let else_c = if !else_block.is_empty() {
+                        format!("else {{\n{}\n}}", self.emit_block(else_block)?)
+                    } else {
+                        String::new()
+                    };
+                    return Ok(format!("({{\n    if ({}) {{\n{}\n    }} {} {}\n}})", cond_c, then_c, elifs_c.join(" "), else_c));
+                }
+
+                let res_c_type = self.c_type(&expr.ty);
+                let res_var = format!("_vio_res_{}", self.lambda_count);
+                self.lambda_count += 1;
+
+                let cond_c = self.emit_expression(&condition)?;
                 let if_branch_c = format!(
                     "if ({}) {{\n        {}\n    }}",
                     cond_c,
-                    self.emit_assigning_block(then_block, &res_var)?
+                    self.emit_assigning_block(&then_block, &res_var)?
                 );
 
                 let mut elifes_c = Vec::new();
-
                 for elif in else_if {
                     let cond = self.emit_expression(&elif.condition)?;
+
                     let body = self.emit_assigning_block(&elif.block, &res_var)?;
 
-                    elifes_c.push(format!("else if ({}) {{\n        {}\n    }}", cond, body,))
+                    elifes_c.push(format!("else if ({}) {{\n        {}\n    }}", cond, body));
                 }
 
                 let mut else_branch = String::new();
-
                 if !else_block.is_empty() {
                     else_branch = format!(
                         "else {{\n        {}\n    }}\n",
-                        self.emit_assigning_block(else_block, &res_var)?
-                    )
+                        self.emit_assigning_block(&else_block, &res_var)?
+                    );
                 }
 
                 format!(
@@ -768,9 +559,8 @@ impl Codegen {
                     res_var
                 )
             }
-            Expression::Match { target, arms, .. } => {
-                let target_ty = self.checker.infer(target.as_ref(), None);
-                let variant_name = match &target_ty {
+            TypedExprKind::Match { target, arms } => {
+                let variant_name = match &target.ty {
                     Ty::Struct(name) => name.clone(),
                     _ => {
                         return Err(CodegenError::Unsupported(
@@ -779,45 +569,46 @@ impl Codegen {
                     }
                 };
 
-                let res_ty = match expected_ty {
-                    Some(t) => t.clone(),
-                    None => self.checker.infer(expr, None),
-                };
-
-                let res_c_type = self.c_type(&res_ty);
+                let res_c_type = self.c_type(&expr.ty);
 
                 let target_var = format!("_vio_match_target_{}", self.lambda_count);
-
                 let res_var = format!("_vio_match_res_{}", self.lambda_count);
+
                 self.lambda_count += 1;
 
                 let target_val_str = self.emit_expression(target.as_ref())?;
-
                 let mut cases_c = Vec::new();
 
                 for arm in arms {
-                    let (case_name, bind_var) = match &arm.pattern {
-                        Expression::Identifier { name, .. } | Expression::Field { name, .. } => {
+                    let (case_name, bind_var) = match &arm.pattern.kind {
+                        TypedExprKind::Identifier { name, .. } | TypedExprKind::Field { name, .. } => {
                             (name.clone(), None)
                         }
-                        Expression::Call { function, args, .. } => {
-                            let name = match function.as_ref() {
-                                Expression::Identifier { name, .. } => name.clone(),
+                        TypedExprKind::Call { function, args } => {
+                            let name = match &function.kind {
+                                TypedExprKind::Identifier { name, .. } => name.clone(),
                                 _ => unreachable!(),
                             };
-
-                            let bind = match &args[0] {
-                                Expression::Identifier { name: b, .. } => b.clone(),
+                            let (bind, ty) = match &args[0] {
+                                TypedExpr {
+                                    kind: TypedExprKind::Identifier { name: b, .. },
+                                    ty,
+                                    ..
+                                } => (b.clone(), ty),
                                 _ => unreachable!(),
                             };
-                            (name.clone(), Some(bind))
+                            (name, Some((bind, ty)))
                         }
-                        Expression::MethodCall { name, args, .. } => {
-                            let bind = match &args[0] {
-                                Expression::Identifier { name: b, .. } => b.clone(),
+                        TypedExprKind::MethodCall { name, args, .. } => {
+                            let (bind, ty) = match &args[0] {
+                                TypedExpr {
+                                    kind: TypedExprKind::Identifier { name: b, .. },
+                                    ty,
+                                    ..
+                                } => (b.clone(), ty),
                                 _ => unreachable!(),
                             };
-                            (name.clone(), Some(bind))
+                            (name.clone(), Some((bind, ty)))
                         }
                         _ => {
                             return Err(CodegenError::Unsupported(
@@ -832,52 +623,34 @@ impl Codegen {
                         "default".to_string()
                     };
 
-                    self.checker.env.push();
-
                     let mut arm_lines = Vec::new();
 
-                    if let Some(var) = bind_var
-                        && let Some((_, Some(payload_ty))) =
-                            self.checker.variant_cases.get(&case_name).cloned()
-                    {
-                        let payload_c_ty = self.c_type(&payload_ty);
-
+                    if let Some((var, p_ty)) = bind_var {
+                        let payload_c_ty = self.c_type(p_ty);
                         arm_lines.push(format!(
                             "    {} {} = {}.data.{};",
                             payload_c_ty, var, target_var, case_name
                         ));
-
-                        self.checker
-                            .defined(var, payload_ty, BindingKind::Let, arm.pattern.span());
                     }
 
-                    match &arm.body {
-                        Expression::Block { body, .. } => {
-                            if let Some((last, init)) = body.split_last() {
-                                for stmt in init {
-                                    arm_lines.push(format!("    {}", self.emit_statement(stmt)?));
-                                }
-
-                                match last {
-                                    Statement::Expression { expression, .. } => {
-                                        let val = self.emit_expression(expression)?;
-                                        arm_lines.push(format!("    {} = {};", res_var, val));
-                                    }
-                                    _ => arm_lines
-                                        .push(format!("    {}", self.emit_statement(last)?)),
-                                }
+                    if let TypedExprKind::Block { body } = &arm.body.kind {
+                        if let Some((last, init)) = body.split_last() {
+                            for stmt in init {
+                                arm_lines.push(format!("    {}", self.emit_statement(stmt)?));
+                            }
+                            if let TypedStmtKind::Expression(expr) = &last.kind {
+                                let val = self.emit_expression(expr)?;
+                                arm_lines.push(format!("    {} = {};", res_var, val));
+                            } else {
+                                arm_lines.push(format!("    {}", self.emit_statement(last)?));
                             }
                         }
-                        _ => {
-                            let val = self.emit_expression(&arm.body)?;
-                            arm_lines.push(format!("        {} = {};", res_var, val));
-                        }
+                    } else {
+                        let val = self.emit_expression(&arm.body)?;
+                        arm_lines.push(format!("        {} = {};", res_var, val));
                     }
 
-                    self.checker.env.pop();
-
                     arm_lines.push("        break;".to_string());
-
                     cases_c.push(if tag_name != "default" {
                         format!("case {}: {{\n{}\n    }}", tag_name, arm_lines.join("\n"))
                     } else {
@@ -887,7 +660,7 @@ impl Codegen {
 
                 format!(
                     "({{\n{} {} = {};\n{} {};\nswitch ({}.tag) {{\n    {}\n}}\n{};\n}})",
-                    self.c_type(&target_ty),
+                    self.c_type(&target.ty),
                     target_var,
                     target_val_str,
                     res_c_type,
@@ -895,6 +668,17 @@ impl Codegen {
                     target_var,
                     cases_c.join("    \n    "),
                     res_var
+                )
+            }
+            TypedExprKind::Block { body } => {
+                let res_var = format!("_vio_block_{}", self.lambda_count);
+                self.lambda_count += 1;
+                let res_c_ty = self.c_type(&expr.ty);
+
+                let body_c = self.emit_assigning_block(&body, &res_var)?;
+                format!(
+                    "({{\n    {} {};\n{}\n    {};\n}})",
+                    res_c_ty, res_var, body_c, res_var
                 )
             }
             _ => {
@@ -906,130 +690,179 @@ impl Codegen {
         })
     }
 
-    pub fn emit_statement(&mut self, stmt: &Statement) -> Result<String, CodegenError> {
-        Ok(match stmt {
-            Statement::Let {
-                name, value, span, ..
-            }
-            | Statement::Const {
-                name, value, span, ..
-            }
-            | Statement::Var {
-                name, value, span, ..
-            } => {
+    pub fn emit_statement(&mut self, stmt: &TypedStmt) -> Result<String, CodegenError> {
+        Ok(match &stmt.kind {
+            TypedStmtKind::Let { name, ty, value }
+            | TypedStmtKind::Const { name, ty, value }
+            | TypedStmtKind::Var { name, ty, value } => {
                 let val_str = self.emit_expression(value)?;
-
-                let ty = self.checker.infer(value, None);
-
-                self.checker.defined(
-                    name.clone(),
-                    ty.clone(),
-                    if matches!(stmt, Statement::Const { .. }) {
-                        BindingKind::Const
-                    } else {
-                        BindingKind::Var
-                    },
-                    *span,
-                );
-
-                let mut res = String::new();
-
-                res.push_str(format!("{} {} = {};", self.c_type(&ty), name, val_str).as_str());
-
-                res
+                format!("{} {} = {};", self.c_type(ty), name, val_str)
             }
-            Statement::Return { value, .. } => {
+            TypedStmtKind::Return { value } => {
                 let mut val_str = String::new();
                 if let Some(expr) = value {
                     val_str = format!(" {}", self.emit_expression(expr)?);
                 }
-
                 if self.is_main && value.is_none() {
                     "return 0;".to_string()
                 } else {
                     format!("return{};", val_str)
                 }
             }
-            Statement::Defer { .. } => String::new(),
-            Statement::ExternFunc {
+            TypedStmtKind::Defer { .. } => String::new(),
+            TypedStmtKind::ExternFunc {
                 name,
                 params,
                 return_type,
                 ..
             } => {
-                let mut ret = Ty::Unit;
+                let parameters = self.format_params(params);
+                format!(
+                    "extern {} {}({});",
+                    self.c_type(return_type),
+                    name,
+                    parameters
+                )
+            }
+            TypedStmtKind::Expression(expr) => {
+                if let TypedExprKind::If {
+                    condition,
+                    then_block,
+                    else_if,
+                    else_block,
+                } = &expr.kind {
+                    let cond_c = self.emit_expression(condition.as_ref())?;
 
-                if let Some(ty) = return_type {
-                    ret = self.checker.resolve(ty);
+                    let then_c= self.emit_block(then_block)?;
+
+                    let mut res = format!("if ({}) {{\n{}\n}}", cond_c, then_c);
+
+                    for elif in else_if {
+                        let elif_cond = self.emit_expression(&elif.condition)?;
+                        let elif_block = self.emit_block(&elif.block)?;
+
+                        res.push_str(&format!(" else if ({}) {{\n{}\n}}", elif_cond, elif_block));
+                    }
+
+                    if !else_block.is_empty() {
+                        let else_body = self.emit_block(else_block)?;
+
+                        res.push_str(&format!(" else {{\n{}\n}}", else_body))
+                    }
+
+                    res
+                } else {
+                    format!("{};", self.emit_expression(expr)?)
                 }
-
-                let parameters = params
-                    .iter()
-                    .map(
-                        |FuncParam {
-                             name, param_type, ..
-                         }| {
-                            let ty = self.checker.resolve(param_type);
-                            format!("{} {}", self.c_type(&ty), name.clone())
-                        },
-                    )
-                    .collect::<Vec<String>>()
-                    .join(", ");
-
-                format!("extern {} {}({});", self.c_type(&ret), name, parameters)
             }
-            Statement::Expression { expression, .. } => {
-                format!("{};", self.emit_expression(expression)?)
+            TypedStmtKind::While { condition, body } => {
+                let cond = self.emit_expression(condition)?;
+                let body = self.emit_block(body)?;
+                format!("while ({}) {{\n{}\n}}", cond, body)
             }
-            Statement::While { .. } | Statement::ForCounter { .. } | Statement::ForRange { .. } => {
-                self.emit_for(stmt)?
-            }
-            Statement::Break { .. } => "break;".to_string(),
-            Statement::Continue { .. } => "continue;".to_string(),
-            Statement::Func { .. } => self.emit_function(stmt)?,
-            Statement::Struct { .. } => self.emit_struct(stmt)?,
-            Statement::Extend {
-                target, methods, ..
+            TypedStmtKind::ForCounter {
+                init,
+                condition,
+                post,
+                body,
             } => {
-                let target_ty = self.checker.resolve(target);
-
+                let initial = self.emit_statement(init)?;
+                let cond = self.emit_expression(condition)?;
+                let postfix = self.emit_expression(post)?;
+                let body = self.emit_block(body)?;
+                format!("for ({} {}; {}) {{\n{}\n}}", initial, cond, postfix, body)
+            }
+            TypedStmtKind::ForRange {
+                variable,
+                iterable,
+                body,
+            } => {
+                let (start, end, cmp) = match &iterable.kind {
+                    TypedExprKind::Range {
+                        start,
+                        end,
+                        range_kind,
+                    } => (
+                        start
+                            .as_ref()
+                            .map_or(Ok("0".to_string()), |s| self.emit_expression(s))?,
+                        end.as_ref().map_or(
+                            Err(CodegenError::Unsupported("Open ranges".to_string())),
+                            |e| self.emit_expression(e),
+                        )?,
+                        if matches!(range_kind, RangeKind::Inclusive) {
+                            "<="
+                        } else {
+                            "<"
+                        },
+                    ),
+                    _ => {
+                        return Err(CodegenError::Unsupported(
+                            "For-loop expects a range".to_string(),
+                        ));
+                    }
+                };
+                let body_str = self.emit_block(body)?;
+                format!(
+                    "for (int64_t {} = {}; {} {} {}; {}++) {{\n{}\n}}",
+                    variable, start, variable, cmp, end, variable, body_str
+                )
+            }
+            TypedStmtKind::Break => "break;".to_string(),
+            TypedStmtKind::Continue => "continue;".to_string(),
+            TypedStmtKind::Func {
+                name,
+                params,
+                return_type,
+                body,
+            } => {
+                let c_name = if name == "main"
+                    || name.starts_with("vio_")
+                    || self.extern_funcs.contains(name)
+                {
+                    name.clone()
+                } else {
+                    format!("vio_user_{}", name)
+                };
+                self.emit_function_custom(c_name, params, return_type, body)?
+            }
+            TypedStmtKind::Struct { name, fields } => {
+                let mut c_fields = Vec::new();
+                for f in fields {
+                    let ty = self.c_type(&self.type_param_to_ty(&f.param_type));
+                    c_fields.push(format!("\t{} {}", ty, f.name));
+                }
+                format!("typedef struct {{\n{};\n}} {};", c_fields.join(";\n"), name)
+            }
+            TypedStmtKind::Extend { target, methods } => {
                 let mut lines = Vec::new();
-
                 for method in methods {
-                    if let Statement::Func { name, .. } = method {
-                        let c_name =
-                            format!("vio_user_{}_{}", self.type_to_prefix(&target_ty), name);
-                        lines.push(self.emit_function_custom(method, &c_name)?);
+                    if let TypedStmtKind::Func {
+                        name,
+                        params,
+                        return_type,
+                        body,
+                    } = &method.kind
+                    {
+                        let c_name = format!("vio_user_{}_{}", self.type_to_prefix(target), name);
+                        lines.push(self.emit_function_custom(c_name, params, return_type, body)?);
                     }
                 }
-
                 lines.join("\n")
             }
-
-            Statement::Variant { name, cases, .. } => {
+            TypedStmtKind::Variant { name, cases } => {
                 let mut c_cases = Vec::new();
-
                 for case in cases {
-                    let case_c = format!("VIO_TAG_{}_{}", name, case.name);
-
-                    c_cases.push(case_c);
+                    c_cases.push(format!("VIO_TAG_{}_{}", name, case.name));
                 }
-
                 let tag_name = format!("vio_tag_{}", name);
 
                 let mut union_states = Vec::new();
-
                 for case in cases {
-                    let state_c_ty = match &case.payload {
-                        Some(ty) => {
-                            let c_ty = &self.checker.resolve(ty);
-
-                            self.c_type(c_ty)
-                        }
-                        None => continue,
-                    };
-
-                    union_states.push(format!("{} {}", state_c_ty, case.name))
+                    if let Some(ty) = &case.payload {
+                        let c_ty = self.c_type(&self.type_param_to_ty(ty));
+                        union_states.push(format!("{} {}", c_ty, case.name));
+                    }
                 }
 
                 let mut res = Vec::new();
@@ -1038,312 +871,182 @@ impl Codegen {
                     c_cases.join(",\n    "),
                     tag_name
                 ));
-
                 if union_states.is_empty() {
                     res.push(format!(
-                        "typedef struct {{\n    {} tag\n}} {};\n",
+                        "typedef struct {{\n    {} tag;\n}} {};\n",
                         tag_name, name
                     ));
                 } else {
                     res.push(format!(
                         "typedef struct {{\n    {} tag;\n    union {{\n        {};\n    }} data;\n}} {};\n",
-                        tag_name,
-                        union_states.join(";\n        "),
-                        name
+                        tag_name, union_states.join(";\n        "), name
                     ));
                 }
-
                 res.join("\n")
+            }
+            _ => {
+                return Err(CodegenError::Unsupported(format!(
+                    "this statement: {:?}",
+                    stmt.kind
+                )));
             }
         })
     }
 
-    pub fn emit_for(&mut self, stmt: &Statement) -> Result<String, CodegenError> {
-        if let Statement::While {
-            condition, body, ..
-        } = stmt
-        {
-            self.checker.env.push();
-
-            let cond = self.emit_expression(condition)?;
-
-            let body = self.emit_block(body)?;
-
-            self.checker.env.pop();
-
-            Ok(format!("while ({}) {{\n{}\n}}", cond, body))
-        } else if let Statement::ForCounter {
-            init,
-            condition,
-            post,
-            body,
-            ..
-        } = stmt
-        {
-            self.checker.env.push();
-
-            let initial = self.emit_statement(init.as_ref())?;
-
-            let cond = self.emit_expression(condition)?;
-
-            let postfix = self.emit_expression(post)?;
-
-            let body = self.emit_block(body)?;
-
-            self.checker.env.pop();
-
-            Ok(format!(
-                "for ({} {}; {}) {{\n{}\n}}",
-                initial, cond, postfix, body
-            ))
-        } else if let Statement::ForRange {
-            variable,
-            iterable,
-            body,
-            span,
-        } = stmt
-        {
-            self.checker.env.push();
-
-            let (start, end, cmp) = match iterable {
-                Expression::Range {
-                    start,
-                    end,
-                    range_kind,
-                    ..
-                } => (
-                    start
-                        .as_ref()
-                        .map_or(Ok("0".to_string()), |s| self.emit_expression(s))?,
-                    end.as_ref().map_or(
-                        Err(CodegenError::Unsupported("Open ranges".to_string())),
-                        |e| self.emit_expression(e),
-                    )?,
-                    if matches!(range_kind, RangeKind::Inclusive) {
-                        "<="
-                    } else {
-                        "<"
-                    },
-                ),
-                _ => {
-                    return Err(CodegenError::Unsupported(
-                        "For-loop expects a range".to_string(),
-                    ));
-                }
-            };
-
-            self.checker
-                .defined(variable.clone(), Ty::Int, BindingKind::Var, *span);
-            let body_str = self.emit_block(body)?;
-
-            self.checker.env.pop();
-
-            Ok(format!(
-                "for (int64_t {} = {}; {} {} {}; {}++) {{\n{}\n}}",
-                variable, start, variable, cmp, end, variable, body_str
-            ))
-        } else {
-            unreachable!()
-        }
-    }
-
-    pub fn emit_function(&mut self, stmt: &Statement) -> Result<String, CodegenError> {
-        if let Statement::Func { name, .. } = stmt {
-            let c_name =
-                if name == "main" || name.starts_with("vio_") || self.extern_funcs.contains(name) {
-                    name.clone()
-                } else {
-                    format!("vio_user_{}", name)
-                };
-
-            self.emit_function_custom(stmt, &c_name)
-        } else {
-            Err(Unexpected(format!("{:?}", stmt)))
-        }
-    }
-
-    pub fn emit_function_custom(
+    fn emit_function_custom(
         &mut self,
-        stmt: &Statement,
-        c_name: &str,
+        c_name: String,
+        params: &[FuncParam],
+        return_type: &Ty,
+        body: &[TypedStmt],
     ) -> Result<String, CodegenError> {
-        if let Statement::Func {
-            name,
-            params,
-            return_type,
-            body,
-            span,
-            ..
-        } = stmt
-        {
-            self.checker.env.push();
+        let ret = if c_name == "main" {
+            "int".to_string()
+        } else {
+            self.c_type(return_type)
+        };
+        let parameters = self.format_params(params);
+        let parameters = if parameters.is_empty() && c_name == "main" {
+            "void".to_string()
+        } else {
+            parameters
+        };
 
-            for p in params {
-                let mut param_ty = self.checker.resolve(&p.param_type);
-                if p.is_ref {
-                    param_ty = Ty::Ref {
-                        inner: Box::new(param_ty),
-                        is_mut: p.kind.is_mutable(),
-                    };
+        let body_str = if ret != "void" {
+            let has_explicit_return = Self::does_block_return(body);
+
+            if !has_explicit_return && let Some((last, init)) = body.split_last() {
+                let mut lines = Vec::new();
+
+                for s in init {
+                    lines.push(format!("    {}", self.emit_statement(s)?));
                 }
-                self.checker
-                    .defined(p.name.clone(), param_ty, p.kind, *span);
-            }
 
-            let mut ret = if name == "main" {
-                "int".to_string()
-            } else {
-                String::from("void")
-            };
-
-            if let Some(ty) = return_type {
-                let ty = self.checker.resolve(ty);
-                ret = self.c_type(&ty)
-            }
-
-            let parameters = params
-                .iter()
-                .map(|p| {
-                    let mut ty = self.checker.resolve(&p.param_type);
-                    if p.is_ref {
-                        ty = Ty::Ref {
-                            inner: Box::new(ty),
-                            is_mut: p.kind.is_mutable(),
-                        };
-                    }
-                    format!("{} {}", self.c_type(&ty), p.name.clone())
-                })
-                .collect::<Vec<String>>()
-                .join(", ");
-
-            let parameters = if parameters.is_empty() && c_name == "main" {
-                "void".to_string()
-            } else {
-                parameters
-            };
-
-            let body_str = if ret != "void" {
-                let has_explicit_return =
-                    body.iter().any(|s| matches!(s, Statement::Return { .. }));
-
-                if !has_explicit_return && let Some((last, init)) = body.split_last() {
-                    let mut lines = Vec::new();
-
-                    for s in init {
-                        lines.push(format!("    {}", self.emit_statement(s)?));
-                    }
-
-                    match last {
-                        Statement::Expression { expression, .. } => {
-                            let val_str = self.emit_expression(expression)?;
-                            lines.push(format!("    return {};", val_str));
-                        }
-                        _ => lines.push(format!("    {}", self.emit_statement(last)?)),
-                    }
-                    lines.join("\n")
+                if let TypedStmtKind::Expression(expr) = &last.kind {
+                    lines.push(format!("    return {};", self.emit_expression(expr)?));
                 } else {
-                    self.emit_block(body)?
+                    lines.push(format!("    {}", self.emit_statement(last)?));
                 }
+
+                lines.join("\n")
             } else {
                 self.emit_block(body)?
-            };
-
-            self.checker.env.pop();
-
-            Ok(format!("{ret} {c_name}({parameters}) {{\n{body_str}\n}}\n"))
-        } else {
-            Err(Unexpected(format!("{:?}", stmt)))
-        }
-    }
-
-    pub fn emit_struct(&mut self, stmt: &Statement) -> Result<String, CodegenError> {
-        if let Statement::Struct { name, fields, span } = stmt {
-            self.checker.env.push();
-
-            let field_tys: Vec<Ty> = fields
-                .iter()
-                .map(|p| self.checker.resolve(&p.param_type))
-                .collect();
-
-            for (f, field_ty) in fields.iter().zip(field_tys.iter()) {
-                self.checker
-                    .defined(f.name.clone(), field_ty.clone(), BindingKind::Var, *span)
             }
-
-            let mut c_fields = fields
-                .iter()
-                .map(
-                    |StructParam {
-                         name: n,
-                         param_type,
-                         ..
-                     }| {
-                        let ty = self.checker.resolve(param_type);
-                        format!("\t{} {}", self.c_type(&ty), n.clone())
-                    },
-                )
-                .collect::<Vec<String>>()
-                .join(";\n");
-
-            c_fields.push_str(";\n");
-
-            self.checker.env.pop();
-
-            Ok(format!(
-                "typedef struct {{\n{}}} {};",
-                c_fields,
-                name.clone()
-            ))
         } else {
-            Err(Unexpected(format!("{:?}", stmt)))
-        }
+            self.emit_block(body)?
+        };
+
+        Ok(format!("{ret} {c_name}({parameters}) {{\n{body_str}\n}}\n"))
     }
 
-    pub fn emit_block(&mut self, body: &[Statement]) -> Result<String, CodegenError> {
+    pub fn emit_block(&mut self, body: &[TypedStmt]) -> Result<String, CodegenError> {
         let mut lines = Vec::new();
         let mut string_vars: Vec<String> = Vec::new();
         self.scope_defers.push(Vec::new());
 
         for s in body {
-            if let Statement::Let { name, value, .. }
-            | Statement::Const { name, value, .. }
-            | Statement::Var { name, value, .. } = s
+            if let TypedStmtKind::Let { name, ty, .. } | TypedStmtKind::Var { name, ty, .. } =
+                &s.kind
             {
-                let ty = self.checker.infer(value, None);
-
                 if matches!(ty, Ty::String) {
                     string_vars.push(name.clone());
                 }
-            } else if let Statement::Defer { callee, .. } = s {
-                let c_callee = self.emit_statement(callee.as_ref())?;
-
+            } else if let TypedStmtKind::Defer { callee, .. } = &s.kind {
+                let c_callee = self.emit_statement(callee)?;
                 self.scope_defers.last_mut().unwrap().push(c_callee);
-            } else if let Statement::Return { .. } = s {
+            } else if let TypedStmtKind::Return { .. } = &s.kind {
                 for deferred_stmts in self.scope_defers.iter().rev() {
                     for stmt in deferred_stmts.iter().rev() {
-                        lines.push(format!("    {}", stmt))
+                        lines.push(format!("    {}", stmt));
                     }
                 }
             }
 
             let stmt = self.emit_statement(s)?;
-
             for line in stmt.lines() {
                 lines.push(format!("    {line}"));
             }
         }
 
         let defers = self.scope_defers.pop().unwrap();
-
         for stmt in defers.iter().rev() {
             lines.push(format!("    {}", stmt));
         }
 
         for name in string_vars.iter().rev() {
-            lines.push(format!("    vio_str_release({});", name))
+            lines.push(format!("    vio_str_release({});", name));
         }
 
         Ok(lines.join("\n"))
+    }
+
+    fn emit_assigning_block(
+        &mut self,
+        stmts: &[TypedStmt],
+        res_var: &str,
+    ) -> Result<String, CodegenError> {
+        let mut stmts_c = Vec::new();
+        if let Some((last, init)) = stmts.split_last() {
+            for s in init {
+                stmts_c.push(self.emit_statement(s)?);
+            }
+            if let TypedStmtKind::Expression(expr) = &last.kind {
+                stmts_c.push(format!("{} = {};", res_var, self.emit_expression(expr)?));
+            } else {
+                stmts_c.push(self.emit_statement(last)?);
+            }
+            Ok(stmts_c.join("\n"))
+        } else {
+            Err(CodegenError::Unsupported("empty block".to_string()))
+        }
+    }
+
+    fn format_params(&mut self, params: &[FuncParam]) -> String {
+        let mut p_strs = Vec::new();
+        for p in params {
+            let ty = self.type_param_to_ty(&p.param_type);
+            let c_ty = if p.is_ref {
+                format!("{}*", self.c_type(&ty))
+            } else {
+                self.c_type(&ty)
+            };
+            p_strs.push(format!("{} {}", c_ty, p.name.replace("$", "_arg_")));
+        }
+        if p_strs.is_empty() {
+            "void".to_string()
+        } else {
+            p_strs.join(", ")
+        }
+    }
+
+    fn type_param_to_ty(&self, t: &Type) -> Ty {
+        match t {
+            Type::Named(path) => {
+                let name = path.segments.last().unwrap();
+                match name.as_str() {
+                    "Int" => Ty::Int,
+                    "Float32" | "Float64" => Ty::Float,
+                    "String" => Ty::String,
+                    "Bool" => Ty::Bool,
+                    "Char" => Ty::Char,
+                    _ => Ty::Struct(name.clone()),
+                }
+            }
+            Type::Fn { params, ret } => Ty::Fn {
+                params: params
+                    .iter()
+                    .map(|p| self.type_param_to_ty(p))
+                    .collect(),
+                ret: Box::new(
+                    ret
+                        .as_ref()
+                        .map_or(Ty::Unit, |r|
+                            self.type_param_to_ty(r.as_ref())
+                        )
+                )
+            },
+            _ => Ty::Unit,
+        }
     }
 
     fn correlate_operator(&mut self, op: &Token) -> Result<String, CodegenError> {
@@ -1395,30 +1098,30 @@ impl Codegen {
         }
     }
 
-    fn emit_assigning_block(
-        &mut self,
-        stmts: &[Statement],
-        res_var: &str,
-    ) -> Result<String, CodegenError> {
-        let mut stmts_c = Vec::new();
+    fn does_block_return(body: &[TypedStmt]) -> bool {
+        for s in body {
+            match &s.kind {
+                TypedStmtKind::Return { .. } => return true,
+                TypedStmtKind::Expression(expr) => {
+                    if let TypedExprKind::If {
+                        then_block,
+                        else_if,
+                        else_block,
+                        ..
+                    } = &expr.kind
+                    {
+                        let does_return_if = Self::does_block_return(then_block);
+                        let do_return_elifs = else_if.iter().all(|elif| Self::does_block_return(&elif.block));
+                        let does_return_else = Self::does_block_return(else_block);
 
-        if let Some((last, init)) = stmts.split_last() {
-            for s in init {
-                stmts_c.push(self.emit_statement(s)?);
+                        if does_return_if && do_return_elifs && does_return_else && !else_block.is_empty() {
+                            return true;
+                        }
+                    }
+                }
+                _ => {}
             }
-
-            if let Statement::Expression {
-                expression: expr, ..
-            } = last
-            {
-                stmts_c.push(format!("{} = {};", res_var, self.emit_expression(expr)?));
-            }
-
-            Ok(stmts_c.join("\n"))
-        } else {
-            Err(CodegenError::Unsupported(
-                "empty if-expression branches".to_string(),
-            ))
         }
+        false
     }
 }

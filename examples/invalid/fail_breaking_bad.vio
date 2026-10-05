@@ -13,7 +13,7 @@ func main() {
 }
 
 func breaking(x: Int) {
-    for i in 0..x {
+    for i in 0..<x {
         if i == 7 {
             break
         }

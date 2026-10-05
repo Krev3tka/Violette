@@ -1,10 +1,17 @@
 #![allow(dead_code)]
 use crate::lexer::span::Span;
 use crate::lexer::token::Token;
-use crate::parser::expression::{RangeKind, StructLiteralField};
+use crate::parser::expression::RangeKind;
 use crate::parser::statement::{FuncParam, StructParam, VariantCase};
 use crate::typechecker::error::TypeError;
 use crate::typechecker::types::Ty;
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TypedProgram {
+    pub package: String,
+    pub declarations: Vec<TypedStmt>,
+    pub main: Vec<TypedStmt>,
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TypedExpr {
@@ -24,6 +31,7 @@ pub struct TypedStmt {
 pub enum TypedExprKind {
     Identifier {
         name: String,
+        is_ref: bool
     },
 
     IntLiteral {
@@ -48,7 +56,7 @@ pub enum TypedExprKind {
 
     StructLiteral {
         name: String,
-        fields: Vec<StructLiteralField>,
+        fields: Vec<TypedStructLiteralField>,
     },
 
     Prefix {
@@ -118,7 +126,7 @@ pub enum TypedExprKind {
 
     Error {
         error: TypeError,
-    }
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -202,6 +210,10 @@ pub enum TypedStmtKind {
         name: String,
         cases: Vec<VariantCase>,
     },
+
+    Error {
+        error: TypeError,
+    },
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -216,12 +228,28 @@ pub struct TypedElseIf {
     pub block: Vec<TypedStmt>,
 }
 
+#[derive(Debug, PartialEq, Clone)]
+pub struct TypedStructLiteralField {
+    pub field_name: String,
+    pub field_val: Box<TypedExpr>,
+}
+
 impl TypedExpr {
     pub fn error(span: Span, error: TypeError) -> Self {
         Self {
             kind: TypedExprKind::Error { error },
             ty: Ty::Error,
-            span
+            span,
+        }
+    }
+}
+
+impl TypedStmt {
+    pub fn error(span: Span, error: TypeError) -> Self {
+        Self {
+            kind: TypedStmtKind::Error { error },
+            ty: Ty::Error,
+            span,
         }
     }
 }

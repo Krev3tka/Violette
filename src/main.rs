@@ -9,10 +9,10 @@ mod parser;
 
 mod diagnostics;
 mod driver;
+pub mod hir;
 #[cfg(test)]
 mod tests;
 mod typechecker;
-pub mod hir;
 
 fn main() {
     let args: Vec<String> = env::args().collect();

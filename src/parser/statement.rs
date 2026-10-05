@@ -351,7 +351,14 @@ impl Parser {
             Token::Variant => self.parse_variant(),
             _ => {
                 let expr = self.parse_expression(Lowest)?;
-                self.next_token();
+                if !matches!(
+                    expr,
+                    Expression::If { .. }
+                    | Expression::Block { .. }
+                    | Expression::Match { .. })
+                {
+                    self.next_token();
+                }
                 Ok(Statement::Expression {
                     expression: expr,
                     span,

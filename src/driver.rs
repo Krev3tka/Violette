@@ -204,7 +204,7 @@ pub fn compile(command: &str, file: &str) {
 
     let mut checker = Checker::default();
 
-    checker.check_program(&ast);
+    let typed_ast = checker.check_program(&ast);
 
     if !checker.errors.is_empty() {
         for err in checker.errors {
@@ -215,7 +215,7 @@ pub fn compile(command: &str, file: &str) {
 
     let mut codegen = Codegen::new();
 
-    let code = match codegen.emit_program(ast) {
+    let code = match codegen.emit_program(typed_ast) {
         Ok(out) => out,
         Err(e) => return println!("Codegen error: {:?}", e),
     };
@@ -243,8 +243,8 @@ pub fn compile(command: &str, file: &str) {
         let dir = temp_dir.join(sub);
         let path = dir.join(name);
         // if !path.exists() {
-            fs::create_dir_all(&dir).ok();
-            fs::write(&path, content).expect("Failed to write runtime file");
+        fs::create_dir_all(&dir).ok();
+        fs::write(&path, content).expect("Failed to write runtime file");
         // }
 
         path

@@ -1,8 +1,8 @@
 #[cfg(test)]
 pub mod hir_tests {
     use crate::lexer::lexer::Lexer;
-    use crate::parser::parser::Parser;
     use crate::parser::Precedence::Lowest;
+    use crate::parser::parser::Parser;
     use crate::typechecker::checker::Checker;
 
     #[test]

@@ -422,6 +422,7 @@ impl Diagnostics for TypeError {
                     ),
                 )
             }
+            _ => todo!(),
         }
     }
 
