@@ -37,7 +37,7 @@
             };
 
             buildInputs = with pkgs; [
-              gcc
+              clang
             ];
           };
         }
@@ -55,7 +55,7 @@
               rust-analyzer
               clippy
               rustfmt
-              gcc
+              clang
             ];
           };
         }
