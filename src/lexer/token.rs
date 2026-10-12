@@ -3,275 +3,252 @@ use crate::lexer::error::LexError;
 #[allow(dead_code)]
 #[derive(Debug, PartialEq, Clone)]
 pub enum Token {
-    /// Lowercase identifier name.
+    /// Lowercase identifier name
     LowerIdent(String),
 
-    /// Keyword `let`.
     Let,
 
-    /// Keyword `var`.
     Var,
 
-    /// Keyword `const`.
     Const,
 
-    /// Keyword `if`.
     If,
 
-    /// Keyword `else`.
     Else,
 
-    /// Keyword `while`.
     While,
 
-    /// Keyword `for`.
     For,
 
-    /// Keyword `in`.
     In,
 
-    /// Keyword `continue`.
     Continue,
 
-    /// Keyword `break`.
     Break,
 
-    /// Keyword `match`.
     Match,
 
-    /// Keyword `defer`.
     Defer,
 
-    /// Keyword `func`.
     Func,
 
-    /// Keyword `extern`
     Extern,
 
-    /// Keyword `return`.
     Return,
 
-    /// Keyword `struct`.
     Struct,
 
-    /// Keyword `extend`.
     Extend,
 
-    /// Keyword `protocol`.
     Protocol,
 
-    /// Keyword `variant`.
     Variant,
 
-    /// Keyword `type`.
     Type,
 
-    /// Keyword `export`.
     Export,
 
-    /// Keyword `local`.
     Local,
 
-    /// Uppercase identifier.
+    /// Uppercase identifier, used for types
     UpperIdent(String),
 
-    /// Pointer-sized signed integer literal.
+    /// Pointer-sized signed integer literal
     Int(isize),
 
-    /// 8-bit signed integer literal.
+    /// 8-bit signed integer literal
     Int8(i8),
 
-    /// 16-bit signed integer literal.
+    /// 16-bit signed integer literal
     Int16(i16),
 
-    /// 32-bit signed integer literal.
+    /// 32-bit signed integer literal
     Int32(i32),
 
-    /// 64-bit signed integer literal.
+    /// 64-bit signed integer literal
     Int64(i64),
 
-    /// Pointer-sized unsigned integer literal.
+    /// Pointer-sized unsigned integer literal
     Uint(usize),
 
-    /// 8-bit unsigned integer literal.
+    /// 8-bit unsigned integer literal
     Uint8(u8),
 
-    /// 16-bit unsigned integer literal.
+    /// 16-bit unsigned integer literal
     Uint16(u16),
 
-    /// 32-bit unsigned integer literal.
+    /// 32-bit unsigned integer literal
     Uint32(u32),
 
-    /// 64-bit unsigned integer literal.
+    /// 64-bit unsigned integer literal
     Uint64(u64),
 
-    /// 32-bit float literal.
+    /// 32-bit float literal
     Float32(f32),
 
-    /// 64-bit float literal.
+    /// 64-bit float literal
     Float64(f64),
 
-    /// Bool literal.
+    /// Bool literal
     Bool(bool),
 
-    /// String literal.
+    /// String literal
     String(String),
 
-    /// Char literal.
+    /// Char literal
     Char(char),
 
-    /// Assignment operator `=`.
+    /// Assignment operator `=`
     Assign,
 
-    /// Equality operator `==`.
+    /// Equality operator `==`
     Equals,
 
-    /// Non-equality operator `!=`.
+    /// Non-equality operator `!=`
     NotEquals,
 
-    /// Less than operator `<`.
+    /// Less than operator `<`
     Less,
 
-    /// Greater than operator `>`.
+    /// Greater than operator `>`
     Greater,
 
-    /// Less than or equal to operator `<=`.
+    /// Less than or equal to operator `<=`
     LessOrEquals,
 
-    /// Greater than or equal to operator `>=`.
+    /// Greater than or equal to operator `>=`
     GreaterOrEquals,
 
-    /// Colon operator `:`.
+    /// Colon operator `:`
     ///
-    /// Used for type annotations.
+    /// Used for type annotations
     Colon,
 
-    /// Semicolon `;`.
     Semicolon,
 
-    /// Field access or navigation dot `.`.
     Dot,
 
-    /// Comma separator `,`.
     Comma,
 
-    /// Pipeline / sprout operator `~>`.
+    /// Pipeline / sprout operator `~>`
     Sprout,
 
-    /// Fat arrow operator `=>`.
+    /// Fat arrow operator `=>`
     FatArrow,
 
-    /// Double dot operator. Used for error output.
+    /// Double dot operator
+    ///
+    /// Used mostly for error output
     DoubleDot,
 
-    /// Right-exclusive range operator `..<`.
+    /// Right-exclusive range operator `..<`
     DoubleDotLess,
 
-    /// Right-inclusive range operator `..=`.
+    /// Right-inclusive range operator `..=`
     DoubleDotAssign,
 
-    /// Addition operator `+`.
+    /// Addition operator `+`
     Add,
 
-    /// Subtraction operator `-`.
+    /// Subtraction operator `-`
     Subtract,
 
-    /// Multiplication operator `*`.
+    /// Multiplication operator `*`
     Multiply,
 
-    /// Division operator `/`.
+    /// Division operator `/`
     Divide,
 
-    /// Modulus operator `%`.
+    /// Modulus operator `%`
     Modulus,
 
-    /// Exponentiation operator `**`.
+    /// Exponentiation operator `**`
     Power,
 
-    /// Increment operator `++`.
+    /// Increment operator `++`
     Increment,
 
-    /// Decrement operator `--`.
+    /// Decrement operator `--`
     Decrement,
 
-    /// Addition assignment operator `+=`.
+    /// Addition assignment operator `+=`
     AddAndAssign,
 
-    /// Subtraction assignment operator `-=`.
+    /// Subtraction assignment operator `-=`
     SubAndAssign,
 
-    /// Multiplication assignment operator `*=`.
+    /// Multiplication assignment operator `*=`
     MulAndAssign,
 
-    /// Division assignment operator `/=`.
+    /// Division assignment operator `/=`
     DivAndAssign,
 
-    /// Modulus assignment operator `%=`.
+    /// Modulus assignment operator `%=`
     ModAndAssign,
 
-    /// Opening parenthesis `(`.
+    /// Opening parenthesis `(`
     LeftParen,
 
-    /// Closing parenthesis `)`.
+    /// Closing parenthesis `)`
     RightParen,
 
-    /// Opening square bracket `[`.
+    /// Opening square bracket `[`
     LeftBracket,
 
-    /// Closing square bracket `]`.
+    /// Closing square bracket `]`
     RightBracket,
 
-    /// Opening curly brace `{`.
+    /// Opening curly brace `{`
     LeftBrace,
 
-    /// Closing curly brace `}`.
+    /// Closing curly brace `}`
     RightBrace,
 
-    /// Logical OR operator `||`.
+    /// Logical OR operator `||`
     LogicOr,
 
-    /// Logical AND operator `&&`.
+    /// Logical AND operator `&&`
     LogicAnd,
 
-    /// Logical NOT operator `!`.
+    /// Logical NOT operator `!`
     LogicNot,
 
-    /// Bitwise AND operator `&`.
+    /// Bitwise AND operator `&`
     BitAnd,
 
-    /// Bitwise OR operator `|`.
+    /// Bitwise OR operator `|`
     BitOr,
 
-    /// Bitwise NOT operator `~`.
+    /// Bitwise NOT operator `~`
     BitNot,
 
-    /// Bitwise XOR operator `^`.
+    /// Bitwise XOR operator `^`
     BitXOR,
 
-    /// Bitwise left shift operator `<<`.
+    /// Bitwise left shift operator `<<`
     LeftShift,
 
-    /// Bitwise right shift operator `>>`.
+    /// Bitwise right shift operator `>>`
     RightShift,
 
-    /// Backslash operator `\`.
+    /// Backslash operator `\`
     BackSlash,
 
-    /// Arrow operator `->`.
+    /// Arrow operator `->`
     Arrow,
 
-    /// Keyword `using`.
+    /// Keyword `using`
     Using,
 
-    /// Keyword `package`.
+    /// Keyword `package`
     Package,
 
-    /// Newline separator.
+    /// Newline separator
     Newline,
 
-    /// End of file marker.
+    /// End of file marker
     Eof,
 
-    /// Unrecognized or illegal token.
+    /// Unrecognized or illegal token
     Illegal(LexError),
 }

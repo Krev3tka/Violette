@@ -973,10 +973,15 @@ impl Checker {
                         t => (t.clone(), false),
                     },
                     None => {
-                        self.errors.push(TypeError::UnknownName {
+                        let err = TypeError::UnknownName {
                             name: name.clone(),
                             span: expr.span(),
-                        });
+                        };
+
+                        if !self.errors.contains(&err) {
+                            self.errors.push(err);
+                        }
+
                         (Ty::Error, false)
                     }
                 };
@@ -996,8 +1001,11 @@ impl Checker {
                 right,
                 span,
             } => {
-                let left_ty = self.infer(left, None);
-                let right_ty = self.infer(right, None);
+                let typed_left = self.check_expr(left.as_ref(), expected);
+                let typed_right = self.check_expr(right.as_ref(), expected);
+
+                let left_ty = typed_left.clone().ty;
+                let right_ty = typed_right.clone().ty;
 
                 let ty = match operator {
                     Token::Add => match (&left_ty, &right_ty) {
@@ -1046,15 +1054,18 @@ impl Checker {
                     },
                     Token::Less | Token::Greater | Token::LessOrEquals | Token::GreaterOrEquals => {
                         match (&left_ty, &right_ty) {
-                            (Ty::Int, Ty::Int) | (Ty::Float, Ty::Float) => {}
-                            _ => self.errors.push(TypeError::InvalidBinaryOperator {
-                                operator: operator.clone(),
-                                left: Box::new(left_ty.clone()),
-                                right: Box::new(right_ty.clone()),
-                                span: *span,
-                            }),
-                        };
-                        Ty::Bool
+                            (Ty::Int, Ty::Int) | (Ty::Float, Ty::Float) => Ty::Bool,
+                            (Ty::Error, _) | (_, Ty::Error) => Ty::Error,
+                            _ => {
+                                self.errors.push(TypeError::InvalidBinaryOperator {
+                                    operator: operator.clone(),
+                                    left: Box::new(left_ty.clone()),
+                                    right: Box::new(right_ty.clone()),
+                                    span: *span,
+                                });
+                                Ty::Error
+                            }
+                        }
                     }
                     Token::Equals | Token::NotEquals => match (&left_ty, &right_ty) {
                         (Ty::Error, _) | (_, Ty::Error) => Ty::Error,
@@ -1094,9 +1105,9 @@ impl Checker {
 
                 TypedExpr {
                     kind: TypedExprKind::Infix {
-                        left: Box::new(self.check_expr(left, expected)),
+                        left: Box::new(typed_left),
                         operator: operator.clone(),
-                        right: Box::new(self.check_expr(right, expected)),
+                        right: Box::new(typed_right),
                     },
                     ty,
                     span: *span,
@@ -1164,6 +1175,48 @@ impl Checker {
                     kind: TypedExprKind::Prefix {
                         operator: operator.clone(),
                         right: Box::new(self.check_expr(right, expected)),
+                    },
+                    ty,
+                    span: *span,
+                }
+            }
+            Expression::Postfix {
+                left,
+                operator,
+                span,
+            } => {
+                let typed_left = self.check_expr(left.as_ref(), expected);
+
+                if let Expression::Identifier { name, .. } = left.as_ref()
+                    && let Some(entity) = self.env.lookup(name)
+                    && !entity.kind.is_mutable()
+                {
+                    self.errors.push(TypeError::AssignmentToImmutable {
+                        name: name.clone(),
+                        kind: entity.kind,
+                        decl_span: entity.span,
+                        assign_span: *span,
+                    });
+                }
+
+                let ty = match typed_left.ty {
+                    Ty::Int => Ty::Int,
+                    Ty::Float => Ty::Float,
+                    Ty::Error => Ty::Error,
+                    _ => {
+                        self.errors.push(TypeError::InvalidUnaryOperator {
+                            operator: operator.clone(),
+                            operand: typed_left.ty.clone(),
+                            span: *span,
+                        });
+                        Ty::Error
+                    }
+                };
+
+                TypedExpr {
+                    kind: TypedExprKind::Postfix {
+                        left: Box::new(typed_left),
+                        operator: operator.clone(),
                     },
                     ty,
                     span: *span,
@@ -1946,14 +1999,14 @@ impl Checker {
                 span,
                 ..
             } => {
-                let cond_ty = self.infer(condition.as_ref(), expected);
-                self.expect(&cond_ty, &Ty::Bool, *span);
+                let typed_cond = self.check_expr(condition.as_ref(), Some(&Ty::Bool));
+                self.expect(&typed_cond.ty, &Ty::Bool, *span);
 
                 if let Some((last, _)) = then_block.split_last() {
                     return if let Statement::Expression { expression, .. } = last {
                         TypedExpr {
                             kind: TypedExprKind::If {
-                                condition: Box::new(self.check_expr(condition.as_ref(), expected)),
+                                condition: Box::new(typed_cond),
                                 then_block: then_block.iter().map(|s| self.check_stmt(s)).collect(),
                                 else_if: else_if
                                     .iter()
@@ -1970,7 +2023,7 @@ impl Checker {
                     } else {
                         TypedExpr {
                             kind: TypedExprKind::If {
-                                condition: Box::new(self.check_expr(condition.as_ref(), expected)),
+                                condition: Box::new(typed_cond),
                                 then_block: then_block.iter().map(|s| self.check_stmt(s)).collect(),
                                 else_if: else_if
                                     .iter()
@@ -1989,7 +2042,7 @@ impl Checker {
 
                 TypedExpr {
                     kind: TypedExprKind::If {
-                        condition: Box::new(self.check_expr(condition.as_ref(), expected)),
+                        condition: Box::new(typed_cond),
                         then_block: then_block.iter().map(|s| self.check_stmt(s)).collect(),
                         else_if: else_if
                             .iter()
@@ -2390,14 +2443,13 @@ impl Checker {
                     ty: last_ty,
                     span: *span,
                 }
-            }
-            _ => TypedExpr::error(
-                expr.span(),
-                TypeError::Unsupported {
-                    desc: format!("expression: {:?}", expr),
-                    span: expr.span(),
-                },
-            ),
+            } // _ => TypedExpr::error(
+              //     expr.span(),
+              //     TypeError::Unsupported {
+              //         desc: format!("expression: {:?}", expr),
+              //         span: expr.span(),
+              //     },
+              // ),
         }
     }
 
@@ -2444,7 +2496,9 @@ impl Checker {
     }
 
     pub fn defined(&mut self, name: String, ty: Ty, kind: BindingKind, span: Span) {
-        if let Err(e) = self.env.define(name.clone(), ty, kind, &span) {
+        if let Err(e) = self.env.define(name.clone(), ty, kind, &span)
+            && !self.errors.contains(&e)
+        {
             self.errors.push(e);
         }
     }

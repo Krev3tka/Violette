@@ -442,10 +442,6 @@ impl Parser {
                 | Token::Modulus
                 | Token::Equals
                 | Token::NotEquals
-                | Token::Less
-                | Token::Greater
-                | Token::LessOrEquals
-                | Token::GreaterOrEquals
                 | Token::Assign
                 | Token::Power
                 | Token::AddAndAssign
@@ -471,6 +467,101 @@ impl Parser {
                         right: Box::new(right.clone()),
                         span: left.span().merge(&right.span()),
                     };
+                }
+                Token::Less | Token::Greater | Token::LessOrEquals | Token::GreaterOrEquals => {
+                    let peek_prec = self.peek_precedence();
+                    self.next_token();
+
+                    let op1 = self.current_token.token.clone();
+                    self.next_token();
+
+                    let middle = self.parse_expression(peek_prec)?;
+
+                    if matches!(self.peek_token.token.clone(), |Token::Less| Token::Greater
+                        | Token::LessOrEquals
+                        | Token::GreaterOrEquals)
+                    {
+                        self.next_token();
+                        let op2 = self.current_token.token.clone();
+
+                        self.next_token();
+
+                        let right = self.parse_expression(peek_prec)?;
+
+                        left = match &middle {
+                            Expression::Identifier { .. } => {
+                                let first_cmp = Expression::Infix {
+                                    left: Box::new(left.clone()),
+                                    operator: op1,
+                                    right: Box::new(middle.clone()),
+                                    span: start_span,
+                                };
+
+                                let second_cmp = Expression::Infix {
+                                    left: Box::new(middle),
+                                    operator: op2,
+                                    right: Box::new(right.clone()),
+                                    span: start_span,
+                                };
+
+                                Expression::Infix {
+                                    left: Box::new(first_cmp),
+                                    operator: Token::LogicAnd,
+                                    right: Box::new(second_cmp),
+                                    span: left.span().merge(&right.span()),
+                                }
+                            }
+                            _ => {
+                                let tmp = Expression::Identifier {
+                                    name: "_tmp".to_string(),
+                                    span: start_span,
+                                };
+
+                                let first_cmp = Expression::Infix {
+                                    left: Box::new(left.clone()),
+                                    operator: op1,
+                                    right: Box::new(tmp.clone()),
+                                    span: start_span,
+                                };
+
+                                let second_cmp = Expression::Infix {
+                                    left: Box::new(tmp.clone()),
+                                    operator: op2,
+                                    right: Box::new(right.clone()),
+                                    span: start_span,
+                                };
+
+                                Expression::Block {
+                                    body: vec![
+                                        Statement::Let {
+                                            name: "_tmp".to_string(),
+                                            annotated_type: None,
+                                            type_span: None,
+                                            value: middle,
+                                            span: start_span,
+                                        },
+                                        Statement::Expression {
+                                            expression: Expression::Infix {
+                                                left: Box::new(first_cmp),
+                                                operator: Token::LogicAnd,
+                                                right: Box::new(second_cmp),
+                                                span: start_span,
+                                            },
+                                            span: start_span,
+                                        },
+                                    ],
+                                    span: left.span().merge(&right.span()),
+                                }
+                            }
+                        };
+                    } else {
+                        left = Expression::Infix {
+                            left: Box::new(left.clone()),
+                            operator: op1,
+                            right: Box::new(middle.clone()),
+                            span: left.span().merge(&middle.span()),
+                        };
+                    }
                 }
                 Token::Decrement | Token::Increment => {
                     self.next_token();
