@@ -59,6 +59,10 @@ pub enum TypedExprKind {
         fields: Vec<TypedStructLiteralField>,
     },
 
+    ArrayLiteral {
+        values: Vec<TypedExpr>,
+    },
+
     Prefix {
         operator: Token,
         right: Box<TypedExpr>,

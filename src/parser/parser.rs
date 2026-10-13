@@ -113,16 +113,7 @@ impl Parser {
             let open_bracket_span = self.current_token.span;
             self.next_token();
 
-            let mut variants = Vec::new();
-
-            variants.push(self.parse_single_type()?);
-            self.skip_terminators();
-
-            while matches!(self.current_token.token, Token::BitOr) {
-                self.next_token();
-                variants.push(self.parse_single_type()?);
-                self.skip_terminators();
-            }
+            let arr_type = self.parse_type()?;
 
             self.expect(
                 Token::RightBracket,
@@ -135,11 +126,7 @@ impl Parser {
                 },
             )?;
 
-            if variants.len() == 1 {
-                return Ok(variants.remove(0));
-            } else {
-                return Ok(Type::Union(variants));
-            }
+            return Ok(Type::Array(Box::new(arr_type)));
         }
 
         self.skip_terminators();

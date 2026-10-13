@@ -25,17 +25,18 @@ pub enum Ty {
         is_mut: bool,
     },
     Char,
+    Array(Box<Ty>),
 }
 
 impl fmt::Display for Ty {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Ty::Int => write!(f, "int"),
-            Ty::Float => write!(f, "float"),
-            Ty::Bool => write!(f, "bool"),
-            Ty::String => write!(f, "string"),
+            Ty::Int => write!(f, "Int"),
+            Ty::Float => write!(f, "Float"),
+            Ty::Bool => write!(f, "Bool"),
+            Ty::String => write!(f, "String"),
             Ty::Struct(name) => write!(f, "{}", name),
-            Ty::Unit => write!(f, "void"),
+            Ty::Unit => write!(f, "Void"),
             Ty::Ref {
                 inner,
                 is_mut: true,

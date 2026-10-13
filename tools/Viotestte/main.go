@@ -23,14 +23,15 @@ var ExpectedErrors = map[string]string{
 	"fail_sprouting_type_mismatch.vio": "found mismatched types",
 	"fail_a_few_entry_points.vio": "program cannot have both top-level statements and a `main` function",
 	"fail_abt_fields.vio": "struct `Color` possibly has no field named `yellow`",
-	"fail_calling.vio": "`count` isn't callable cause it has `int` type",
-	"fail_operator_logic.vio": "operator `Add` cannot be applied to types `int` and `string`",
+	"fail_calling.vio": "`count` isn't callable cause it has `Int` type",
+	"fail_operator_logic.vio": "operator `Add` cannot be applied to types `Int` and `String`",
 	"fail_unknown_name.vio": "found something undefined: `Ponit`",
 	"fail_arity_mismatch.vio": "function `mul_and_add` takes 2 arguments but only 1 were found",
 }
 
 var ExpectedOutputs = map[string]string{
     "anonymous_functions.vio": "12\n-2\n5\n7\n35\n0\n78125",
+    "array.vio": "1\n2\n3",
 	"bits.vio":            "452",
 	"characteristics.vio":     "A\nя\n⼆",
 	"double_inequality.vio": "x: 1",

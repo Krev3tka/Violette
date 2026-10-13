@@ -60,7 +60,11 @@ impl ClearSpan for Expression {
             | Expression::BoolLiteral { span, .. }
             | Expression::StringLiteral { span, .. }
             | Expression::CharLiteral { span, .. } => *span = Span::default(),
+            Expression::ArrayLiteral { values, span, .. } => {
+                let _ = values.iter_mut().map(|v| v.clone().clear_span());
 
+                *span = Span::default();
+            }
             Expression::Infix {
                 left, right, span, ..
             } => {

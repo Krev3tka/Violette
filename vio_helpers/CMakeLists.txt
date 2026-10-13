@@ -19,4 +19,6 @@ add_executable(vio_helpers main.c
         vio_casting/vio_string.c
         vio_casting/vio_float.h
         vio_casting/vio_float.c
+        vio_array/vio_int_array.h
+        vio_array/vio_int_array.c
 )

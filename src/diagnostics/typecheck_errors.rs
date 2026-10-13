@@ -478,10 +478,10 @@ impl Diagnostics for TypeError {
             match label.style {
                 LabelStyle::Primary => {
                     if !message.contains("outside of a loop") {
-                        res.push_str(
-                            format!(" {empty:>width$}  \u{2502}\n", empty = "", width = width)
-                                .as_str(),
-                        );
+                        // res.push_str(
+                        //     format!(" {empty:>width$}  \u{2502}\n", empty = "", width = width)
+                        //         .as_str(),
+                        // );
                     }
                     res.push_str(
                         format!(
@@ -504,19 +504,19 @@ impl Diagnostics for TypeError {
                         )
                         .as_str(),
                     );
-                    if !message.contains("outside of a loop") {
-                        res.push_str(
-                            format!(" {empty:>width$}  \u{2502}\n", empty = "", width = width)
-                                .as_str(),
-                        );
-                    }
+                    // if !message.contains("outside of a loop") {
+                    //     res.push_str(
+                    //         format!(" {empty:>width$}  \u{2502}\n", empty = "", width = width)
+                    //             .as_str(),
+                    //     );
+                    // }
                 }
                 LabelStyle::Secondary => {
                     if !message.contains("outside of a loop") {
-                        res.push_str(
-                            format!(" {empty:>width$}  \u{2502}\n", empty = "", width = width)
-                                .as_str(),
-                        );
+                        // res.push_str(
+                        //     format!(" {empty:>width$}  \u{2502}\n", empty = "", width = width)
+                        //         .as_str(),
+                        // );
                     }
                     res.push_str(
                         format!(

@@ -200,8 +200,6 @@ impl Parser {
                     type_span = Some(self.current_token.span);
                     annotated_type = Some(self.parse_type()?);
                     type_span = Some(type_span.unwrap().merge(&self.current_token.span));
-
-                    self.next_token();
                 }
 
                 self.expect(

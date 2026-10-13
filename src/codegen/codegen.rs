@@ -50,6 +50,7 @@ impl Codegen {
             Ty::Char => "uint32_t".to_string(),
             Ty::String => "VioString".to_string(),
             Ty::Struct(s) => s.to_string(),
+            Ty::Array(inner) => format!("{}*", self.c_type(inner.as_ref())),
             Ty::Unit => "void".to_string(),
             Ty::Fn { params, ret } => {
                 let ret_c = self.c_type(ret);
@@ -318,7 +319,12 @@ impl Codegen {
             TypedExprKind::Index { left, index } => {
                 let left_str = self.emit_expression(left.as_ref())?;
                 let index_str = self.emit_expression(index.as_ref())?;
-                format!("vio_str_get({}, {})", left_str, index_str)
+
+                if matches!(left.ty, Ty::String) {
+                    format!("vio_str_get({}, {})", left_str, index_str)
+                } else {
+                    format!("{}[{}]", left_str, index_str)
+                }
             }
             TypedExprKind::Identifier { name, is_ref } => {
                 if let Some((variant_name, false)) = self.variant_cases.get(name) {
@@ -687,6 +693,20 @@ impl Codegen {
                     "({{\n    {} {};\n{}\n    {};\n}})",
                     res_c_ty, res_var, body_c, res_var
                 )
+            }
+            TypedExprKind::ArrayLiteral { values } => {
+                let c_vals = values
+                    .iter()
+                    .map(|expr| self.emit_expression(expr))
+                    .collect::<Result<Vec<_>, _>>()?
+                    .join(", ");
+
+                let elem_c_type = match &expr.ty {
+                    Ty::Array(inner) => self.c_type(inner.as_ref()),
+                    _ => "int64_t".to_string(),
+                };
+
+                format!("({}[]){{ {} }}", elem_c_type, c_vals)
             }
             _ => {
                 return Err(CodegenError::Unsupported(format!(

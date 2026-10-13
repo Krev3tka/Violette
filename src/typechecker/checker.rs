@@ -308,6 +308,8 @@ impl Checker {
                 }
             }
 
+            Type::Array(inner) => Ty::Array(Box::new(self.resolve(inner.as_ref()))),
+
             Type::Fn { params, ret } => Ty::Fn {
                 params: params.iter().map(|t| self.resolve(t)).collect(),
                 ret: Box::new(ret.as_ref().map_or(Ty::Unit, |t| self.resolve(t))),
@@ -490,15 +492,14 @@ impl Checker {
                 name,
                 value,
                 annotated_type,
-                type_span,
                 span,
+                ..
             } => {
                 let expected = annotated_type.as_ref().map(|t| self.resolve(t));
                 let typed_val = self.check_expr(value, expected.as_ref());
 
                 let final_ty = if let Some(expected_ty) = expected {
-                    let err_span = type_span.unwrap_or(value.span());
-                    self.expect(&typed_val.ty, &expected_ty, err_span);
+                    self.expect(&typed_val.ty, &expected_ty, value.span());
 
                     expected_ty
                 } else {
@@ -925,6 +926,35 @@ impl Checker {
                 ty: Ty::String,
                 span: *span,
             },
+            Expression::ArrayLiteral { values, span } => {
+                let values: Vec<_> = values
+                    .iter()
+                    .map(|expr| self.check_expr(expr, expected))
+                    .collect();
+
+                let inner_ty = match values.first() {
+                    Some(expr) => expr.ty.clone(),
+                    None => Ty::Unit,
+                };
+
+                if values.iter().any(|expr| expr.ty.clone() != inner_ty) {
+                    for expr in values.clone() {
+                        if expr.ty != inner_ty {
+                            self.errors.push(TypeError::Mismatch {
+                                expected: inner_ty.clone(),
+                                found: expr.ty.clone(),
+                                span: expr.span,
+                            });
+                        }
+                    }
+                }
+
+                TypedExpr {
+                    kind: TypedExprKind::ArrayLiteral { values },
+                    ty: Ty::Array(Box::new(inner_ty)),
+                    span: *span,
+                }
+            }
             Expression::Identifier { name, span } => {
                 if let Some((variant_name, None)) = self.variant_cases.get(name) {
                     return TypedExpr {
@@ -1231,6 +1261,7 @@ impl Checker {
                 self.expect(&index_ty, &Ty::Int, *span);
 
                 let el_ty = match left_ty {
+                    Ty::Array(inner) => *inner.clone(),
                     Ty::String => Ty::Char,
                     Ty::Error => Ty::Error,
                     _ => {

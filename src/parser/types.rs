@@ -51,6 +51,8 @@ impl std::fmt::Display for ParseError {
 pub enum Type {
     Named(TypePath),
 
+    Array(Box<Type>),
+
     Fn {
         params: Vec<Type>,
         ret: Option<Box<Type>>,

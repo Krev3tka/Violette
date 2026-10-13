@@ -39,6 +39,11 @@ pub enum Expression {
         span: Span,
     },
 
+    ArrayLiteral {
+        values: Vec<Expression>,
+        span: Span,
+    },
+
     StructLiteral {
         name: String,
         fields: Vec<StructLiteralField>,
@@ -255,6 +260,60 @@ impl Parser {
                 val: *c,
                 span: start_span,
             },
+            Token::LeftBracket => {
+                let open_token = self.current_token.token.clone();
+                let open_span = self.current_token.span;
+
+                self.next_token();
+                self.skip_terminators();
+                self.paren_depth += 1;
+
+                let mut values = Vec::new();
+
+                if matches!(self.current_token.token.clone(), Token::RightBracket) {
+                    self.next_token();
+                    return Ok(Expression::ArrayLiteral {
+                        values,
+                        span: open_span.merge(&self.current_token.span),
+                    });
+                }
+
+                loop {
+                    values.push(self.parse_expression(Lowest)?);
+                    self.skip_terminators();
+
+                    while self.paren_depth > 0 && matches!(self.peek_token.token, Token::Newline) {
+                        self.next_token();
+                    }
+
+                    if matches!(self.peek_token.token, Token::Comma) {
+                        self.next_token();
+                        self.next_token();
+
+                        if matches!(self.current_token.token, Token::RightBracket) {
+                            break;
+                        }
+                    } else if matches!(self.peek_token.token.clone(), Token::RightBracket) {
+                        self.next_token();
+                        break;
+                    } else {
+                        return Err(ParseError::UnclosedDelimiter {
+                            open_token: Box::new(open_token),
+                            open_span,
+                            expected_token: Box::new(Token::RightBracket),
+                            found_tok: Box::new(self.peek_token.token.clone()),
+                            found_span: self.peek_token.span,
+                        });
+                    }
+                }
+
+                self.paren_depth -= 1;
+
+                Expression::ArrayLiteral {
+                    values,
+                    span: open_span.merge(&self.current_token.span),
+                }
+            }
             Token::LeftParen => {
                 let open_token = self.current_token.token.clone();
                 let open_span = self.current_token.span;
@@ -658,7 +717,7 @@ impl Parser {
         Ok(Expression::Index {
             left: Box::new(left),
             index: Box::new(index),
-            span: start_span,
+            span: start_span.merge(&self.current_token.span),
         })
     }
 
@@ -1182,6 +1241,7 @@ impl Expression {
             Expression::FloatLiteral { span, .. } => *span,
             Expression::BoolLiteral { span, .. } => *span,
             Expression::StringLiteral { span, .. } => *span,
+            Expression::ArrayLiteral { span, .. } => *span,
             Expression::StructLiteral { span, .. } => *span,
             Expression::CharLiteral { span, .. } => *span,
             Expression::Prefix { span, .. } => *span,
