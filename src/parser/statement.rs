@@ -51,14 +51,6 @@ pub enum Statement {
         span: Span,
     },
 
-    ForCounter {
-        init: Box<Statement>,
-        condition: Expression,
-        post: Expression,
-        body: Vec<Statement>,
-        span: Span,
-    },
-
     Break {
         span: Span,
     },
@@ -406,8 +398,6 @@ impl Parser {
                 self.expect(Token::In, self.unexpected(&self.current_token))?;
 
                 self.parse_for_range(&var)
-            } else if matches!(self.peek_token.token, Token::Assign) {
-                self.parse_for_counter(&var)
             } else {
                 Err(ParseError::InvalidForLoopSyntax {
                     span: self.current_token.span,
@@ -440,65 +430,6 @@ impl Parser {
         Ok(Statement::ForRange {
             variable,
             iterable,
-            body,
-            span,
-        })
-    }
-
-    pub fn parse_for_counter(&mut self, var: &str) -> Result<Statement, ParseError> {
-        let span = self.current_token.span;
-        let name = var.to_owned();
-        self.next_token();
-
-        self.expect(
-            Token::Assign,
-            ParseError::ExpectedAssign {
-                context: "in 'for' counter initializer",
-                found: self.current_token.token.clone(),
-                span: self.current_token.span,
-            },
-        )?;
-
-        let saved = self.allowed_struct_literal;
-        self.allowed_struct_literal = false;
-        let value = self.parse_expression(Lowest)?;
-        self.allowed_struct_literal = saved;
-
-        let init = Box::new(Statement::Let {
-            name,
-            value,
-            span,
-            annotated_type: None,
-            type_span: None,
-        });
-
-        self.next_token();
-        self.expect(Token::Semicolon, self.unexpected(&self.current_token))?;
-
-        let saved = self.allowed_struct_literal;
-        self.allowed_struct_literal = false;
-        let condition = self.parse_expression(Lowest)?;
-        self.allowed_struct_literal = saved;
-
-        self.next_token();
-        self.expect(Token::Semicolon, self.unexpected(&self.current_token))?;
-
-        let saved = self.allowed_struct_literal;
-        self.allowed_struct_literal = false;
-        let post = self.parse_expression(Lowest)?;
-        self.allowed_struct_literal = saved;
-
-        self.next_token();
-        self.skip_terminators();
-
-        self.expect(Token::LeftBrace, self.unexpected(&self.current_token))?;
-
-        let (body, _) = self.parse_block()?;
-
-        Ok(Statement::ForCounter {
-            init,
-            condition,
-            post,
             body,
             span,
         })
@@ -1071,7 +1002,6 @@ impl Statement {
             Statement::Const { span, .. } => *span,
             Statement::While { span, .. } => *span,
             Statement::ForRange { span, .. } => *span,
-            Statement::ForCounter { span, .. } => *span,
             Statement::Return { span, .. } => *span,
             Statement::ExternFunc { span, .. } => *span,
             Statement::Func { span, .. } => *span,

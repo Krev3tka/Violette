@@ -436,34 +436,6 @@ impl Checker {
                 ty: Ty::Unit,
                 span: *span,
             }
-        } else if let Statement::ForCounter {
-            init,
-            condition: cond,
-            post,
-            body,
-            span,
-        } = stmt
-        {
-            let init = self.check_stmt(init.as_ref());
-
-            let cond = self.check_expr(cond, None);
-
-            self.expect(&cond.ty, &Ty::Bool, stmt.span());
-
-            let post = self.check_expr(post, None);
-
-            let body = self.check_block(body);
-
-            TypedStmt {
-                kind: TypedStmtKind::ForCounter {
-                    init: Box::new(init),
-                    condition: cond,
-                    post,
-                    body,
-                },
-                ty: Ty::Unit,
-                span: *span,
-            }
         } else {
             unreachable!()
         };
@@ -575,9 +547,7 @@ impl Checker {
                     span: *span,
                 }
             }
-            Statement::While { .. } | Statement::ForCounter { .. } | Statement::ForRange { .. } => {
-                self.check_for_stmt(stmt)
-            }
+            Statement::While { .. } | Statement::ForRange { .. } => self.check_for_stmt(stmt),
             Statement::Break { .. } | Statement::Continue { .. } => {
                 if !self.in_loop {
                     self.errors.push(TypeError::OutsideLoop {
@@ -2586,7 +2556,6 @@ impl Checker {
                 | Statement::Const { .. }
                 | Statement::While { .. }
                 | Statement::ForRange { .. }
-                | Statement::ForCounter { .. }
                 | Statement::Func { .. }
                 | Statement::Struct { .. }
                 | Statement::Break { .. }

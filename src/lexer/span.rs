@@ -241,22 +241,6 @@ impl ClearSpan for Statement {
                 }
                 *span = Span::default();
             }
-            Statement::ForCounter {
-                init,
-                condition,
-                post,
-                body,
-                span,
-                ..
-            } => {
-                init.clear_span();
-                condition.clear_span();
-                post.clear_span();
-                for stmt in body {
-                    stmt.clear_span();
-                }
-                *span = Span::default();
-            }
             Statement::ForRange {
                 iterable,
                 body,

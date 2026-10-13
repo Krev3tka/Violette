@@ -3,13 +3,14 @@ pub mod statements_tests {
     use crate::lexer::lexer::Lexer;
     use crate::lexer::span::Span;
     use crate::lexer::token::Token;
-    use crate::parser::Statement;
+    use crate::parser::expression::RangeKind::Inclusive;
     use crate::parser::parser::Parser;
     use crate::parser::statement::{ElseIf, FuncParam, StructParam};
     use crate::parser::types::Type::Union;
     use crate::parser::types::{Type, TypePath};
+    use crate::parser::{Expression, Statement};
     use crate::tests::helpers::{
-        assert_stmt_tests, call, const_stmt, expr_stmt, for_counter, for_range, func, ident,
+        assert_stmt_tests, call, const_stmt, dummy_span, expr_stmt, for_range, func, ident,
         if_expr, index, infix, int, let_stmt, postfix, ret, struct_def, while_loop,
     };
     use crate::typechecker::error::BindingKind;
@@ -70,28 +71,18 @@ if a > 7 {
     fn for_whose_advantage() {
         let test_cases = vec![
             (
-                "for i = someVar; i < 10; i++ {
-    let a = 5 * i
-    let b = i * 3
-}",
-                for_counter(
-                    let_stmt("i", ident("someVar")),
-                    infix(ident("i"), Token::Less, int(10)),
-                    postfix(ident("i"), Token::Increment),
-                    vec![
-                        let_stmt("a", infix(int(5), Token::Multiply, ident("i"))),
-                        let_stmt("b", infix(ident("i"), Token::Multiply, int(3))),
-                    ],
-                ),
-            ),
-            (
-                "for x in thru(1, 10) {
+                "for x in 1..=10 {
     let a = 5 * x
     let b = x * 3
 }",
                 for_range(
                     "x",
-                    call(ident("thru"), vec![int(1), int(10)]),
+                    Expression::Range {
+                        start: Some(Box::new(int(1))),
+                        end: Some(Box::new(int(10))),
+                        range_kind: Inclusive,
+                        span: dummy_span(),
+                    },
                     vec![
                         let_stmt("a", infix(int(5), Token::Multiply, ident("x"))),
                         let_stmt("b", infix(ident("x"), Token::Multiply, int(3))),

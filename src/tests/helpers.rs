@@ -9,7 +9,7 @@ use crate::parser::types::Type;
 use crate::parser::{Expression, Precedence, Statement};
 
 #[inline]
-fn dummy_span() -> Span {
+pub fn dummy_span() -> Span {
     Span::default()
 }
 
@@ -179,22 +179,6 @@ pub fn for_range(var: &str, iter: Expression, body: Vec<Statement>) -> Statement
         span: dummy_span(),
     }
 }
-
-pub fn for_counter(
-    init: Statement,
-    cond: Expression,
-    post: Expression,
-    body: Vec<Statement>,
-) -> Statement {
-    Statement::ForCounter {
-        init: Box::new(init),
-        condition: cond,
-        post,
-        body,
-        span: dummy_span(),
-    }
-}
-
 pub fn ret(v: Option<Expression>) -> Statement {
     Statement::Return {
         value: v,
