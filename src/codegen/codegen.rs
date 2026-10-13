@@ -768,18 +768,6 @@ impl Codegen {
                 let body = self.emit_block(body)?;
                 format!("while ({}) {{\n{}\n}}", cond, body)
             }
-            TypedStmtKind::ForCounter {
-                init,
-                condition,
-                post,
-                body,
-            } => {
-                let initial = self.emit_statement(init)?;
-                let cond = self.emit_expression(condition)?;
-                let postfix = self.emit_expression(post)?;
-                let body = self.emit_block(body)?;
-                format!("for ({} {}; {}) {{\n{}\n}}", initial, cond, postfix, body)
-            }
             TypedStmtKind::ForRange {
                 variable,
                 iterable,

@@ -162,13 +162,6 @@ pub enum TypedStmtKind {
         body: Vec<TypedStmt>,
     },
 
-    ForCounter {
-        init: Box<TypedStmt>,
-        condition: TypedExpr,
-        post: TypedExpr,
-        body: Vec<TypedStmt>,
-    },
-
     Break,
 
     Continue,
