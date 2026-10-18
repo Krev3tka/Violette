@@ -38,7 +38,7 @@ impl Diagnostics for TypeError {
                 let labels = [
                     Label::secondary(
                         *decl_span,
-                        format!("first variable defined as {} here", kind_str),
+                        format!("variable defined as {} here", kind_str),
                         path.to_string(),
                     ),
                     Label::primary(
@@ -434,19 +434,14 @@ impl Diagnostics for TypeError {
         labels: &[Label],
         help: Option<&str>,
     ) -> String {
-        let mut res = "error: ".magenta().bold().to_string();
+        let mut res = "error: ".red().bold().to_string();
 
         res.push_str(message.as_str());
-        res.push_str(
-            format!(
-                "\n  > {}:{}:{}\n",
-                path, main_span.start.line, main_span.start.col
-            )
-            .as_str(),
-        );
+        res.push('\n');
 
         let underline = |span: Span| {
             let len = span.end.col.saturating_sub(span.start.col).max(1);
+
             format!("{}{}", " ".repeat(span.start.col), "~".repeat(len))
         };
 
@@ -457,107 +452,64 @@ impl Diagnostics for TypeError {
 
         let width = max_line.span.start.line.to_string().len();
 
-        let is_compact = labels.len() == 1;
+        // let is_compact = labels.len() == 1;
+        //
+        // let line_len = if is_compact { 50 } else { 60 };
 
-        let line_len = if is_compact { 50 } else { 60 };
+        let indent = " ".repeat(width);
 
         res.push_str(
             format!(
-                " {empty:>width$}  ╭─{line}\n",
-                empty = "",
-                width = width,
-                line = "─".repeat(line_len)
+                " {indent}  ╭─[ {}:{}:{} ]\n",
+                path, main_span.start.line, main_span.start.col
             )
             .as_str(),
         );
 
-        for label in labels {
+        res.push_str(&format!(" {indent}  \u{2502}\n"));
+
+        for (i, label) in labels.iter().enumerate() {
             let file_content = std::fs::read_to_string(&label.file_path).unwrap_or_default();
             let file_lines: Vec<&str> = file_content.lines().collect();
 
+            let code_line = file_lines
+                .get(label.span.start.line.saturating_sub(1))
+                .copied()
+                .unwrap_or("<source unavailable>");
+
+            res.push_str(&format!(
+                " {line:>width$}  \u{2502}  {code_line}\n",
+                line = label.span.start.line,
+                width = width,
+                code_line = code_line,
+            ));
+
             match label.style {
                 LabelStyle::Primary => {
-                    if !message.contains("outside of a loop") {
-                        // res.push_str(
-                        //     format!(" {empty:>width$}  \u{2502}\n", empty = "", width = width)
-                        //         .as_str(),
-                        // );
-                    }
-                    res.push_str(
-                        format!(
-                            " {line:>width$}  \u{2502}  {code_line}\n",
-                            line = label.span.start.line,
-                            width = width,
-                            code_line = file_lines
-                                .get(label.span.start.line.saturating_sub(1))
-                                .copied()
-                                .unwrap_or("<source unavailable>")
-                        )
-                        .as_str(),
-                    );
-                    let indent = format!("{:>width$}", "", width = width);
-                    res.push_str(
-                        format!(
+                    res.push_str(&format!(
                             " {indent}  \u{2502} {decl_mark} {message}\n",
-                            decl_mark = underline(label.span).magenta().bold(),
-                            message = label.message.magenta().bold()
-                        )
-                        .as_str(),
-                    );
-                    // if !message.contains("outside of a loop") {
-                    //     res.push_str(
-                    //         format!(" {empty:>width$}  \u{2502}\n", empty = "", width = width)
-                    //             .as_str(),
-                    //     );
-                    // }
+                            decl_mark = underline(label.span).red().bold(),
+                            message = label.message.red().bold()
+                        ));
                 }
                 LabelStyle::Secondary => {
-                    if !message.contains("outside of a loop") {
-                        // res.push_str(
-                        //     format!(" {empty:>width$}  \u{2502}\n", empty = "", width = width)
-                        //         .as_str(),
-                        // );
-                    }
-                    res.push_str(
-                        format!(
-                            " {line:>width$}  \u{2502}  {code_line}\n",
-                            line = label.span.start.line,
-                            width = width,
-                            code_line = file_lines
-                                .get(label.span.start.line.saturating_sub(1))
-                                .copied()
-                                .unwrap_or("<source unavailable>")
-                        )
-                        .as_str(),
-                    );
-                    let indent = format!("{:>width$}", "", width = width);
-                    res.push_str(
-                        format!(
+                    res.push_str(&format!(
                             " {indent}  \u{2502} {decl_mark} {message}\n",
-                            decl_mark = underline(label.span).replace("~", "_").yellow().bold(),
-                            message = label.message.yellow().bold()
-                        )
-                        .as_str(),
-                    );
-                    if !message.contains("outside of a loop") {
-                        res.push_str(
-                            format!(" {empty:>width$}  \u{2502}\n", empty = "", width = width)
-                                .as_str(),
-                        );
-                    }
+                            decl_mark = underline(label.span).replace("~", "_").cyan().bold(),
+                            message = label.message.cyan().bold()
+                        ));
                 }
+            }
+
+            if i + 1 < labels.len() {
+                res.push_str(&format!(" {indent}  \u{2502}\n"));
             }
         }
 
-        res.push_str(
-            format!(
-                " {empty:>width$}  ╰─{line}\n",
-                empty = "",
-                width = width,
-                line = "─".repeat(line_len)
-            )
-            .as_str(),
-        );
+        res.push_str(&format!(
+            "{line_indent}──╯\n",
+            line_indent = "─".repeat(indent.len() + 1)
+        ));
 
         if let Some(message) = help {
             res.push_str(

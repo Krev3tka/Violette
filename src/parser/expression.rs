@@ -271,7 +271,7 @@ impl Parser {
                 let mut values = Vec::new();
 
                 if matches!(self.current_token.token.clone(), Token::RightBracket) {
-                    self.next_token();
+                    self.paren_depth -= 1;
                     return Ok(Expression::ArrayLiteral {
                         values,
                         span: open_span.merge(&self.current_token.span),

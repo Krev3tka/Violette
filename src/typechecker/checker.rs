@@ -927,31 +927,38 @@ impl Checker {
                 span: *span,
             },
             Expression::ArrayLiteral { values, span } => {
-                let values: Vec<_> = values
-                    .iter()
-                    .map(|expr| self.check_expr(expr, expected))
-                    .collect();
-
-                let inner_ty = match values.first() {
-                    Some(expr) => expr.ty.clone(),
-                    None => Ty::Unit,
+                let expected_elem_ty = match expected {
+                    Some(Ty::Array(inner)) => Some(inner.as_ref()),
+                    _ => None,
                 };
 
-                if values.iter().any(|expr| expr.ty.clone() != inner_ty) {
-                    for expr in values.clone() {
-                        if expr.ty != inner_ty {
-                            self.errors.push(TypeError::Mismatch {
-                                expected: inner_ty.clone(),
-                                found: expr.ty.clone(),
-                                span: expr.span,
+                let target_elem_ty = if let Some(exp) = expected_elem_ty {
+                    exp.clone()
+                } else {
+                    match values.first() {
+                        Some(first_expr) => self.infer(first_expr, None),
+                        None => {
+                            self.errors.push(TypeError::Unsupported {
+                                desc: "cannot infer type of an empty array, add type annotation like `let a: [Int] = []``".to_string(),
+                                span: *span,
                             });
+                            Ty::Error
                         }
                     }
-                }
+                };
+
+                let values: Vec<_> = values
+                    .iter()
+                    .map(|expr| {
+                        let typed = self.check_expr(expr, expected);
+                        self.expect(&typed.ty, &target_elem_ty, expr.span());
+                        typed
+                    })
+                    .collect();
 
                 TypedExpr {
                     kind: TypedExprKind::ArrayLiteral { values },
-                    ty: Ty::Array(Box::new(inner_ty)),
+                    ty: Ty::Array(Box::new(target_elem_ty)),
                     span: *span,
                 }
             }
