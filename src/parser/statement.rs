@@ -520,6 +520,7 @@ impl Parser {
 
         if matches!(self.current_token.token.clone(), Token::Assign) {
             self.next_token();
+            self.skip_terminators();
 
             let expr = self.parse_expression(Lowest)?;
             self.next_token();

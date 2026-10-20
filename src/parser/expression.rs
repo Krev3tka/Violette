@@ -1,6 +1,6 @@
 use crate::lexer::span::Span;
 use crate::lexer::token::Token;
-use crate::parser::Precedence::Lowest;
+use crate::parser::Precedence::{Lowest, Prefix};
 use crate::parser::parser::{MAX_DEPTH, Parser};
 use crate::parser::statement::{ElseIf, FuncParam, MatchArm};
 use crate::parser::types::Type;
@@ -344,61 +344,26 @@ impl Parser {
                     | Token::LeftShift
                     | Token::RightShift => {
                         let operator = self.current_token.token.clone();
+                        let operator_span = self.current_token.span;
                         self.next_token();
 
                         if matches!(self.current_token.token.clone(), Token::RightParen) {
-                            let arg_ident_0 = Expression::Identifier {
-                                name: String::from("$0"),
-                                span: start_span,
-                            };
-
-                            let arg_ident_1 = Expression::Identifier {
-                                name: String::from("$1"),
-                                span: start_span,
-                            };
-
-                            let body_expr = Expression::Infix {
-                                left: Box::new(arg_ident_0),
-                                operator: operator.clone(),
-                                right: Box::new(arg_ident_1),
-                                span: start_span,
-                            };
-
-                            return Ok(Expression::Lambda {
-                                params: vec![
-                                    FuncParam {
-                                        name: String::from("$0"),
-                                        param_type: Type::Infer,
-                                        span: start_span,
-                                        kind: BindingKind::Param,
-                                        is_ref: false,
-                                    },
-                                    FuncParam {
-                                        name: String::from("$1"),
-                                        param_type: Type::Infer,
-                                        span: start_span,
-                                        kind: BindingKind::Param,
-                                        is_ref: false,
-                                    },
-                                ],
-                                return_type: None,
-                                body: vec![Statement::Return {
-                                    value: Some(body_expr),
-                                    span: start_span,
-                                }],
-                                span: start_span,
-                            });
+                            let expr =
+                                self.parse_operator_as_lambda(operator.clone(), operator_span);
+                            self.paren_depth -= 1;
+                            return expr;
                         }
 
                         if matches!(operator, Token::Subtract) {
                             self.paren_depth += 1
                         } else {
-                            let right_part = self.parse_expression(Lowest)?;
+                            let expr = self.parse_right_section(operator, start_span)?;
                             self.skip_terminators();
 
-                            if matches!(self.peek_token.token.clone(), Token::RightParen) {
+                            if matches!(self.peek_token.token, Token::RightParen) {
                                 self.next_token();
                                 self.paren_depth -= 1;
+                                return Ok(expr);
                             } else {
                                 return Err(ParseError::UnclosedDelimiter {
                                     open_token: Box::new(open_token),
@@ -408,34 +373,6 @@ impl Parser {
                                     found_span: self.peek_token.span,
                                 });
                             }
-
-                            let arg_ident = Expression::Identifier {
-                                name: String::from("$0"),
-                                span: start_span,
-                            };
-
-                            let body_expr = Expression::Infix {
-                                left: Box::new(arg_ident),
-                                operator,
-                                right: Box::new(right_part),
-                                span: start_span,
-                            };
-
-                            return Ok(Expression::Lambda {
-                                params: vec![FuncParam {
-                                    name: String::from("$0"),
-                                    param_type: Type::Infer,
-                                    span: start_span,
-                                    kind: BindingKind::Param,
-                                    is_ref: false,
-                                }],
-                                return_type: None,
-                                body: vec![Statement::Return {
-                                    value: Some(body_expr),
-                                    span: start_span,
-                                }],
-                                span: start_span,
-                            });
                         }
                     }
                     _ => {}
@@ -465,13 +402,51 @@ impl Parser {
             | Token::Increment
             | Token::Decrement => {
                 let operator = self.current_token.token.clone();
-                self.next_token();
-                let right = self.parse_expression(Precedence::Prefix)?;
+                let op_span = self.current_token.span;
 
-                Expression::Prefix {
-                    operator,
-                    right: Box::new(right),
-                    span: start_span.merge(&self.current_token.span),
+                if matches!(operator, Token::Subtract)
+                    && self.allowed_bare_sections
+                    && matches!(self.peek_token.token, Token::Comma | Token::RightParen)
+                {
+                    self.parse_operator_as_lambda(operator, op_span)?
+                } else {
+                    self.next_token();
+                    let right = self.parse_expression(Prefix)?;
+
+                    Expression::Prefix {
+                        operator,
+                        right: Box::new(right),
+                        span: start_span.merge(&self.current_token.span),
+                    }
+                }
+            }
+            Token::Equals
+            | Token::NotEquals
+            | Token::Less
+            | Token::Greater
+            | Token::LessOrEquals
+            | Token::GreaterOrEquals
+            | Token::Add
+            | Token::Multiply
+            | Token::Divide
+            | Token::Modulus
+            | Token::Power
+            | Token::LogicAnd
+            | Token::LogicOr
+            | Token::BitOr
+            | Token::BitXOR
+            | Token::LeftShift
+            | Token::RightShift
+                if self.allowed_bare_sections =>
+            {
+                let operator = self.current_token.token.clone();
+                let operator_span = self.current_token.span;
+
+                if matches!(self.peek_token.token, Token::Comma | Token::RightParen) {
+                    self.parse_operator_as_lambda(operator, operator_span)?
+                } else {
+                    self.next_token();
+                    self.parse_right_section(operator, operator_span)?
                 }
             }
             Token::If => self.parse_if_expression()?,
@@ -654,7 +629,12 @@ impl Parser {
                     self.next_token();
                     self.next_token();
 
-                    let mut right = self.parse_expression(Precedence::Sprout)?;
+                    let saved = self.allowed_bare_sections;
+                    self.allowed_bare_sections = true;
+                    let right_res = self.parse_expression(Precedence::Sprout);
+                    self.allowed_bare_sections = saved;
+
+                    let mut right = right_res?;
 
                     if let Expression::Call { ref mut args, .. } = right {
                         args.insert(0, left);
@@ -960,7 +940,12 @@ impl Parser {
         }
 
         loop {
-            args.push(self.parse_expression(Lowest)?);
+            let saved = self.allowed_bare_sections;
+            self.allowed_bare_sections = true;
+            let arg = self.parse_expression(Lowest)?;
+            self.allowed_bare_sections = saved;
+
+            args.push(arg);
             self.skip_terminators();
 
             while self.paren_depth > 0 && matches!(self.peek_token.token, Token::Newline) {
@@ -1118,6 +1103,91 @@ impl Parser {
             params,
             return_type,
             body,
+            span: start_span,
+        })
+    }
+
+    pub fn parse_right_section(
+        &mut self,
+        operator: Token,
+        start_span: Span,
+    ) -> Result<Expression, ParseError> {
+        let right_part = self.parse_expression(Lowest)?;
+        self.skip_terminators();
+
+        let arg_ident = Expression::Identifier {
+            name: String::from("$0"),
+            span: start_span,
+        };
+
+        let body_expr = Expression::Infix {
+            left: Box::new(arg_ident),
+            operator,
+            right: Box::new(right_part),
+            span: start_span,
+        };
+
+        Ok(Expression::Lambda {
+            params: vec![FuncParam {
+                name: String::from("$0"),
+                param_type: Type::Infer,
+                span: start_span,
+                kind: BindingKind::Param,
+                is_ref: false,
+            }],
+            return_type: None,
+            body: vec![Statement::Return {
+                value: Some(body_expr),
+                span: start_span,
+            }],
+            span: start_span,
+        })
+    }
+
+    pub fn parse_operator_as_lambda(
+        &mut self,
+        operator: Token,
+        start_span: Span,
+    ) -> Result<Expression, ParseError> {
+        let arg_ident_0 = Expression::Identifier {
+            name: String::from("$0"),
+            span: start_span,
+        };
+
+        let arg_ident_1 = Expression::Identifier {
+            name: String::from("$1"),
+            span: start_span,
+        };
+
+        let body_expr = Expression::Infix {
+            left: Box::new(arg_ident_0),
+            operator: operator.clone(),
+            right: Box::new(arg_ident_1),
+            span: start_span,
+        };
+
+        Ok(Expression::Lambda {
+            params: vec![
+                FuncParam {
+                    name: String::from("$0"),
+                    param_type: Type::Infer,
+                    span: start_span,
+                    kind: BindingKind::Param,
+                    is_ref: false,
+                },
+                FuncParam {
+                    name: String::from("$1"),
+                    param_type: Type::Infer,
+                    span: start_span,
+                    kind: BindingKind::Param,
+                    is_ref: false,
+                },
+            ],
+            return_type: None,
+            body: vec![Statement::Return {
+                value: Some(body_expr),
+                span: start_span,
+            }],
             span: start_span,
         })
     }

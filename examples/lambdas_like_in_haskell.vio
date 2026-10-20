@@ -5,9 +5,9 @@ func filter_print(x: Int, predicate: func (Int) -> Bool) {
 }
 
 func main() {
-    filter_print(10, (> 5))
-    filter_print(3, (> 5))
+    filter_print(10, > 5)
+    filter_print(3, > 5)
 
-    filter_print(7, (!= 7))
-    filter_print(42, (!= 7))
+    filter_print(7, != 7)
+    filter_print(42, != 7)
 }

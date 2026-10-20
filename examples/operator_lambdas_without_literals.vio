@@ -12,14 +12,14 @@ func calculate_string(a: String, b: String, op: func(String, String) -> String) 
 
 func main() {
     println(
-        calculate_float(7.3, 5.5, (-)) // 1.8
+        calculate_float(7.3, 5.5, -) // 1.8
     )
 
     println(
-        calculate_int(5, 7, (**)) // 78_125
+        calculate_int(5, 7, **) // 78_125
     )
 
     println(
-        calculate_string("Hello, ", "Violette", (+)) // Hello, Violette
+        calculate_string("Hello, ", "Violette", +) // Hello, Violette
     )
 }

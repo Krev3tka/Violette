@@ -17,8 +17,8 @@ pub enum Precedence {
     Shift,       // >> <<
     Sum,         // + -
     Product,     // * / %
-    Prefix,      // -X !X ++X --X
     Power,       // **
+    Prefix,      // -X !X ++X --X
     Postfix,     // x++ x-- () [] .
 }
 

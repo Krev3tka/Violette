@@ -1,4 +1,5 @@
-func map(num: Int, action: func (Int) -> Int) -> Int = action(num)
+func map(num: Int, action: func (Int) -> Int) -> Int =
+    action(num)
 func filter(num: Int, predicate: func (Int) -> Bool) -> Int {
     return if predicate(num) { num } else { -1 }
 }
