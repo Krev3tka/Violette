@@ -487,17 +487,17 @@ impl Diagnostics for TypeError {
             match label.style {
                 LabelStyle::Primary => {
                     res.push_str(&format!(
-                            " {indent}  \u{2502} {decl_mark} {message}\n",
-                            decl_mark = underline(label.span).red().bold(),
-                            message = label.message.red().bold()
-                        ));
+                        " {indent}  \u{2502} {decl_mark} {message}\n",
+                        decl_mark = underline(label.span).red().bold(),
+                        message = label.message.red().bold()
+                    ));
                 }
                 LabelStyle::Secondary => {
                     res.push_str(&format!(
-                            " {indent}  \u{2502} {decl_mark} {message}\n",
-                            decl_mark = underline(label.span).replace("~", "_").cyan().bold(),
-                            message = label.message.cyan().bold()
-                        ));
+                        " {indent}  \u{2502} {decl_mark} {message}\n",
+                        decl_mark = underline(label.span).replace("~", "_").cyan().bold(),
+                        message = label.message.cyan().bold()
+                    ));
                 }
             }
 

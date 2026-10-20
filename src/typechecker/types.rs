@@ -40,7 +40,7 @@ impl fmt::Display for Ty {
             Ty::Ref {
                 inner,
                 is_mut: true,
-            } => write!(f, "&var {}", inner),
+            } => write!(f, "var &{}", inner),
             Ty::Ref {
                 inner,
                 is_mut: false,

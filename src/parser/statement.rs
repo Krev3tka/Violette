@@ -128,6 +128,18 @@ pub struct StructParam {
     pub kind: BindingKind,
 }
 
+impl StructParam {
+    pub fn to_func(&self) -> FuncParam {
+        FuncParam {
+            name: self.name.clone(),
+            param_type: self.param_type.clone(),
+            span: self.span,
+            kind: self.kind,
+            is_ref: false,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct MatchArm {
     pub pattern: Expression,

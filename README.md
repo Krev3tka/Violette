@@ -151,7 +151,7 @@ cargo build --release
 ### Run an Example
 ```bash
 # Run any .vio file directly:
-./target/release/violette run examples/demo_showcase.vio
+./target/release/violette run examples/binary_search.vio
 ```
 
 ### Nix Environment (Reproducible)

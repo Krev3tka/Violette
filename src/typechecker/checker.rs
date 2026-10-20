@@ -12,6 +12,7 @@ pub use crate::typechecker::error::TypeError;
 use crate::typechecker::error::TypeError::ConflictingEntryPoint;
 use crate::typechecker::error::{BindingKind, DefinitionKind, LoopControlKind};
 use crate::typechecker::types::Ty;
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Debug)]
@@ -164,111 +165,24 @@ impl Checker {
                 } => {
                     let target_ty = self.resolve(target);
 
-                    match target_ty {
+                    let prefix = match &target_ty {
                         Ty::Struct(struct_name) => {
-                            if !self.structs.contains_key(&struct_name) {
+                            if !self.structs.contains_key(struct_name) {
                                 self.errors.push(TypeError::UnknownName {
                                     name: struct_name.clone(),
                                     span: *span,
                                 });
                                 continue;
                             }
-
-                            for method in methods {
-                                if let Statement::Func {
-                                    name,
-                                    params,
-                                    return_type,
-                                    span,
-                                    ..
-                                } = method
-                                {
-                                    let full_name = format!("{}.{}", struct_name, name);
-
-                                    let params_ty: Vec<_> = params
-                                        .iter()
-                                        .map(|p| self.resolve(&p.param_type))
-                                        .collect();
-
-                                    let ret =
-                                        return_type.as_ref().map_or(Ty::Unit, |t| self.resolve(t));
-
-                                    if self.funcs.contains_key(&full_name) {
-                                        self.errors.push(TypeError::DuplicateDefinition {
-                                            name: full_name.clone(),
-                                            first_span: match self.funcs.get(name) {
-                                                Some(f) => f.span,
-                                                None => unreachable!(),
-                                            },
-                                            second_span: stmt.span(),
-                                            def_kind: DefinitionKind::Fun,
-                                        });
-                                        continue;
-                                    }
-
-                                    self.funcs.insert(
-                                        full_name.clone(),
-                                        FnSig {
-                                            params: params_ty,
-                                            ret,
-                                            span: *span,
-                                        },
-                                    );
-                                }
-                            }
+                            struct_name.clone()
                         }
-                        Ty::Int | Ty::Float | Ty::String | Ty::Char | Ty::Bool => {
-                            for method in methods {
-                                if let Statement::Func {
-                                    name,
-                                    params,
-                                    return_type,
-                                    span,
-                                    ..
-                                } = method
-                                {
-                                    let first_part = match target_ty {
-                                        Ty::Int => "int",
-                                        Ty::Float => "float64",
-                                        Ty::String => "string",
-                                        Ty::Char => "char",
-                                        Ty::Bool => "bool",
-                                        _ => unreachable!(),
-                                    };
-
-                                    let full_name = format!("{}.{}", first_part, name);
-
-                                    let params_ty: Vec<_> = params
-                                        .iter()
-                                        .map(|p| self.resolve(&p.param_type))
-                                        .collect();
-
-                                    let ret_ty =
-                                        return_type.as_ref().map_or(Ty::Unit, |t| self.resolve(t));
-
-                                    if self.funcs.contains_key(&full_name) {
-                                        self.errors.push(TypeError::DuplicateDefinition {
-                                            name: full_name.clone(),
-                                            first_span: match self.funcs.get(&full_name) {
-                                                Some(f) => f.span,
-                                                None => unreachable!(),
-                                            },
-                                            second_span: stmt.span(),
-                                            def_kind: DefinitionKind::Fun,
-                                        });
-                                        continue;
-                                    }
-
-                                    self.funcs.insert(
-                                        full_name.clone(),
-                                        FnSig {
-                                            params: params_ty,
-                                            ret: ret_ty,
-                                            span: *span,
-                                        },
-                                    );
-                                }
-                            }
+                        Ty::Int => "int".to_string(),
+                        Ty::Float => "float64".to_string(),
+                        Ty::String => "string".to_string(),
+                        Ty::Char => "char".to_string(),
+                        Ty::Bool => "bool".to_string(),
+                        Ty::Array(inner) => {
+                            format!("Array_{}", self.type_to_prefix(inner.as_ref()))
                         }
                         _ => {
                             self.errors.push(TypeError::Unsupported {
@@ -278,6 +192,44 @@ impl Checker {
                                 ),
                                 span: *span,
                             });
+                            continue;
+                        }
+                    };
+
+                    for method in methods {
+                        if let Statement::Func {
+                            name,
+                            params,
+                            return_type,
+                            span: func_span,
+                            ..
+                        } = method
+                        {
+                            let full_name = format!("{}.{}", prefix, name);
+
+                            let params_ty: Vec<_> =
+                                params.iter().map(|p| self.resolve(&p.param_type)).collect();
+
+                            let ret_ty = return_type.as_ref().map_or(Ty::Unit, |t| self.resolve(t));
+
+                            if self.funcs.contains_key(&full_name) {
+                                self.errors.push(TypeError::DuplicateDefinition {
+                                    name: full_name.clone(),
+                                    first_span: self.funcs.get(&full_name).unwrap().span,
+                                    second_span: *func_span,
+                                    def_kind: DefinitionKind::Fun,
+                                });
+                                continue;
+                            }
+
+                            self.funcs.insert(
+                                full_name,
+                                FnSig {
+                                    params: params_ty,
+                                    ret: ret_ty,
+                                    span: *func_span,
+                                },
+                            );
                         }
                     }
                 }
@@ -1235,18 +1187,19 @@ impl Checker {
                 range_kind,
                 span,
             } => {
-                let start_ty = start.as_ref().map_or(Ty::Int, |s| self.infer(s, None));
-                let end_ty = end.as_ref().map_or(Ty::Int, |e| self.infer(e, None));
+                let typed_start = start
+                    .as_ref()
+                    .map(|s| Box::new(self.check_expr(s.as_ref(), expected)));
+
+                let typed_end = end
+                    .as_ref()
+                    .map(|e| Box::new(self.check_expr(e.as_ref(), expected)));
+
+                let start_ty = typed_start.as_ref().map_or(Ty::Int, |s| s.ty.clone());
+                let end_ty = typed_end.as_ref().map_or(Ty::Int, |e| e.ty.clone());
 
                 self.expect(&start_ty, &Ty::Int, expr.span());
                 self.expect(&end_ty, &Ty::Int, expr.span());
-
-                let typed_start = Some(Box::new(
-                    self.check_expr(start.clone().unwrap().as_ref(), expected),
-                ));
-                let typed_end = Some(Box::new(
-                    self.check_expr(end.clone().unwrap().as_ref(), expected),
-                ));
 
                 TypedExpr {
                     kind: TypedExprKind::Range {
@@ -1262,18 +1215,35 @@ impl Checker {
                 }
             }
             Expression::Index { left, index, span } => {
-                let left_ty = self.infer(left.as_ref(), None);
-                let index_ty = self.infer(index.as_ref(), None);
+                let typed_left = self.check_expr(left.as_ref(), expected);
+                let typed_index = self.check_expr(index.as_ref(), None);
 
-                self.expect(&index_ty, &Ty::Int, *span);
+                let is_slice =
+                    matches!(typed_index.ty, Ty::Generic { ref name, .. } if name == "Range");
 
-                let el_ty = match left_ty {
-                    Ty::Array(inner) => *inner.clone(),
-                    Ty::String => Ty::Char,
+                if !is_slice {
+                    self.expect(&typed_index.ty, &Ty::Int, index.span());
+                }
+
+                let el_ty = match typed_left.ty {
+                    Ty::Array(inner) => {
+                        if is_slice {
+                            Ty::Array(inner.clone())
+                        } else {
+                            *inner.clone()
+                        }
+                    }
+                    Ty::String => {
+                        if is_slice {
+                            Ty::String
+                        } else {
+                            Ty::Char
+                        }
+                    }
                     Ty::Error => Ty::Error,
                     _ => {
                         self.errors.push(TypeError::Unsupported {
-                            desc: format!("Type `{:?}` doesn't support indexing", left_ty),
+                            desc: format!("Type `{:?}` doesn't support indexing", typed_left.ty),
                             span: *span,
                         });
 
@@ -1694,6 +1664,18 @@ impl Checker {
                 }
 
                 let obj = self.check_expr(object.as_ref(), expected);
+
+                if name == "len" && matches!(obj.ty, Ty::Array(_) | Ty::String) {
+                    return TypedExpr {
+                        kind: TypedExprKind::Field {
+                            object: Box::new(obj),
+                            name: name.clone(),
+                        },
+                        ty: Ty::Int,
+                        span: *span,
+                    };
+                }
+
                 if let Expression::Identifier { name: obj_name, .. } = object.as_ref()
                     && let Some((var_name, None)) = self.variant_cases.get(name)
                     && var_name == obj_name
@@ -1708,9 +1690,7 @@ impl Checker {
                     };
                 }
 
-                let obj_ty = self.infer(object.as_ref(), None);
-
-                let res_ty = match obj_ty {
+                let res_ty = match obj.ty {
                     Ty::Struct(s) => match self.structs.get(&s) {
                         Some(struct_sig) => {
                             match struct_sig
@@ -1739,7 +1719,7 @@ impl Checker {
                     Ty::Error => Ty::Error,
                     _ => {
                         self.errors.push(TypeError::NoFields {
-                            ty: obj_ty,
+                            ty: obj.ty,
                             span: *span,
                         });
                         Ty::Error
@@ -1837,6 +1817,9 @@ impl Checker {
                         Ty::String => format!("string.{}", name),
                         Ty::Char => format!("char.{}", name),
                         Ty::Bool => format!("bool.{}", name),
+                        Ty::Array(inner) => {
+                            format!("Array_{}.{}", self.type_to_prefix(inner), name)
+                        }
                         Ty::Error => {
                             return TypedExpr {
                                 kind: TypedExprKind::MethodCall {
@@ -2668,5 +2651,20 @@ impl Checker {
         };
 
         (name.clone(), has_wildcard)
+    }
+
+    fn type_to_prefix<'a>(&self, ty: &'a Ty) -> Cow<'a, str> {
+        match ty {
+            Ty::Int => Cow::from("int"),
+            Ty::Float => Cow::from("float64"),
+            Ty::String => Cow::from("string"),
+            Ty::Char => Cow::from("char"),
+            Ty::Bool => Cow::from("bool"),
+            Ty::Struct(name) => Cow::from(name),
+            Ty::Array(inner) => {
+                Cow::Owned(format!("array_{}", self.type_to_prefix(inner.as_ref())))
+            }
+            _ => Cow::from("unknown"),
+        }
     }
 }

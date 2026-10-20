@@ -31,12 +31,12 @@ var ExpectedErrors = map[string]string{
 
 var ExpectedOutputs = map[string]string{
     "anonymous_functions.vio": "12\n-2\n5\n7\n35\n0\n78125",
-    "array.vio": "1\n2\n3",
+    "array.vio": "1\n2\n3\n5",
+    "binary_search.vio": "3",
 	"bits.vio":            "452",
 	"characteristics.vio":     "A\nя\n⼆",
 	"double_inequality.vio": "x: 1",
-	"demo_showcase.vio":   "3.16228\n8\nIs `Violette` empty?: false",
-	"defer_to_my_wishes.vio":  "1\n2\n3\n4",
+	"defer.vio":  "1\n2\n3\n4",
 	"escape_chars.vio": "Quotes: \"Hello, Violette!\"\nBackslash: \\",
 	"extern_fun.vio":      "64\n8\n3",
 	"extend_demo.vio":     "5",

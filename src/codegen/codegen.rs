@@ -1,12 +1,15 @@
 use crate::codegen::error::CodegenError;
 use crate::codegen::error::CodegenError::Unexpected;
 use crate::hir::typed_ast::{TypedExpr, TypedExprKind, TypedProgram, TypedStmt, TypedStmtKind};
+use crate::lexer::span::Span;
 use crate::lexer::token::Token;
 use crate::parser::expression::RangeKind;
 use crate::parser::statement::FuncParam;
 use crate::parser::types::Type;
 use crate::typechecker::checker::Checker;
+use crate::typechecker::error::BindingKind;
 use crate::typechecker::types::Ty;
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 
 pub struct Codegen {
@@ -21,6 +24,8 @@ pub struct Codegen {
     struct_names: HashSet<String>,
     variant_cases: HashMap<String, (String, bool)>,
     user_funcs: HashSet<String>,
+    slice_types: HashSet<String>,
+    methods_taking_ref: HashSet<String>,
 }
 
 impl Codegen {
@@ -39,6 +44,8 @@ impl Codegen {
             struct_names: HashSet::new(),
             variant_cases: HashMap::new(),
             user_funcs: HashSet::new(),
+            slice_types: HashSet::new(),
+            methods_taking_ref: HashSet::new(),
         }
     }
 
@@ -50,7 +57,12 @@ impl Codegen {
             Ty::Char => "uint32_t".to_string(),
             Ty::String => "VioString".to_string(),
             Ty::Struct(s) => s.to_string(),
-            Ty::Array(inner) => format!("{}*", self.c_type(inner.as_ref())),
+            Ty::Ref { inner, .. } => format!("{}*", self.c_type(inner)),
+            Ty::Array(inner) => {
+                let inner_c = self.c_type(inner.as_ref());
+                self.slice_types.insert(inner_c.clone());
+                format!("VioSlice_{}", inner_c)
+            }
             Ty::Unit => "void".to_string(),
             Ty::Fn { params, ret } => {
                 let ret_c = self.c_type(ret);
@@ -73,7 +85,6 @@ impl Codegen {
 
                 type_name
             }
-            Ty::Ref { inner, .. } => format!("{}*", self.c_type(inner)),
             Ty::Infer => "int64_t".to_string(),
             _ => "unknown".to_string(),
         }
@@ -85,6 +96,18 @@ impl Codegen {
         for s in &prg.declarations {
             if let TypedStmtKind::Func { name, .. } = &s.kind {
                 self.user_funcs.insert(name.clone());
+            }
+
+            if let TypedStmtKind::Extend { target, methods } = &s.kind {
+                for method in methods {
+                    if let TypedStmtKind::Func { name, params, .. } = &method.kind
+                        && let Some(first) = params.first()
+                        && first.is_ref
+                    {
+                        let c_name = format!("vio_user_{}_{}", self.type_to_prefix(target), name);
+                        self.methods_taking_ref.insert(c_name);
+                    }
+                }
             }
 
             match &s.kind {
@@ -218,6 +241,13 @@ impl Codegen {
         let mut final_lines = Vec::new();
         final_lines.push("#include \"vio_runtime.h\"\n".to_string());
 
+        for slice_ty in &self.slice_types {
+            final_lines.push(format!(
+                "typedef struct {{\n    int64_t len;\n    {slice_ty}* data;\n}} VioSlice_{slice_ty};"
+            ));
+        }
+        final_lines.push("\n".to_string());
+
         if !self.typedefs.is_empty() {
             final_lines.extend(self.typedefs.clone());
             final_lines.push("\n".to_string());
@@ -318,12 +348,40 @@ impl Codegen {
             }
             TypedExprKind::Index { left, index } => {
                 let left_str = self.emit_expression(left.as_ref())?;
+
+                if matches!(expr.ty, Ty::Array(_))
+                    && let TypedExprKind::Range { start, end, .. } = &index.kind
+                {
+                    let start_c = start
+                        .as_ref()
+                        .map(|s| self.emit_expression(s).unwrap())
+                        .unwrap_or("0".to_string());
+
+                    let end_c = end
+                        .as_ref()
+                        .map(|e| self.emit_expression(e).unwrap())
+                        .unwrap_or(format!("{left_str}.len"));
+
+                    let inner_ty = match &left.ty {
+                        Ty::Array(inner) => inner.as_ref(),
+                        _ => unreachable!(),
+                    };
+
+                    let c_elem_type = self.c_type(inner_ty);
+
+                    self.slice_types.insert(c_elem_type.clone());
+
+                    return Ok(format!(
+                        "(VioSlice_{c_elem_type}){{\n    .len = ({end_c}) - ({start_c}),\n    .data = {left_str}.data + ({start_c})\n }}"
+                    ));
+                }
+
                 let index_str = self.emit_expression(index.as_ref())?;
 
                 if matches!(left.ty, Ty::String) {
                     format!("vio_str_get({}, {})", left_str, index_str)
                 } else {
-                    format!("{}[{}]", left_str, index_str)
+                    format!("{}.data[{}]", left_str, index_str)
                 }
             }
             TypedExprKind::Identifier { name, is_ref } => {
@@ -426,7 +484,14 @@ impl Codegen {
 
                 let mut all_args = Vec::new();
                 if !is_static {
-                    all_args.push(self.emit_expression(object.as_ref())?);
+                    let obj_expr = self.emit_expression(object.as_ref())?;
+                    if self.methods_taking_ref.contains(&c_fn_name)
+                        && !matches!(object.ty, Ty::Ref { .. })
+                    {
+                        all_args.push(format!("&{}", obj_expr))
+                    } else {
+                        all_args.push(obj_expr)
+                    }
                 }
                 for a in args {
                     all_args.push(self.emit_expression(a)?);
@@ -706,7 +771,15 @@ impl Codegen {
                     _ => "int64_t".to_string(),
                 };
 
-                format!("({}[]){{ {} }}", elem_c_type, c_vals)
+                self.slice_types.insert(elem_c_type.clone());
+
+                format!(
+                    "(VioSlice_{}) {{ .data = ({}[]){{ {} }}, .len = {} }}",
+                    elem_c_type,
+                    elem_c_type,
+                    c_vals,
+                    values.len()
+                )
             }
             _ => {
                 return Err(CodegenError::Unsupported(format!(
@@ -845,7 +918,7 @@ impl Codegen {
             TypedStmtKind::Struct { name, fields } => {
                 let mut c_fields = Vec::new();
                 for f in fields {
-                    let ty = self.c_type(&self.type_param_to_ty(&f.param_type));
+                    let ty = self.c_type(&self.type_param_to_ty(&f.to_func()));
                     c_fields.push(format!("\t{} {}", ty, f.name));
                 }
                 format!("typedef struct {{\n{};\n}} {};", c_fields.join(";\n"), name)
@@ -876,7 +949,16 @@ impl Codegen {
                 let mut union_states = Vec::new();
                 for case in cases {
                     if let Some(ty) = &case.payload {
-                        let c_ty = self.c_type(&self.type_param_to_ty(ty));
+                        let param_ty_wrapper = &FuncParam {
+                            name: "".to_string(),
+                            param_type: ty.clone(),
+                            span: Span::default(),
+                            kind: BindingKind::Param,
+                            is_ref: false,
+                        };
+
+                        let c_ty = self.c_type(&self.type_param_to_ty(param_ty_wrapper));
+
                         union_states.push(format!("{} {}", c_ty, case.name));
                     }
                 }
@@ -958,6 +1040,7 @@ impl Codegen {
     pub fn emit_block(&mut self, body: &[TypedStmt]) -> Result<String, CodegenError> {
         let mut lines = Vec::new();
         let mut string_vars: Vec<String> = Vec::new();
+
         self.scope_defers.push(Vec::new());
 
         for s in body {
@@ -1020,12 +1103,10 @@ impl Codegen {
     fn format_params(&mut self, params: &[FuncParam]) -> String {
         let mut p_strs = Vec::new();
         for p in params {
-            let ty = self.type_param_to_ty(&p.param_type);
-            let c_ty = if p.is_ref {
-                format!("{}*", self.c_type(&ty))
-            } else {
-                self.c_type(&ty)
-            };
+            let ty = self.type_param_to_ty(p);
+
+            let c_ty = self.c_type(&ty);
+
             p_strs.push(format!("{} {}", c_ty, p.name.replace("$", "_arg_")));
         }
         if p_strs.is_empty() {
@@ -1035,8 +1116,8 @@ impl Codegen {
         }
     }
 
-    fn type_param_to_ty(&self, t: &Type) -> Ty {
-        match t {
+    fn type_param_to_ty(&self, f: &FuncParam) -> Ty {
+        let ty = match f.param_type.clone() {
             Type::Named(path) => {
                 let name = path.segments.last().unwrap();
                 match name.as_str() {
@@ -1048,14 +1129,54 @@ impl Codegen {
                     _ => Ty::Struct(name.clone()),
                 }
             }
+            Type::Array(inner) => {
+                let param_ty_wrapper = &FuncParam {
+                    name: "".to_string(),
+                    param_type: *inner.clone(),
+                    span: Span::default(),
+                    kind: BindingKind::Param,
+                    is_ref: false,
+                };
+
+                Ty::Array(Box::new(self.type_param_to_ty(param_ty_wrapper)))
+            }
             Type::Fn { params, ret } => Ty::Fn {
-                params: params.iter().map(|p| self.type_param_to_ty(p)).collect(),
-                ret: Box::new(
-                    ret.as_ref()
-                        .map_or(Ty::Unit, |r| self.type_param_to_ty(r.as_ref())),
-                ),
+                params: params
+                    .iter()
+                    .map(|p| {
+                        let param_ty_wrapper = &FuncParam {
+                            name: "".to_string(),
+                            param_type: p.clone(),
+                            span: Span::default(),
+                            kind: BindingKind::Param,
+                            is_ref: false,
+                        };
+
+                        self.type_param_to_ty(param_ty_wrapper)
+                    })
+                    .collect(),
+                ret: Box::new(ret.as_ref().map_or(Ty::Unit, |r| {
+                    let param_ty_wrapper = &FuncParam {
+                        name: "".to_string(),
+                        param_type: *r.clone(),
+                        span: Span::default(),
+                        kind: BindingKind::Param,
+                        is_ref: false,
+                    };
+
+                    self.type_param_to_ty(param_ty_wrapper)
+                })),
             },
             _ => Ty::Unit,
+        };
+
+        if f.is_ref {
+            Ty::Ref {
+                inner: Box::new(ty),
+                is_mut: matches!(f.kind, BindingKind::Var),
+            }
+        } else {
+            ty
         }
     }
 
@@ -1096,15 +1217,17 @@ impl Codegen {
         }))
     }
 
-    fn type_to_prefix<'a>(&self, ty: &'a Ty) -> &'a str {
+    fn type_to_prefix<'a>(&self, ty: &'a Ty) -> Cow<'a, str> {
         match ty {
-            Ty::Int => "int",
-            Ty::Float => "float64",
-            Ty::String => "string",
-            Ty::Char => "char",
-            Ty::Bool => "bool",
-            Ty::Struct(name) => name.as_str(),
-            _ => "unknown",
+            Ty::Int => Cow::from("int"),
+            Ty::Float => Cow::from("float64"),
+            Ty::String => Cow::from("string"),
+            Ty::Char => Cow::from("char"),
+            Ty::Bool => Cow::from("bool"),
+            Ty::Struct(name) => Cow::from(name),
+            Ty::Array(inner) => format!("Array_{}", self.type_to_prefix(inner)).into(),
+            Ty::Ref { inner, .. } => self.type_to_prefix(inner),
+            _ => Cow::from("unknown"),
         }
     }
 

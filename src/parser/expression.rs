@@ -1133,7 +1133,7 @@ impl Parser {
         self.next_token();
 
         let end = if matches!(
-            self.peek_token.token,
+            self.current_token.token,
             Token::RightBracket
                 | Token::RightParen
                 | Token::Comma
