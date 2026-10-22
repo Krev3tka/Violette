@@ -360,19 +360,19 @@ impl Parser {
                             let expr = self.parse_right_section(operator, start_span)?;
                             self.skip_terminators();
 
-                            if matches!(self.peek_token.token, Token::RightParen) {
+                            return if matches!(self.peek_token.token, Token::RightParen) {
                                 self.next_token();
                                 self.paren_depth -= 1;
-                                return Ok(expr);
+                                Ok(expr)
                             } else {
-                                return Err(ParseError::UnclosedDelimiter {
+                                Err(ParseError::UnclosedDelimiter {
                                     open_token: Box::new(open_token),
                                     open_span,
                                     expected_token: Box::new(Token::RightParen),
                                     found_tok: Box::new(self.peek_token.token.clone()),
                                     found_span: self.peek_token.span,
-                                });
-                            }
+                                })
+                            };
                         }
                     }
                     _ => {}
