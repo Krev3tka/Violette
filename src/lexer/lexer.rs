@@ -406,6 +406,7 @@ impl Lexer {
                     "defer" => Token::Defer,
                     "extern" => Token::Extern,
                     "func" => Token::Func,
+                    "fun" => Token::Fun,
                     "return" => Token::Return,
                     "struct" => Token::Struct,
                     "extend" => Token::Extend,

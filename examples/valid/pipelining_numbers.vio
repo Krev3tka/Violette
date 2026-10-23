@@ -1,6 +1,6 @@
-func map(num: Int, action: func (Int) -> Int) -> Int =
+func map(num: Int, action: fun(Int) -> Int) -> Int =
     action(num)
-func filter(num: Int, predicate: func (Int) -> Bool) -> Int {
+func filter(num: Int, predicate: fun(Int) -> Bool) -> Int {
     return if predicate(num) { num } else { -1 }
 }
 

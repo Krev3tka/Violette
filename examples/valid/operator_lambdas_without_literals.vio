@@ -1,12 +1,12 @@
-func calculate_int(a: Int, b: Int, op: func(Int, Int) -> Int) -> Int {
+func calculate_int(a: Int, b: Int, op: fun(Int, Int) -> Int) -> Int {
     return op(a, b)
 }
 
-func calculate_float(a: Float64, b: Float64, op: func(Float64, Float64) -> Float64) -> Float64 {
+func calculate_float(a: Float64, b: Float64, op: fun(Float64, Float64) -> Float64) -> Float64 {
     return op(a, b)
 }
 
-func calculate_string(a: String, b: String, op: func(String, String) -> String) -> String {
+func calculate_string(a: String, b: String, op: fun(String, String) -> String) -> String {
     return op(a, b)
 }
 
