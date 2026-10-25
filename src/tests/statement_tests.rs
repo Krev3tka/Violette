@@ -3,6 +3,7 @@ pub mod statements_tests {
     use crate::lexer::lexer::Lexer;
     use crate::lexer::span::Span;
     use crate::lexer::token::Token;
+    use crate::parser::expression::CallArg;
     use crate::parser::expression::RangeKind::Inclusive;
     use crate::parser::parser::Parser;
     use crate::parser::statement::{ElseIf, FuncParam, StructParam};
@@ -120,6 +121,7 @@ if a > 7 {
                 vec![
                     FuncParam {
                         name: "db".to_string(),
+                        annotated_name: "db".to_string(),
                         param_type: Type::Named(TypePath {
                             segments: vec![
                                 "Sql".to_string(),
@@ -133,6 +135,7 @@ if a > 7 {
                     },
                     FuncParam {
                         name: "count".to_string(),
+                        annotated_name: "count".to_string(),
                         param_type: Type::Named(TypePath {
                             segments: vec!["Int".to_string()],
                         }),
@@ -168,7 +171,8 @@ if a > 7 {
 
     #[test]
     fn binary_search() {
-        let test_cases = vec![
+        let test_cases =
+            vec![
             (
                 "let ans = arr[mid + 1]",
                 let_stmt(
@@ -200,6 +204,7 @@ if a > 7 {
                     vec![
                         FuncParam {
                             name: "arr".to_string(),
+                            annotated_name: "arr".to_string(),
                             param_type: Type::Named(TypePath {
                                 segments: vec!["Std".to_string(), "Vector".to_string()],
                             }),
@@ -209,6 +214,7 @@ if a > 7 {
                         },
                         FuncParam {
                             name: "target".to_string(),
+                            annotated_name: "target".to_string(),
                             param_type: Type::Named(TypePath {
                                 segments: vec!["Int".to_string()],
                             }),
@@ -233,7 +239,11 @@ if a > 7 {
                     ])),
                     vec![
                         let_stmt("left", int(0)),
-                        let_stmt("right", call(ident("len"), vec![ident("arr")])),
+                        let_stmt("right", call(ident("len"), vec![CallArg {
+                            label: None,
+                            value: ident("arr"),
+                            span: dummy_span()
+                        }])),
                         while_loop(
                             infix(ident("left"), Token::Less, ident("right")),
                             vec![
@@ -273,11 +283,19 @@ if a > 7 {
                                         ))],
                                         span: Span::default(),
                                     }],
-                                    vec![ret(Some(call(ident("Win"), vec![ident("mid")])))],
+                                    vec![ret(Some(call(ident("Win"), vec![CallArg {
+                                        label: None,
+                                        value: ident("mid"),
+                                        span: dummy_span()
+                                    }])))],
                                 )),
                             ],
                         ),
-                        ret(Some(call(ident("Fail"), vec![ident("NotFound")]))),
+                        ret(Some(call(ident("Fail"), vec![CallArg {
+                            label: None,
+                            value: ident("NotFound"),
+                            span: dummy_span()
+                        }]))),
                     ],
                 ),
             ),
@@ -294,10 +312,25 @@ if a > 7 {
                 "result",
                 call(
                     ident("validate"),
-                    vec![call(
-                        ident("parse"),
-                        vec![call(ident("fetch"), vec![ident("url")])],
-                    )],
+                    vec![CallArg {
+                        label: None,
+                        value: call(
+                            ident("parse"),
+                            vec![CallArg {
+                                label: None,
+                                value: call(
+                                    ident("fetch"),
+                                    vec![CallArg {
+                                        label: None,
+                                        value: ident("url"),
+                                        span: dummy_span(),
+                                    }],
+                                ),
+                                span: dummy_span(),
+                            }],
+                        ),
+                        span: dummy_span(),
+                    }],
                 ),
             ),
         )];

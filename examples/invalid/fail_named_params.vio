@@ -1,0 +1,13 @@
+func greet(to name: String, from sender: String) {
+    println("Hello, " + name + " from " + sender)
+}
+
+func main() {
+    greet(to: "Alice", who: "Bob")
+
+    greet(to: "Alice")
+
+    greet(to: "Alice", from: "Bob", to: "Charlie")
+
+    greet(to: "Alice", from: "Bob", "Extra")
+}

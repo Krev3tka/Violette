@@ -1,0 +1,14 @@
+func greet(first f: String, second s: String, third t: String, fourth four: String, fifth five: String) {
+    println(
+    "first: " + f +
+    "second: " + s +
+    "third: " + t +
+    "fourth: " + four +
+    "fifth: " + five
+    )
+}
+
+greet("a", "b", "c", "d", "e")
+greet("a", second: "b", "c", "d", "e")
+greet(fourth: "d", "a", "b", "c", "e")
+greet("a", "b", "d", "e", third: "c")

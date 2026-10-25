@@ -56,6 +56,12 @@ pub enum TypeError {
         span: Span,
     },
 
+    UnknownArgumentLabel {
+        name: String,
+        label: String,
+        span: Span,
+    },
+
     UnknownField {
         struct_name: String,
         field: String,
@@ -132,6 +138,11 @@ pub enum TypeError {
         target_name: String,
         missed_patterns: String,
         span: Span,
+    },
+
+    IfNoElse {
+        if_span: Span,
+        closing_span: Span,
     },
 
     Unreachable {

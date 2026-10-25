@@ -4,6 +4,7 @@ use crate::hir::typed_ast::{
 };
 use crate::lexer::span::Span;
 use crate::lexer::token::Token;
+use crate::parser::expression::CallArg;
 use crate::parser::program::Program;
 use crate::parser::types::Type;
 use crate::parser::{Expression, Statement};
@@ -17,18 +18,18 @@ use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Debug)]
 pub struct FnSig {
-    params: Vec<Ty>,
+    params: Vec<ParamSig>,
     ret: Ty,
     span: Span,
 }
 
-pub type StructSig = Vec<(String, Ty, Span)>;
-
-#[allow(dead_code)]
 #[derive(Clone, Debug)]
-pub struct VariantCaseSig {
-    pub payload: Option<Ty>,
+pub struct ParamSig {
+    pub label: String,
+    pub ty: Ty,
 }
+
+pub type StructSig = Vec<(String, Ty, Span)>;
 
 #[derive(Default)]
 pub struct Checker {
@@ -68,12 +69,18 @@ impl Checker {
                         .map(|p| {
                             let ty = self.resolve(&p.param_type);
                             if p.is_ref {
-                                Ty::Ref {
-                                    inner: Box::new(ty),
-                                    is_mut: p.kind.is_mutable(),
+                                ParamSig {
+                                    label: p.annotated_name.clone(),
+                                    ty: Ty::Ref {
+                                        inner: Box::new(ty),
+                                        is_mut: p.kind.is_mutable(),
+                                    },
                                 }
                             } else {
-                                ty
+                                ParamSig {
+                                    label: p.annotated_name.clone(),
+                                    ty,
+                                }
                             }
                         })
                         .collect();
@@ -81,7 +88,11 @@ impl Checker {
                     let ret = return_type.as_ref().map_or(Ty::Unit, |t| self.resolve(t));
 
                     let f = Ty::Fn {
-                        params: params.clone(),
+                        params: params
+                            .iter()
+                            .map(|p| p.ty.clone())
+                            .collect::<Vec<_>>()
+                            .clone(),
                         ret: Box::new(return_type.as_ref().map_or(Ty::Unit, |t| self.resolve(t))),
                     };
 
@@ -115,14 +126,24 @@ impl Checker {
                     return_type,
                     span,
                 } => {
-                    let params: Vec<_> =
-                        params.iter().map(|p| self.resolve(&p.param_type)).collect();
+                    let params: Vec<_> = params
+                        .iter()
+                        .map(|p| ParamSig {
+                            label: p.annotated_name.clone(),
+                            ty: self.resolve(&p.param_type),
+                        })
+                        .collect();
+
                     let ret = return_type.as_ref().map_or(Ty::Unit, |t| self.resolve(t));
 
                     self.defined(
                         name.clone(),
                         Ty::Fn {
-                            params: params.clone(),
+                            params: params
+                                .iter()
+                                .map(|p| p.ty.clone())
+                                .collect::<Vec<_>>()
+                                .clone(),
                             ret: Box::new(ret.clone()),
                         },
                         BindingKind::Var,
@@ -207,8 +228,13 @@ impl Checker {
                         {
                             let full_name = format!("{}.{}", prefix, name);
 
-                            let params_ty: Vec<_> =
-                                params.iter().map(|p| self.resolve(&p.param_type)).collect();
+                            let params_ty: Vec<_> = params
+                                .iter()
+                                .map(|p| ParamSig {
+                                    label: p.annotated_name.clone(),
+                                    ty: self.resolve(&p.param_type),
+                                })
+                                .collect();
 
                             let ret_ty = return_type.as_ref().map_or(Ty::Unit, |t| self.resolve(t));
 
@@ -553,7 +579,13 @@ impl Checker {
             } => {
                 let ret = return_type.as_ref().map_or(Ty::Unit, |t| self.resolve(t));
                 let sig = FnSig {
-                    params: params.iter().map(|p| self.resolve(&p.param_type)).collect(),
+                    params: params
+                        .iter()
+                        .map(|p| ParamSig {
+                            label: p.annotated_name.clone(),
+                            ty: self.resolve(&p.param_type),
+                        })
+                        .collect(),
                     ret,
                     span: *span,
                 };
@@ -848,6 +880,116 @@ impl Checker {
 
     pub fn infer(&mut self, expr: &Expression, expected_ty: Option<&Ty>) -> Ty {
         self.check_expr(expr, expected_ty).ty
+    }
+
+    pub fn resolve_args(
+        &mut self,
+        name: String,
+        params: &[ParamSig],
+        args: &[CallArg],
+        call_span: Span,
+    ) -> Vec<TypedExpr> {
+        let mut resolved = vec![None; params.len()];
+        let mut positional_idx = 0;
+        let mut has_specific_error = false;
+        let mut seen_named = false;
+        let mut reported_pos_after_named = false;
+
+        for arg in args {
+            if let Some(ref label) = arg.label {
+                if let Some(idx) = params.iter().position(|p| p.label == *label) {
+                    seen_named = true;
+                    if resolved[idx].is_some() {
+                        self.errors.push(TypeError::Unsupported {
+                            desc: format!("Argument `{}` already provided", label),
+                            span: arg.span,
+                        });
+                        has_specific_error = true;
+                    } else {
+                        let typed_arg = self.check_expr(&arg.value, Some(&params[idx].ty));
+
+                        self.expect(&typed_arg.ty, &params[idx].ty, arg.span);
+
+                        resolved[idx] = Some(typed_arg);
+                    }
+                } else {
+                    self.errors.push(TypeError::Unsupported {
+                        desc: format!("Unknown argument label `{}`", label),
+                        span: arg.span,
+                    });
+                    has_specific_error = true;
+                }
+            } else {
+                if seen_named {
+                    if !reported_pos_after_named {
+                        self.errors.push(TypeError::Unsupported {
+                            desc: "Positional argument cannot follow named argument".to_string(),
+                            span: arg.span,
+                        });
+                        reported_pos_after_named = true;
+                    }
+                    has_specific_error = true;
+                }
+
+                while positional_idx < resolved.len() && resolved[positional_idx].is_some() {
+                    positional_idx += 1;
+                }
+
+                if positional_idx < params.len() {
+                    let typed_arg = self.check_expr(&arg.value, Some(&params[positional_idx].ty));
+
+                    self.expect(&typed_arg.ty, &params[positional_idx].ty, arg.span);
+
+                    resolved[positional_idx] = Some(typed_arg);
+
+                    positional_idx += 1;
+                } else {
+                    self.errors.push(TypeError::ArityMismatch {
+                        name: name.clone(),
+                        expected: params.len(),
+                        found: args.len(),
+                        span: call_span,
+                    });
+
+                    has_specific_error = true;
+                }
+            }
+        }
+
+        if args.len() != params.len() && !has_specific_error {
+            self.errors.push(TypeError::ArityMismatch {
+                name: name.clone(),
+                expected: params.len(),
+                found: args.len(),
+                span: call_span,
+            })
+        }
+
+        if !has_specific_error {
+            for (idx, slot) in resolved.iter().enumerate() {
+                if slot.is_none() {
+                    self.errors.push(TypeError::Unsupported {
+                        desc: format!("Missing argument for parameter `{}`", params[idx].label),
+                        span: call_span,
+                    });
+                }
+            }
+        }
+
+        resolved
+            .into_iter()
+            .map(|opt| {
+                opt.unwrap_or_else(|| {
+                    TypedExpr::error(
+                        call_span,
+                        TypeError::Unsupported {
+                            desc: "Missing argument".to_string(),
+                            span: call_span,
+                        },
+                    )
+                })
+            })
+            .collect()
     }
 
     #[allow(dead_code)]
@@ -1281,8 +1423,8 @@ impl Checker {
                             span: *span,
                         });
 
-                        let typed_arg = self.check_expr(&args[0], Some(&expected_payload));
-                        self.expect(&typed_arg.ty, &expected_payload, args[0].span());
+                        let typed_arg = self.check_expr(&args[0].value, Some(&expected_payload));
+                        self.expect(&typed_arg.ty, &expected_payload, args[0].span);
 
                         let typed_fn = TypedExpr {
                             kind: TypedExprKind::Identifier {
@@ -1299,18 +1441,26 @@ impl Checker {
                         return TypedExpr {
                             kind: TypedExprKind::Call {
                                 function: Box::new(typed_fn),
-                                args: args.iter().map(|e| self.check_expr(e, None)).collect(),
+                                args: args
+                                    .iter()
+                                    .map(|e| self.check_expr(&e.value, None))
+                                    .collect(),
                             },
                             ty: Ty::Struct(variant_name),
                             span: *span,
                         };
                     }
-                    let arg_ty = self.infer(&args[0], Some(&expected_payload));
-                    self.expect(&arg_ty, &expected_payload, args[0].span());
+
+                    let arg_ty = self.infer(&args[0].value, Some(&expected_payload));
+                    self.expect(&arg_ty, &expected_payload, args[0].span);
+
                     return TypedExpr {
                         kind: TypedExprKind::Call {
                             function: Box::new(self.check_expr(function.as_ref(), None)),
-                            args: args.iter().map(|e| self.check_expr(e, None)).collect(),
+                            args: args
+                                .iter()
+                                .map(|e| self.check_expr(&e.value, None))
+                                .collect(),
                         },
                         ty: Ty::Struct(variant_name),
                         span: *span,
@@ -1321,7 +1471,7 @@ impl Checker {
                     && self.env.lookup(name).is_none()
                     && !args.is_empty()
                 {
-                    let first_arg_ty = self.infer(&args[0], None);
+                    let first_arg_ty = self.infer(&args[0].value, None);
                     if let Ty::Struct(ref s_name) = first_arg_ty {
                         let method_name = format!("{}.{}", s_name, name);
                         if let Some(sig) = self.funcs.get(&method_name).cloned() {
@@ -1332,6 +1482,7 @@ impl Checker {
                                     found: args.len(),
                                     span: *span,
                                 });
+
                                 return TypedExpr {
                                     kind: TypedExprKind::Call {
                                         function: Box::new(
@@ -1340,7 +1491,9 @@ impl Checker {
                                         args: args
                                             .iter()
                                             .zip(sig.params.iter())
-                                            .map(|(e, param_ty)| self.check_expr(e, Some(param_ty)))
+                                            .map(|(e, param_ty)| {
+                                                self.check_expr(&e.value, Some(&param_ty.ty))
+                                            })
                                             .collect(),
                                     },
                                     ty: sig.ret,
@@ -1348,18 +1501,13 @@ impl Checker {
                                 };
                             }
 
-                            for (arg, param) in args.iter().zip(sig.params.iter()) {
-                                let a_ty = self.infer(arg, Some(param));
-                                self.expect(&a_ty, param, arg.span());
-                            }
+                            let typed_args =
+                                self.resolve_args(name.clone(), &sig.params, args, *span);
+
                             return TypedExpr {
                                 kind: TypedExprKind::Call {
                                     function: Box::new(self.check_expr(function.as_ref(), None)),
-                                    args: args
-                                        .iter()
-                                        .zip(sig.params.iter())
-                                        .map(|(e, param_ty)| self.check_expr(e, Some(param_ty)))
-                                        .collect(),
+                                    args: typed_args,
                                 },
                                 ty: sig.ret,
                                 span: *span,
@@ -1369,7 +1517,8 @@ impl Checker {
                 }
 
                 let callee = if matches!(function.as_ref(), Expression::Lambda { .. }) {
-                    let arg_types: Vec<Ty> = args.iter().map(|a| self.infer(a, None)).collect();
+                    let arg_types: Vec<Ty> =
+                        args.iter().map(|a| self.infer(&a.value, None)).collect();
 
                     let expected_fn = Ty::Fn {
                         params: arg_types,
@@ -1379,6 +1528,21 @@ impl Checker {
                 } else {
                     self.infer(function, None)
                 };
+
+                if let Expression::Identifier { name, .. } = function.as_ref()
+                    && let Some(sig) = self.funcs.get(name).cloned()
+                {
+                    let typed_args = self.resolve_args(name.clone(), &sig.params, args, *span);
+
+                    return TypedExpr {
+                        kind: TypedExprKind::Call {
+                            function: Box::new(self.check_expr(function.as_ref(), None)),
+                            args: typed_args,
+                        },
+                        ty: sig.ret,
+                        span: *span,
+                    };
+                }
 
                 match callee {
                     Ty::Fn { params, ret } => {
@@ -1397,9 +1561,9 @@ impl Checker {
                         let mut typed_args = Vec::new();
 
                         for (arg, param_ty) in args.iter().zip(params.iter()) {
-                            let typed_arg = self.check_expr(arg, Some(param_ty));
+                            let typed_arg = self.check_expr(&arg.value, Some(param_ty));
 
-                            self.expect(&typed_arg.ty, param_ty, arg.span());
+                            self.expect(&typed_arg.ty, param_ty, arg.span);
 
                             typed_args.push(typed_arg);
                         }
@@ -1421,7 +1585,7 @@ impl Checker {
                                 args: args
                                     .iter()
                                     .zip(params.iter())
-                                    .map(|(e, param_ty)| self.check_expr(e, Some(param_ty)))
+                                    .map(|(e, param_ty)| self.check_expr(&e.value, Some(param_ty)))
                                     .collect(),
                             },
                             ty: *ret,
@@ -1431,7 +1595,10 @@ impl Checker {
                     Ty::Error => TypedExpr {
                         kind: TypedExprKind::Call {
                             function: Box::new(self.check_expr(function.as_ref(), expected)),
-                            args: args.iter().map(|e| self.check_expr(e, None)).collect(),
+                            args: args
+                                .iter()
+                                .map(|e| self.check_expr(&e.value, None))
+                                .collect(),
                         },
                         ty: Ty::Error,
                         span: *span,
@@ -1454,7 +1621,10 @@ impl Checker {
                         TypedExpr {
                             kind: TypedExprKind::Call {
                                 function: Box::new(self.check_expr(function.as_ref(), expected)),
-                                args: args.iter().map(|e| self.check_expr(e, None)).collect(),
+                                args: args
+                                    .iter()
+                                    .map(|e| self.check_expr(&e.value, None))
+                                    .collect(),
                             },
                             ty: Ty::Error,
                             span: *span,
@@ -1761,9 +1931,9 @@ impl Checker {
                             });
                         }
                         if let Some(arg) = args.first() {
-                            let a = self.check_expr(arg, Some(payload_ty));
+                            let a = self.check_expr(&arg.value, Some(payload_ty));
 
-                            self.expect(&a.ty, payload_ty, arg.span());
+                            self.expect(&a.ty, payload_ty, arg.span);
 
                             typed_args.push(a);
                         }
@@ -1824,7 +1994,10 @@ impl Checker {
                             return TypedExpr {
                                 kind: TypedExprKind::MethodCall {
                                     object: Box::new(self.check_expr(object.as_ref(), expected)),
-                                    args: args.iter().map(|a| self.check_expr(a, None)).collect(),
+                                    args: args
+                                        .iter()
+                                        .map(|a| self.check_expr(&a.value, None))
+                                        .collect(),
                                     name: name.clone(),
                                 },
                                 ty: Ty::Error,
@@ -1840,7 +2013,10 @@ impl Checker {
                             return TypedExpr {
                                 kind: TypedExprKind::MethodCall {
                                     object: Box::new(self.check_expr(object.as_ref(), expected)),
-                                    args: args.iter().map(|a| self.check_expr(a, None)).collect(),
+                                    args: args
+                                        .iter()
+                                        .map(|a| self.check_expr(&a.value, None))
+                                        .collect(),
                                     name: name.clone(),
                                 },
                                 ty: Ty::Error,
@@ -1865,14 +2041,18 @@ impl Checker {
                             return TypedExpr {
                                 kind: TypedExprKind::MethodCall {
                                     object: Box::new(self.check_expr(object.as_ref(), expected)),
-                                    args: args.iter().map(|a| self.check_expr(a, None)).collect(),
+                                    args: args
+                                        .iter()
+                                        .map(|a| self.check_expr(&a.value, None))
+                                        .collect(),
                                     name: name.clone(),
                                 },
                                 ty: Ty::Error,
                                 span: *span,
                             };
                         }
-                        self.expect(&obj_ty, &sig.params[0], object.span());
+                        self.expect(&obj_ty, &sig.params[0].ty, object.span());
+
                         &sig.params[1..]
                     };
 
@@ -1886,7 +2066,10 @@ impl Checker {
                         return TypedExpr {
                             kind: TypedExprKind::MethodCall {
                                 object: Box::new(self.check_expr(object.as_ref(), expected)),
-                                args: args.iter().map(|a| self.check_expr(a, None)).collect(),
+                                args: args
+                                    .iter()
+                                    .map(|a| self.check_expr(&a.value, None))
+                                    .collect(),
                                 name: name.clone(),
                             },
                             ty: sig.ret,
@@ -1915,12 +2098,7 @@ impl Checker {
                         self.check_expr(object.as_ref(), None)
                     };
 
-                    let mut typed_args = Vec::new();
-                    for (arg, param_ty) in args.iter().zip(expected_args.iter()) {
-                        let a = self.check_expr(arg, Some(param_ty));
-                        self.expect(&a.ty, param_ty, arg.span());
-                        typed_args.push(a);
-                    }
+                    let typed_args = self.resolve_args(name.clone(), expected_args, args, *span);
 
                     TypedExpr {
                         kind: TypedExprKind::MethodCall {
@@ -1940,7 +2118,7 @@ impl Checker {
                     } else {
                         if let Some(global_sig) = self.funcs.get(name)
                             && !global_sig.params.is_empty()
-                            && global_sig.params[0] == obj_ty
+                            && global_sig.params[0].ty == obj_ty
                         {
                             self.errors.push(TypeError::MethodFoundAsGlobal {
                                 ty: obj_ty.clone(),
@@ -1957,7 +2135,10 @@ impl Checker {
                             return TypedExpr {
                                 kind: TypedExprKind::MethodCall {
                                     object: Box::new(self.check_expr(object.as_ref(), expected)),
-                                    args: args.iter().map(|a| self.check_expr(a, None)).collect(),
+                                    args: args
+                                        .iter()
+                                        .map(|a| self.check_expr(&a.value, None))
+                                        .collect(),
                                     name: name.clone(),
                                 },
                                 ty: Ty::Error,
@@ -1974,7 +2155,10 @@ impl Checker {
                     TypedExpr {
                         kind: TypedExprKind::MethodCall {
                             object: Box::new(self.check_expr(object.as_ref(), expected)),
-                            args: args.iter().map(|a| self.check_expr(a, None)).collect(),
+                            args: args
+                                .iter()
+                                .map(|a| self.check_expr(&a.value, None))
+                                .collect(),
                             name: name.clone(),
                         },
                         ty: Ty::Error,
@@ -1988,46 +2172,34 @@ impl Checker {
                 else_if,
                 else_block,
                 span,
-                ..
+                closing_span,
             } => {
                 let typed_cond = self.check_expr(condition.as_ref(), Some(&Ty::Bool));
                 self.expect(&typed_cond.ty, &Ty::Bool, *span);
 
-                if let Some((last, _)) = then_block.split_last() {
-                    return if let Statement::Expression { expression, .. } = last {
-                        TypedExpr {
-                            kind: TypedExprKind::If {
-                                condition: Box::new(typed_cond),
-                                then_block: then_block.iter().map(|s| self.check_stmt(s)).collect(),
-                                else_if: else_if
-                                    .iter()
-                                    .map(|elif| TypedElseIf {
-                                        condition: self.check_expr(&elif.condition, None),
-                                        block: self.check_block(&elif.block),
-                                    })
-                                    .collect(),
-                                else_block: else_block.iter().map(|s| self.check_stmt(s)).collect(),
+                let then_ty = if let Some((last, _)) = then_block.split_last()
+                    && let Statement::Expression { expression, .. } = last
+                {
+                    self.infer(expression, expected)
+                } else {
+                    Ty::Unit
+                };
+
+                if !matches!(then_ty, Ty::Unit) && else_block.is_empty() {
+                    self.errors.push(TypeError::IfNoElse {
+                        if_span: *span,
+                        closing_span: closing_span.unwrap_or(Span::default()),
+                    });
+
+                    return TypedExpr {
+                        kind: TypedExprKind::Error {
+                            error: TypeError::IfNoElse {
+                                if_span: *span,
+                                closing_span: closing_span.unwrap_or(Span::default()),
                             },
-                            ty: self.infer(expression, expected),
-                            span: *span,
-                        }
-                    } else {
-                        TypedExpr {
-                            kind: TypedExprKind::If {
-                                condition: Box::new(typed_cond),
-                                then_block: then_block.iter().map(|s| self.check_stmt(s)).collect(),
-                                else_if: else_if
-                                    .iter()
-                                    .map(|elif| TypedElseIf {
-                                        condition: self.check_expr(&elif.condition, None),
-                                        block: self.check_block(&elif.block),
-                                    })
-                                    .collect(),
-                                else_block: else_block.iter().map(|s| self.check_stmt(s)).collect(),
-                            },
-                            ty: Ty::Unit,
-                            span: *span,
-                        }
+                        },
+                        ty: Ty::Error,
+                        span: *span,
                     };
                 }
 
@@ -2043,8 +2215,9 @@ impl Checker {
                             })
                             .collect(),
                         else_block: else_block.iter().map(|s| self.check_stmt(s)).collect(),
+                        closing_span: *closing_span,
                     },
-                    ty: Ty::Unit,
+                    ty: then_ty,
                     span: *span,
                 }
             }
@@ -2214,7 +2387,7 @@ impl Checker {
                                         } else if let Expression::Identifier {
                                             name: bind_name,
                                             span: bind_span,
-                                        } = &args[0]
+                                        } = &args[0].value
                                         {
                                             self.defined(
                                                 bind_name.clone(),
@@ -2234,7 +2407,7 @@ impl Checker {
                                             self.errors.push(TypeError::Unsupported {
                                                 desc: "Pattern payload not as identifier"
                                                     .to_string(),
-                                                span: args[0].span(),
+                                                span: args[0].span,
                                             });
                                         }
                                     } else {
@@ -2279,7 +2452,7 @@ impl Checker {
                                         } else if let Expression::Identifier {
                                             name: bind_name,
                                             span: bind_span,
-                                        } = &args[0]
+                                        } = &args[0].value
                                         {
                                             self.defined(
                                                 bind_name.clone(),
@@ -2291,7 +2464,7 @@ impl Checker {
                                             self.errors.push(TypeError::Unsupported {
                                                 desc: "Pattern payload not as identifier"
                                                     .to_string(),
-                                                span: args[0].span(),
+                                                span: args[0].span,
                                             });
                                         }
                                     } else {
@@ -2434,13 +2607,7 @@ impl Checker {
                     ty: last_ty,
                     span: *span,
                 }
-            } // _ => TypedExpr::error(
-              //     expr.span(),
-              //     TypeError::Unsupported {
-              //         desc: format!("expression: {:?}", expr),
-              //         span: expr.span(),
-              //     },
-              // ),
+            }
         }
     }
 

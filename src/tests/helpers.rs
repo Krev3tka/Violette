@@ -3,6 +3,7 @@
 use crate::lexer::lexer::Lexer;
 use crate::lexer::span::{ClearSpan, Span};
 use crate::lexer::token::Token;
+use crate::parser::expression::CallArg;
 use crate::parser::parser::Parser;
 use crate::parser::statement::{ElseIf, FuncParam, MatchArm, StructParam};
 use crate::parser::types::Type;
@@ -102,6 +103,7 @@ pub fn if_expr(
         else_if,
         else_block,
         span: dummy_span(),
+        closing_span: None,
     }
 }
 
@@ -113,7 +115,7 @@ pub fn index(l: Expression, i: Expression) -> Expression {
     }
 }
 
-pub fn call(f: Expression, args: Vec<Expression>) -> Expression {
+pub fn call(f: Expression, args: Vec<CallArg>) -> Expression {
     Expression::Call {
         function: Box::new(f),
         args,

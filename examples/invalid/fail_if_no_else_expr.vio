@@ -1,0 +1,9 @@
+func main() {
+    let switcher = 0
+
+    let num = if switcher > 0 {
+        5
+    }
+
+    println(num)
+}

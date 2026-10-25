@@ -15,6 +15,9 @@ const TestPaths = "../../examples/"
 var ExpectedErrors = map[string]string{
 	"fail_breaking_bad.vio":      "found `break` outside of a loop",
 	"fail_constatation.vio":      "couldn't assign again to const variable",
+	"fail_having_too_many_labels_is_bad.vio": "Positional argument cannot follow named argument",
+	"fail_if_no_else_expr.vio": "this `if` block needs an `else` branch",
+	"fail_named_params.vio": "Unknown argument label `who`",
 	"fail_not_full_return.vio":   "there's no `return` in every path",
 	"fail_redefine_fun_vars.vio": "couldn't re-define",
 	"fail_user_struct.vio":       "couldn't re-define",
@@ -62,10 +65,12 @@ var ExpectedOutputs = map[string]string{
 		"8 16 24 32 40 48 56 64 72 \n" +
 		"9 18 27 36 45 54 63 72 81 ",
     "mutating_parameters.vio": "11\n2\n1",
+    "named_params.vio": "Hello, Alice from me\nHello, Alice from you\nHello, Alice from her",
     "operator_lambdas_without_literals.vio": "1.8\n78125\nHello, Violette",
     "pipelining_numbers.vio": "10\n-1",
 	"point.vio":          "3.5",
 	"response_variants.vio": "",
+	"section_pipelining.vio": "12",
 	"sprouting.vio":      "true",
 	"square.vio":         "36",
 	"string_concat.vio":  "Hello, Violette!",

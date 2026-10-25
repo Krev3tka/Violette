@@ -77,7 +77,7 @@ pub enum Expression {
 
     Call {
         function: Box<Expression>,
-        args: Vec<Expression>,
+        args: Vec<CallArg>,
         span: Span,
     },
 
@@ -101,7 +101,7 @@ pub enum Expression {
     MethodCall {
         object: Box<Expression>,
         name: String,
-        args: Vec<Expression>,
+        args: Vec<CallArg>,
         span: Span,
     },
 
@@ -125,7 +125,15 @@ pub enum Expression {
         else_if: Vec<ElseIf>,
         else_block: Vec<Statement>,
         span: Span,
+        closing_span: Option<Span>,
     },
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct CallArg {
+    pub label: Option<String>,
+    pub value: Expression,
+    pub span: Span,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -376,7 +384,7 @@ impl Parser {
                         }
                     }
                     _ => {}
-                };
+                }
 
                 let expr = self.parse_expression(Lowest)?;
                 self.skip_terminators();
@@ -631,18 +639,27 @@ impl Parser {
 
                     let saved = self.allowed_bare_sections;
                     self.allowed_bare_sections = true;
-                    let right_res = self.parse_expression(Precedence::Sprout);
+                    let mut right = self.parse_expression(Precedence::Sprout)?;
                     self.allowed_bare_sections = saved;
 
-                    let mut right = right_res?;
-
                     if let Expression::Call { ref mut args, .. } = right {
-                        args.insert(0, left);
+                        args.insert(
+                            0,
+                            CallArg {
+                                label: None,
+                                value: left.clone(),
+                                span: left.span(),
+                            },
+                        );
                         left = right;
                     } else {
                         left = Expression::Call {
                             function: Box::new(right),
-                            args: vec![left],
+                            args: vec![CallArg {
+                                label: None,
+                                value: left.clone(),
+                                span: left.span(),
+                            }],
                             span: start_span,
                         }
                     }
@@ -714,12 +731,13 @@ impl Parser {
         self.next_token();
 
         let mut then_block = Vec::new();
+        let mut closing_span = None;
 
         if matches!(&self.current_token.token.clone(), Token::LeftBrace) {
             self.next_token();
             self.skip_terminators();
 
-            (then_block, _) = self.parse_block()?;
+            (then_block, closing_span) = self.parse_block()?;
         }
 
         let mut else_if = Vec::new();
@@ -751,6 +769,7 @@ impl Parser {
             else_if,
             else_block,
             span,
+            closing_span,
         })
     }
 
@@ -881,18 +900,34 @@ impl Parser {
             };
 
             let start_span = self.current_token.span;
-            let param_name = match self.current_token.token.clone() {
-                Token::LowerIdent(name) => name,
-                _ => {
-                    return Err(ParseError::ExpectedIdentifier {
-                        context: "in function parameter",
-                        found: self.current_token.token.clone(),
-                        span: self.current_token.span,
-                    });
-                }
-            };
 
-            self.next_token();
+            let annotated_name;
+            let param_name;
+
+            if let Token::LowerIdent(annotated) = self.current_token.token.clone()
+                && let Token::LowerIdent(name) = self.peek_token.token.clone()
+            {
+                annotated_name = annotated;
+                param_name = name;
+
+                self.next_token();
+                self.next_token();
+            } else {
+                param_name = match self.current_token.token.clone() {
+                    Token::LowerIdent(name) => name,
+                    _ => {
+                        return Err(ParseError::ExpectedIdentifier {
+                            context: "in function parameter",
+                            found: self.current_token.token.clone(),
+                            span: self.current_token.span,
+                        });
+                    }
+                };
+
+                annotated_name = param_name.clone();
+                self.next_token();
+            }
+
             self.expect(Token::Colon, self.unexpected(&self.current_token))?;
 
             let is_ref = match self.current_token.token.clone() {
@@ -906,6 +941,7 @@ impl Parser {
 
             let param = FuncParam {
                 name: param_name,
+                annotated_name,
                 param_type,
                 span: start_span,
                 kind,
@@ -924,7 +960,7 @@ impl Parser {
         Ok(params)
     }
 
-    pub fn parse_call_args(&mut self) -> Result<Vec<Expression>, ParseError> {
+    pub fn parse_call_args(&mut self) -> Result<Vec<CallArg>, ParseError> {
         let open_paren_tok = self.current_token.token.clone();
         let open_paren_span = self.current_token.span;
 
@@ -940,10 +976,41 @@ impl Parser {
         }
 
         loop {
+            let mut label = None;
+            let mut label_span = None;
+
+            if let Token::LowerIdent(label_name) = self.current_token.token.clone()
+                && matches!(self.peek_token.token.clone(), Token::Colon)
+            {
+                label = Some(label_name);
+                label_span = Some(self.current_token.span);
+                self.next_token();
+
+                self.expect(
+                    Token::Colon,
+                    ParseError::ExpectedColon {
+                        context: "in function call",
+                        found: self.current_token.token.clone(),
+                        span: self.current_token.span,
+                    },
+                )?;
+            }
+
             let saved = self.allowed_bare_sections;
             self.allowed_bare_sections = true;
-            let arg = self.parse_expression(Lowest)?;
+
+            let arg_value = self.parse_expression(Lowest)?;
+
             self.allowed_bare_sections = saved;
+
+            let arg = CallArg {
+                label,
+                value: arg_value.clone(),
+                span: match label_span {
+                    Some(span) => span.merge(&arg_value.span()),
+                    None => arg_value.span(),
+                },
+            };
 
             args.push(arg);
             self.skip_terminators();
@@ -981,13 +1048,6 @@ impl Parser {
         let start_span = self.current_token.span;
 
         self.expect(Token::BackSlash, self.unexpected(&self.current_token))?;
-
-        let has_parens = matches!(self.current_token.token.clone(), Token::LeftParen);
-        let open_token = self.current_token.token.clone();
-        let open_span = self.current_token.span;
-        if has_parens {
-            self.next_token();
-        }
 
         let mut params = Vec::new();
 
@@ -1035,6 +1095,7 @@ impl Parser {
 
             params.push(FuncParam {
                 name,
+                annotated_name: String::new(),
                 param_type,
                 span: param_start_span.merge(&self.current_token.span),
                 kind,
@@ -1057,19 +1118,6 @@ impl Parser {
             } else {
                 return Err(self.unexpected(&self.current_token));
             }
-        }
-
-        if has_parens {
-            self.expect(
-                Token::RightParen,
-                ParseError::UnclosedDelimiter {
-                    open_token: Box::new(open_token),
-                    open_span,
-                    found_tok: Box::new(self.current_token.token.clone()),
-                    found_span: self.current_token.span,
-                    expected_token: Box::new(Token::RightParen),
-                },
-            )?;
         }
 
         if matches!(self.current_token.token, Token::Arrow) {
@@ -1130,6 +1178,7 @@ impl Parser {
         Ok(Expression::Lambda {
             params: vec![FuncParam {
                 name: String::from("$0"),
+                annotated_name: String::new(),
                 param_type: Type::Infer,
                 span: start_span,
                 kind: BindingKind::Param,
@@ -1169,6 +1218,7 @@ impl Parser {
         Ok(Expression::Lambda {
             params: vec![
                 FuncParam {
+                    annotated_name: String::new(),
                     name: String::from("$0"),
                     param_type: Type::Infer,
                     span: start_span,
@@ -1176,6 +1226,7 @@ impl Parser {
                     is_ref: false,
                 },
                 FuncParam {
+                    annotated_name: String::new(),
                     name: String::from("$1"),
                     param_type: Type::Infer,
                     span: start_span,

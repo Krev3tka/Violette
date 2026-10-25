@@ -1,9 +1,9 @@
 func main() {
     let a = 'A'
     let ru = 'я'
-    let two_in_chinese = '⼆'
+    let chinese_two = '⼆'
 
     println(a)
     println(ru)
-    println(two_in_chinese)
+    println(chinese_two)
 }

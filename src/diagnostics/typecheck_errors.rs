@@ -422,6 +422,23 @@ impl Diagnostics for TypeError {
                     ),
                 )
             }
+            TypeError::IfNoElse {
+                if_span,
+                closing_span,
+            } => {
+                let labels = &[
+                    Label::secondary(*if_span, "if-expression starts here", path.to_string()),
+                    Label::primary(*closing_span, "there is no `else` here", path.to_string()),
+                ];
+
+                self.report(
+                    path.to_string(),
+                    *closing_span,
+                    "this `if` block needs an `else` branch".to_string(),
+                    labels,
+                    Some("every `if` expression must have an `else` for producing value in every path no matter which branch is happening")
+                )
+            }
             _ => todo!(),
         }
     }

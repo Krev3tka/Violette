@@ -1,4 +1,5 @@
 use crate::lexer::token::Token;
+use crate::parser::expression::CallArg;
 use crate::parser::statement::{FuncParam, MatchArm, StructParam, VariantCase};
 use crate::parser::{Expression, Statement};
 
@@ -61,7 +62,9 @@ impl ClearSpan for Expression {
             | Expression::StringLiteral { span, .. }
             | Expression::CharLiteral { span, .. } => *span = Span::default(),
             Expression::ArrayLiteral { values, span, .. } => {
-                let _ = values.iter_mut().map(|v| v.clone().clear_span());
+                for v in values {
+                    v.clear_span();
+                }
 
                 *span = Span::default();
             }
@@ -99,7 +102,8 @@ impl ClearSpan for Expression {
             } => {
                 function.clear_span();
                 for arg in args {
-                    arg.clear_span();
+                    arg.span = Span::default();
+                    arg.value.clear_span();
                 }
                 *span = Span::default();
             }
@@ -138,7 +142,8 @@ impl ClearSpan for Expression {
             } => {
                 object.clear_span();
                 for arg in args {
-                    arg.clear_span();
+                    arg.span = Span::default();
+                    arg.value.clear_span();
                 }
                 *span = Span::default();
             }
@@ -167,6 +172,7 @@ impl ClearSpan for Expression {
                 else_if,
                 else_block,
                 span,
+                closing_span,
             } => {
                 condition.clear_span();
                 for stmt in then_block {
@@ -184,6 +190,7 @@ impl ClearSpan for Expression {
                     stmt.clear_span();
                 }
 
+                *closing_span = None;
                 *span = Span::default();
             }
         }
@@ -334,6 +341,13 @@ impl ClearSpan for StructParam {
 
 impl ClearSpan for VariantCase {
     fn clear_span(&mut self) {
+        self.span = Span::default();
+    }
+}
+
+impl ClearSpan for CallArg {
+    fn clear_span(&mut self) {
+        self.value.clear_span();
         self.span = Span::default();
     }
 }

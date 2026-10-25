@@ -7,7 +7,7 @@ func inc(var num: Int) -> Int {
 func main() {
     let x = 0
 
-    if 0 < inc(x) <= 2 {
+    if 0 < inc(x) < 2 {
         println("x: " + inc(x).to_string())
     } else {
         println("unreachable")

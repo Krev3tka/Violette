@@ -1,5 +1,5 @@
 func main () {
-    let add = \(x: Int, y: Int,) => x + y
+    let add = \x: Int, y: Int, => x + y
     let subtract = \x: Float64, y: Float64 => { x - y }
 
     let multiply = \x: Int, y: Int, => {
@@ -8,7 +8,7 @@ func main () {
         x * y
     }
 
-    let divide = \(x: Int, y: Int)  => {
+    let divide = \x: Int, y: Int  => {
         return x / y
     }
 

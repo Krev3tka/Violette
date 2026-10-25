@@ -1,15 +1,16 @@
 func map(num: Int, action: fun(Int) -> Int) -> Int =
     action(num)
+
 func filter(num: Int, predicate: fun(Int) -> Bool) -> Int {
     return if predicate(num) { num } else { -1 }
 }
 
 func main() {
     println(
-        5 ~> map((* 2)) ~> filter((> 0))
+        5 ~> map(* 2) ~> filter(> 0)
     )
 
     println(
-        3 ~> map((* 2)) ~> filter((> 7))
+        3 ~> map(* 2) ~> filter(> 7)
     )
 }

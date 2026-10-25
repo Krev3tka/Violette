@@ -114,6 +114,7 @@ pub struct ElseIf {
 #[derive(Debug, PartialEq, Clone)]
 pub struct FuncParam {
     pub name: String,
+    pub annotated_name: String,
     pub param_type: Type,
     pub span: Span,
     pub kind: BindingKind,
@@ -132,6 +133,7 @@ impl StructParam {
     pub fn to_func(&self) -> FuncParam {
         FuncParam {
             name: self.name.clone(),
+            annotated_name: self.name.clone(),
             param_type: self.param_type.clone(),
             span: self.span,
             kind: self.kind,

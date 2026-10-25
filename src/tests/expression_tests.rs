@@ -8,10 +8,11 @@ mod expressions_tests {
     };
     use crate::parser::Expression;
     use crate::parser::Expression::{Call, Identifier, IntLiteral};
+    use crate::parser::expression::CallArg;
     use crate::parser::statement::MatchArm;
     use crate::tests::helpers::{
-        assert_expr_tests, assert_stmt_tests, block, boolean, call, expr_stmt, ident, infix, int,
-        let_stmt, match_expr, prefix, string,
+        assert_expr_tests, assert_stmt_tests, block, boolean, call, dummy_span, expr_stmt, ident,
+        infix, int, let_stmt, match_expr, prefix, string,
     };
 
     #[test]
@@ -93,16 +94,34 @@ mod expressions_tests {
                         ident("res"),
                         vec![
                             MatchArm {
-                                pattern: call(ident("Win"), vec![ident("u")]),
+                                pattern: call(
+                                    ident("Win"),
+                                    vec![CallArg {
+                                        label: None,
+                                        value: ident("u"),
+                                        span: dummy_span(),
+                                    }],
+                                ),
                                 body: ident("u"),
                                 span: Span::default(),
                             },
                             MatchArm {
-                                pattern: call(ident("Fail"), vec![ident("r")]),
+                                pattern: call(
+                                    ident("Fail"),
+                                    vec![CallArg {
+                                        label: None,
+                                        value: ident("r"),
+                                        span: dummy_span(),
+                                    }],
+                                ),
                                 body: block(vec![
                                     expr_stmt(call(
                                         ident("println"),
-                                        vec![infix(string("Error: "), Add, ident("r"))],
+                                        vec![CallArg {
+                                            label: None,
+                                            value: infix(string("Error: "), Add, ident("r")),
+                                            span: dummy_span(),
+                                        }],
                                     )),
                                     expr_stmt(call(ident("NewUser"), Vec::new())),
                                 ]),
@@ -126,7 +145,14 @@ mod expressions_tests {
                     ident("res"),
                     vec![
                         MatchArm {
-                            pattern: call(ident("Win"), vec![ident("num")]),
+                            pattern: call(
+                                ident("Win"),
+                                vec![CallArg {
+                                    label: None,
+                                    value: ident("num"),
+                                    span: dummy_span(),
+                                }],
+                            ),
                             body: block(vec![expr_stmt(match_expr(
                                 ident("num"),
                                 vec![
@@ -145,8 +171,22 @@ mod expressions_tests {
                             span: Span::default(),
                         },
                         MatchArm {
-                            pattern: call(ident("Fail"), vec![ident("r")]),
-                            body: call(ident("print"), vec![ident("r")]),
+                            pattern: call(
+                                ident("Fail"),
+                                vec![CallArg {
+                                    label: None,
+                                    value: ident("r"),
+                                    span: dummy_span(),
+                                }],
+                            ),
+                            body: call(
+                                ident("print"),
+                                vec![CallArg {
+                                    label: None,
+                                    value: ident("r"),
+                                    span: dummy_span(),
+                                }],
+                            ),
                             span: Span::default(),
                         },
                     ],
@@ -232,12 +272,20 @@ mod expressions_tests {
                 MatchArm {
                     pattern: Call {
                         function: Box::new(ident("Win")),
-                        args: vec![ident("v")],
+                        args: vec![CallArg {
+                            label: None,
+                            value: ident("v"),
+                            span: dummy_span(),
+                        }],
                         span: Span::default(),
                     },
                     body: Call {
                         function: Box::new(ident("fetch")),
-                        args: vec![ident("v")],
+                        args: vec![CallArg {
+                            label: None,
+                            value: ident("v"),
+                            span: dummy_span(),
+                        }],
                         span: Span::default(),
                     },
                     span: Span::default(),
@@ -245,7 +293,11 @@ mod expressions_tests {
                 MatchArm {
                     pattern: Call {
                         function: Box::new(ident("Fail")),
-                        args: vec![ident("e")],
+                        args: vec![CallArg {
+                            label: None,
+                            value: ident("e"),
+                            span: dummy_span(),
+                        }],
                         span: Span::default(),
                     },
                     body: ident("e"),

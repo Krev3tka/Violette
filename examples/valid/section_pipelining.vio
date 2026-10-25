@@ -1,0 +1,6 @@
+func process(x: Int) -> Int =
+    x ~> (+1) ~> (*2)
+
+func main() {
+    println(process(5))
+ }

@@ -575,6 +575,7 @@ impl Codegen {
                 then_block,
                 else_if,
                 else_block,
+                ..
             } => {
                 let cond_c = self.emit_expression(condition)?;
 
@@ -830,6 +831,7 @@ impl Codegen {
                     then_block,
                     else_if,
                     else_block,
+                    ..
                 } = &expr.kind
                 {
                     let cond_c = self.emit_expression(condition.as_ref())?;
@@ -951,6 +953,7 @@ impl Codegen {
                     if let Some(ty) = &case.payload {
                         let param_ty_wrapper = &FuncParam {
                             name: "".to_string(),
+                            annotated_name: "".to_string(),
                             param_type: ty.clone(),
                             span: Span::default(),
                             kind: BindingKind::Param,
@@ -1132,6 +1135,7 @@ impl Codegen {
             Type::Array(inner) => {
                 let param_ty_wrapper = &FuncParam {
                     name: "".to_string(),
+                    annotated_name: "".to_string(),
                     param_type: *inner.clone(),
                     span: Span::default(),
                     kind: BindingKind::Param,
@@ -1146,6 +1150,7 @@ impl Codegen {
                     .map(|p| {
                         let param_ty_wrapper = &FuncParam {
                             name: "".to_string(),
+                            annotated_name: "".to_string(),
                             param_type: p.clone(),
                             span: Span::default(),
                             kind: BindingKind::Param,
@@ -1158,6 +1163,7 @@ impl Codegen {
                 ret: Box::new(ret.as_ref().map_or(Ty::Unit, |r| {
                     let param_ty_wrapper = &FuncParam {
                         name: "".to_string(),
+                        annotated_name: "".to_string(),
                         param_type: *r.clone(),
                         span: Span::default(),
                         kind: BindingKind::Param,

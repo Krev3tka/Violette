@@ -126,6 +126,7 @@ pub enum TypedExprKind {
         then_block: Vec<TypedStmt>,
         else_if: Vec<TypedElseIf>,
         else_block: Vec<TypedStmt>,
+        closing_span: Option<Span>,
     },
 
     Error {
