@@ -8,7 +8,7 @@ func main() {
     let x = 0
 
     if 0 < inc(x) < 2 {
-        println("x: " + inc(x).to_string())
+        println("x: " + inc(x).toString())
     } else {
         println("unreachable")
     }

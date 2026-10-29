@@ -1,7 +1,7 @@
-package math
+package Math
 
 extend Float64 {
-    func abs(n: Float64) -> Float64 {
+    func (n: Float64) abs() -> Float64 {
         if n >= 0.0 {
             return n
         }
@@ -9,7 +9,7 @@ extend Float64 {
         return -n
     }
 
-    func sqrt(val: Float64) -> Float64 {
+    func (val: Float64) sqrt() -> Float64 {
         if val < 0.0 {
             return -1.0
         }
@@ -32,11 +32,11 @@ extend Float64 {
         return guess
     }
 
-    func pow(base: Float64, exp: Float64) -> Float64 {
+    func (base: Float64) pow(exp: Float64) -> Float64 {
         return base ** exp
     }
 
-    func sign(n: Float64) -> Int {
+    func (n: Float64) sign() -> Int {
         if n < 0.0 {
             return -1
         } else if n == 0.0 {
@@ -46,33 +46,33 @@ extend Float64 {
         return 1
     }
 
-    func hypot(a: Float64, b: Float64) -> Float64 {
+    func (a: Float64) hypot(b: Float64) -> Float64 {
         return (a * a + b * b).sqrt()
     }
 }
 
 extend Int {
-    func is_even(n: Int) -> Bool {
+    func (n: Int) isEven() -> Bool {
         return n % 2 == 0
     }
 
-    func is_odd(n: Int) -> Bool {
+    func (n: Int) isOdd() -> Bool {
         return n % 2 == 1
     }
 
-    func is_positive(n: Int) -> Bool {
+    func (n: Int) isPositive() -> Bool {
         return n > 0
     }
 
-    func is_negative(n: Int) -> Bool {
+    func (n: Int) isNegative() -> Bool {
         return n < 0
     }
 
-    func is_zero(n: Int) -> Bool {
+    func (n: Int) isZero() -> Bool {
         return n == 0
     }
 
-    func min(this: Int, other: Int) -> Int {
+    func (this: Int) min(other: Int) -> Int {
         if this < other {
             return this
         }
@@ -80,7 +80,7 @@ extend Int {
         return other
     }
 
-    func max(this: Int, other: Int) -> Int {
+    func (this: Int) max(other: Int) -> Int {
         if this >= other {
             return this
         }
@@ -88,7 +88,7 @@ extend Int {
         return other
     }
 
-    func clamp(val: Int, min: Int, max: Int) -> Int {
+    func (val: Int) clamp(min: Int, max: Int) -> Int {
         if val < min {
             return min
         }

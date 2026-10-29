@@ -1,9 +1,9 @@
-package float
+package Float
 
 extern func vio_float_to_int(f: Float64) -> Int
 extern func vio_float_to_str(f: Float64) -> String
 
 extend Float64 {
-    func to_int(f: Float64) -> Int = vio_float_to_int(f)
-    func to_string(f: Float64) -> String = vio_float_to_str(f)
+    func (f: Self) toInt() -> Int = vio_float_to_int(f)
+    func (f: Self) toString() -> String = vio_float_to_str(f)
 }

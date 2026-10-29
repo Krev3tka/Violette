@@ -5,6 +5,7 @@ use crate::parser::Statement;
 use crate::parser::parser::Parser;
 use crate::parser::program::{ImportItem, Program};
 use crate::typechecker::checker::Checker;
+use colored::Colorize;
 use std::path::Path;
 use std::process::Command;
 use std::{env, fs};
@@ -15,6 +16,10 @@ const STD_INT: &str = include_str!("../std/int.vio");
 const STD_STRING: &str = include_str!("../std/string.vio");
 const STD_FLOAT: &str = include_str!("../std/float.vio");
 
+pub enum DriverError {
+    UnresolvedImport { symbol: String },
+}
+
 fn parse_module(source: &str, pkg_name: &str) -> Program {
     let lexer = Lexer::new(source);
     let mut parser = Parser::new(lexer);
@@ -23,12 +28,17 @@ fn parse_module(source: &str, pkg_name: &str) -> Program {
         .expect("Failed to parse stdlib")
 }
 
-fn filter_declarations(declarations: Vec<Statement>, symbols: &[String]) -> Vec<Statement> {
+fn filter_declarations(
+    declarations: Vec<Statement>,
+    symbols: &[String],
+) -> Result<Vec<Statement>, Vec<DriverError>> {
     if symbols.is_empty() {
-        return declarations;
+        return Ok(declarations);
     }
 
-    declarations
+    let mut found_symbols = std::collections::HashSet::new();
+
+    let filtered = declarations
         .into_iter()
         .filter_map(|stmt| match stmt {
             Statement::ExternFunc { .. } | Statement::Variant { .. } => Some(stmt),
@@ -48,9 +58,18 @@ fn filter_declarations(declarations: Vec<Statement>, symbols: &[String]) -> Vec<
             } => {
                 let filtered_methods: Vec<_> = methods
                     .into_iter()
-                    .filter(|m| match m {
-                        Statement::Func { name, .. } => symbols.contains(name),
-                        _ => true,
+                    .filter(|m| {
+                        let name = match m {
+                            Statement::Func { name, .. } | Statement::Method { name, .. } => name,
+                            _ => return false,
+                        };
+
+                        if symbols.contains(name) {
+                            found_symbols.insert(name.clone());
+                            true
+                        } else {
+                            false
+                        }
                     })
                     .collect();
 
@@ -66,7 +85,23 @@ fn filter_declarations(declarations: Vec<Statement>, symbols: &[String]) -> Vec<
             }
             _ => None,
         })
-        .collect()
+        .collect();
+
+    let mut errors = Vec::new();
+
+    for symbol in symbols {
+        if !found_symbols.contains(symbol) {
+            errors.push(DriverError::UnresolvedImport {
+                symbol: symbol.clone(),
+            });
+        }
+    }
+
+    if !errors.is_empty() {
+        Err(errors)
+    } else {
+        Ok(filtered)
+    }
 }
 
 fn resolve_import(import_item: &ImportItem, file_path: &Path) -> Vec<Statement> {
@@ -79,10 +114,10 @@ fn resolve_import(import_item: &ImportItem, file_path: &Path) -> Vec<Statement> 
         };
 
     let module_ast = match module_name {
-        "math" => parse_module(STD_MATH, "math"),
-        "int" => parse_module(STD_INT, "int"),
-        "string" => parse_module(STD_STRING, "string"),
-        "float" => parse_module(STD_FLOAT, "float"),
+        "Math" => parse_module(STD_MATH, "math"),
+        "Int" => parse_module(STD_INT, "int"),
+        "String" => parse_module(STD_STRING, "string"),
+        "Float" => parse_module(STD_FLOAT, "float"),
         _ => {
             let local_path = file_path
                 .parent()
@@ -94,13 +129,26 @@ fn resolve_import(import_item: &ImportItem, file_path: &Path) -> Vec<Statement> 
                     fs::read_to_string(&local_path).expect("Failed to read local module");
                 parse_module(&local_src, module_name)
             } else {
-                println!("Failed to load module {}", module_name);
+                println!("Failed to `load` module {}", module_name);
                 return vec![];
             }
         }
     };
 
-    filter_declarations(module_ast.declarations, &symbols)
+    filter_declarations(module_ast.declarations, &symbols).unwrap_or_else(|errors| {
+        let names: Vec<String> = errors
+            .iter()
+            .map(|DriverError::UnresolvedImport { symbol }| symbol.clone())
+            .collect();
+
+        println!(
+            "{} {}",
+            "Found unresolved symbols in using:".red().bold(),
+            names.join(", ").red()
+        );
+
+        std::process::exit(1)
+    })
 }
 
 pub fn find_cc() -> Option<String> {
@@ -174,6 +222,13 @@ pub fn compile(command: &str, file: &str) {
                                     filtered.push(s.clone());
                                 }
                             }
+                            Statement::Method { obj_name, name, .. } => {
+                                let key = format!("{:?}.{}", obj_name, name);
+
+                                if imported_symbols.insert(key.clone()) {
+                                    filtered.push(s.clone());
+                                }
+                            }
                             _ => unreachable!(),
                         };
                     }
@@ -205,6 +260,8 @@ pub fn compile(command: &str, file: &str) {
     let mut checker = Checker::default();
 
     let typed_ast = checker.check_program(&ast);
+
+    checker.errors.dedup();
 
     if !checker.errors.is_empty() {
         for err in checker.errors {

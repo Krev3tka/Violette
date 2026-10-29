@@ -1,5 +1,5 @@
 extend [Int] {
-    func binarySearch(arr: &[Int], target: Int) -> Int {
+    func (arr: Self) binarySearch(target: Int) -> Int {
         var left = 0
         var right = arr.len - 1
 

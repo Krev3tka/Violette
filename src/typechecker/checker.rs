@@ -6,6 +6,7 @@ use crate::lexer::span::Span;
 use crate::lexer::token::Token;
 use crate::parser::expression::CallArg;
 use crate::parser::program::Program;
+use crate::parser::statement::FuncParam;
 use crate::parser::types::Type;
 use crate::parser::{Expression, Statement};
 use crate::typechecker::env::Env;
@@ -21,6 +22,9 @@ pub struct FnSig {
     params: Vec<ParamSig>,
     ret: Ty,
     span: Span,
+
+    /// Is it a method and isn't it static? (not static => dynamic, don't try to find any logic here)
+    is_dynamic_method: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -41,6 +45,7 @@ pub struct Checker {
     pub errors: Vec<TypeError>,
     pub main_fn_span: Option<Span>,
     pub in_loop: bool,
+    current_self_type: Option<Ty>,
 }
 
 impl Checker {
@@ -116,6 +121,7 @@ impl Checker {
                             params,
                             ret,
                             span: *span,
+                            is_dynamic_method: false,
                         },
                     );
                 }
@@ -156,6 +162,7 @@ impl Checker {
                             params,
                             ret,
                             span: *span,
+                            is_dynamic_method: true,
                         },
                     );
                 }
@@ -185,6 +192,8 @@ impl Checker {
                     span,
                 } => {
                     let target_ty = self.resolve(target);
+
+                    self.current_self_type = Some(target_ty.clone());
 
                     let prefix = match &target_ty {
                         Ty::Struct(struct_name) => {
@@ -254,10 +263,62 @@ impl Checker {
                                     params: params_ty,
                                     ret: ret_ty,
                                     span: *func_span,
+                                    is_dynamic_method: false,
+                                },
+                            );
+                        }
+                        if let Statement::Method {
+                            obj_name,
+                            name,
+                            params,
+                            return_type,
+                            span: func_span,
+                            ..
+                        } = method
+                        {
+                            let full_name = format!("{}.{}", prefix, name);
+
+                            let mut params_ty: Vec<_> = params
+                                .iter()
+                                .map(|p| ParamSig {
+                                    label: p.annotated_name.clone(),
+                                    ty: self.resolve(&p.param_type),
+                                })
+                                .collect();
+
+                            params_ty.insert(
+                                0,
+                                ParamSig {
+                                    label: obj_name.clone(),
+                                    ty: target_ty.clone(),
+                                },
+                            );
+
+                            let ret_ty = return_type.as_ref().map_or(Ty::Unit, |t| self.resolve(t));
+
+                            if self.funcs.contains_key(&full_name) {
+                                self.errors.push(TypeError::DuplicateDefinition {
+                                    name: full_name.clone(),
+                                    first_span: self.funcs.get(&full_name).unwrap().span,
+                                    second_span: *func_span,
+                                    def_kind: DefinitionKind::Fun,
+                                });
+                                continue;
+                            }
+
+                            self.funcs.insert(
+                                full_name,
+                                FnSig {
+                                    params: params_ty,
+                                    ret: ret_ty,
+                                    span: *func_span,
+                                    is_dynamic_method: true,
                                 },
                             );
                         }
                     }
+
+                    self.current_self_type = None;
                 }
                 Statement::Variant { name, cases, .. } => {
                     for case in cases {
@@ -283,6 +344,18 @@ impl Checker {
                     "Bool" => Ty::Bool,
                     "Char" => Ty::Char,
                     _ => Ty::Struct(name.clone()),
+                }
+            }
+
+            Type::SelfTy => {
+                if let Some(ref self_ty) = self.current_self_type {
+                    self_ty.clone()
+                } else {
+                    self.errors.push(TypeError::Unsupported {
+                        desc: "`Self` can only be used inside `extend` blocks".to_string(),
+                        span: Span::default(),
+                    });
+                    Ty::Error
                 }
             }
 
@@ -347,6 +420,66 @@ impl Checker {
                 kind: TypedStmtKind::Func {
                     name: name.clone(),
                     params: params.clone(),
+                    return_type: ret,
+                    body,
+                },
+                ty: Ty::Unit,
+                span: *span,
+            }
+        } else if let Statement::Method {
+            obj_name,
+            obj_type,
+            name,
+            is_ref_obj,
+            params,
+            return_type,
+            body,
+            span,
+            ..
+        } = stmt
+        {
+            self.current_ret = return_type.as_ref().map_or(Ty::Unit, |t| self.resolve(t));
+
+            let mut params = params.clone();
+
+            params.insert(
+                0,
+                FuncParam {
+                    name: obj_name.clone(),
+                    annotated_name: obj_name.clone(),
+                    param_type: obj_type.clone(),
+                    span: *span,
+                    kind: BindingKind::Param,
+                    is_ref: *is_ref_obj,
+                },
+            );
+
+            for p in &params {
+                let mut ty = self.resolve(&p.param_type);
+
+                if p.is_ref {
+                    ty = Ty::Ref {
+                        inner: Box::new(ty),
+                        is_mut: p.kind.is_mutable(),
+                    };
+                }
+
+                if let Err(e) = self.env.define(p.name.clone(), ty, p.kind, &p.span) {
+                    self.errors.push(e);
+                }
+            }
+
+            let ret = return_type.as_ref().map_or(Ty::Unit, |t| self.resolve(t));
+
+            let body = self.check_block(body);
+
+            self.check_returns(stmt);
+            self.env.pop();
+
+            TypedStmt {
+                kind: TypedStmtKind::Func {
+                    name: name.clone(),
+                    params,
                     return_type: ret,
                     body,
                 },
@@ -588,6 +721,7 @@ impl Checker {
                         .collect(),
                     ret,
                     span: *span,
+                    is_dynamic_method: false,
                 };
 
                 self.funcs.insert(name.clone(), sig.clone());
@@ -679,13 +813,32 @@ impl Checker {
             } => {
                 let target = self.resolve(target);
 
+                self.current_self_type = Some(target.clone());
+
                 let mut typed_methods = Vec::new();
 
                 for method in methods {
-                    if let Statement::Func { .. } = method {
+                    if matches!(method, Statement::Func { .. }) {
+                        typed_methods.push(self.check_fn(method));
+                    } else if let Statement::Method {
+                        obj_type, obj_span, ..
+                    } = method
+                    {
+                        let receiver = self.resolve(obj_type);
+
+                        if receiver != target {
+                            self.errors.push(TypeError::Mismatch {
+                                expected: target.clone(),
+                                found: receiver,
+                                span: *obj_span,
+                            });
+                        }
+
                         typed_methods.push(self.check_fn(method));
                     }
                 }
+
+                self.current_self_type = None;
 
                 TypedStmt {
                     kind: TypedStmtKind::Extend {
@@ -1911,6 +2064,7 @@ impl Checker {
                 args,
                 span,
             } => {
+                // First check: Enum constructor call (e.g. Status.Ok("done"))
                 if let Expression::Identifier {
                     name: obj_name,
                     span: obj_span,
@@ -1959,12 +2113,15 @@ impl Checker {
                     };
                 }
 
+                // Second check: Is it static?
+
                 let mut found_sig = None;
 
                 let mut is_static = false;
 
                 let mut obj_ty = Ty::Error;
 
+                // Is there struct name at left?
                 if let Expression::Identifier { name: obj_name, .. } = object.as_ref() {
                     if self.structs.contains_key(obj_name) {
                         let sig_name = format!("{}.{}", obj_name, name);
@@ -1978,6 +2135,7 @@ impl Checker {
                     }
                 }
 
+                // If it isn't a type, it's an object
                 if !is_static {
                     obj_ty = self.infer(object.as_ref(), None);
                     let sig_name = match &obj_ty {
@@ -2027,7 +2185,31 @@ impl Checker {
                     found_sig = self.funcs.get(&sig_name).cloned();
                 }
 
+                // Third check: checking receiver and args
                 if let Some(sig) = found_sig {
+                    if !is_static && !sig.is_dynamic_method {
+                        self.errors.push(TypeError::Unsupported {
+                            desc: format!(
+                                "Function: `{}` has no receiver and cannot be called as a method. Declare it as `func (obj_name: Self) {}` or call it ad `{}.{}()` pls",
+                                name, name, self.type_to_prefix(&obj_ty), name
+                            ),
+                            span: *span,
+                        });
+                        return TypedExpr::error(
+                            *span,
+                            TypeError::Unsupported {
+                                desc: format!(
+                                    "Function: `{}` has no receiver and cannot be called as a method. Declare it as `func (obj_name: Self) {}` or call it ad `{}.{}()` pls",
+                                    name,
+                                    name,
+                                    self.type_to_prefix(&obj_ty),
+                                    name
+                                ),
+                                span: *span,
+                            },
+                        );
+                    }
+
                     let expected_args = if is_static {
                         &sig.params[..]
                     } else {
@@ -2038,44 +2220,19 @@ impl Checker {
                                 found: 0,
                                 span: *span,
                             });
-                            return TypedExpr {
-                                kind: TypedExprKind::MethodCall {
-                                    object: Box::new(self.check_expr(object.as_ref(), expected)),
-                                    args: args
-                                        .iter()
-                                        .map(|a| self.check_expr(&a.value, None))
-                                        .collect(),
-                                    name: name.clone(),
+                            return TypedExpr::error(
+                                *span,
+                                TypeError::NoSuchMethod {
+                                    ty: obj_ty,
+                                    method: name.clone(),
+                                    span: *span,
                                 },
-                                ty: Ty::Error,
-                                span: *span,
-                            };
+                            );
                         }
                         self.expect(&obj_ty, &sig.params[0].ty, object.span());
 
                         &sig.params[1..]
                     };
-
-                    if args.len() != expected_args.len() {
-                        self.errors.push(TypeError::ArityMismatch {
-                            name: name.clone(),
-                            expected: expected_args.len(),
-                            found: args.len(),
-                            span: *span,
-                        });
-                        return TypedExpr {
-                            kind: TypedExprKind::MethodCall {
-                                object: Box::new(self.check_expr(object.as_ref(), expected)),
-                                args: args
-                                    .iter()
-                                    .map(|a| self.check_expr(&a.value, None))
-                                    .collect(),
-                                name: name.clone(),
-                            },
-                            ty: sig.ret,
-                            span: *span,
-                        };
-                    }
 
                     let typed_object = if is_static {
                         if let Expression::Identifier {
@@ -2110,6 +2267,7 @@ impl Checker {
                         span: *span,
                     }
                 } else {
+                    // Last check: Didn't find anything, error hints formatting
                     if is_static {
                         self.errors.push(TypeError::UnknownName {
                             name: name.clone(),
@@ -2132,38 +2290,30 @@ impl Checker {
                                         _ => "Type"
                                     }),
                             });
-                            return TypedExpr {
-                                kind: TypedExprKind::MethodCall {
-                                    object: Box::new(self.check_expr(object.as_ref(), expected)),
-                                    args: args
-                                        .iter()
-                                        .map(|a| self.check_expr(&a.value, None))
-                                        .collect(),
-                                    name: name.clone(),
+                            return TypedExpr::error(
+                                *span,
+                                TypeError::NoSuchMethod {
+                                    ty: obj_ty,
+                                    method: name.clone(),
+                                    span: *span,
                                 },
-                                ty: Ty::Error,
-                                span: *span,
-                            };
+                            );
                         }
                         self.errors.push(TypeError::NoSuchMethod {
-                            ty: obj_ty,
+                            ty: obj_ty.clone(),
                             method: name.clone(),
                             span: *span,
                         });
                     }
 
-                    TypedExpr {
-                        kind: TypedExprKind::MethodCall {
-                            object: Box::new(self.check_expr(object.as_ref(), expected)),
-                            args: args
-                                .iter()
-                                .map(|a| self.check_expr(&a.value, None))
-                                .collect(),
-                            name: name.clone(),
+                    TypedExpr::error(
+                        *span,
+                        TypeError::NoSuchMethod {
+                            ty: obj_ty,
+                            method: name.clone(),
+                            span: *span,
                         },
-                        ty: Ty::Error,
-                        span: *span,
-                    }
+                    )
                 }
             }
             Expression::If {
@@ -2746,6 +2896,7 @@ impl Checker {
                 | Statement::ForRange { .. }
                 | Statement::Func { .. }
                 | Statement::Struct { .. }
+                | Statement::Method { .. }
                 | Statement::Break { .. }
                 | Statement::Continue { .. }
                 | Statement::ExternFunc { .. }

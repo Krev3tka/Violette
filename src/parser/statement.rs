@@ -91,6 +91,19 @@ pub enum Statement {
         span: Span,
     },
 
+    Method {
+        name: String,
+        obj_name: String,
+        obj_span: Span,
+        obj_type: Type,
+        is_ref_obj: bool,
+        params: Vec<FuncParam>,
+        return_type: Option<Type>,
+        body: Vec<Statement>,
+        span: Span,
+        ending_span: Span,
+    },
+
     Extend {
         target: Type,
         methods: Vec<Statement>,
@@ -302,10 +315,10 @@ impl Parser {
             Token::Func
                 if matches!(
                     self.peek_token.token,
-                    Token::LowerIdent(_) | Token::UpperIdent(_)
+                    Token::LowerIdent(_) | Token::UpperIdent(_) | Token::LeftParen
                 ) =>
             {
-                self.parse_function()
+                self.parse_function(None)
             }
             Token::Break => {
                 self.next_token();
@@ -468,10 +481,80 @@ impl Parser {
         })
     }
 
-    pub fn parse_function(&mut self) -> Result<Statement, ParseError> {
+    pub fn parse_function(&mut self, mut obj_type: Option<Type>) -> Result<Statement, ParseError> {
         let mut span = self.current_token.span;
 
         self.expect(Token::Func, self.unexpected(&self.current_token))?;
+
+        let mut is_method = false;
+        let mut obj_name = String::new();
+        let mut obj_span = Span::default();
+        let mut is_ref = false;
+
+        if matches!(self.current_token.token.clone(), Token::LeftParen) {
+            is_method = true;
+            let open_paren_obj_tok = self.current_token.token.clone();
+            let open_paren_obj_span = self.current_token.span;
+            self.next_token();
+
+            obj_name = match self.current_token.token.clone() {
+                Token::LowerIdent(name) => name,
+                Token::UpperIdent(_) => {
+                    return Err(ParseError::ExpectedLowercaseIdent {
+                        context: "after 'func'",
+                        span: self.current_token.span,
+                    });
+                }
+                _ => {
+                    return Err(ParseError::ExpectedIdentifier {
+                        context: "after 'func'",
+                        found: self.current_token.token.clone(),
+                        span: self.current_token.span,
+                    });
+                }
+            };
+
+            obj_span = self.current_token.span;
+
+            self.next_token();
+
+            self.expect(
+                Token::Colon,
+                ParseError::ExpectedColon {
+                    context: "in object type annotation",
+                    found: self.current_token.token.clone(),
+                    span: self.current_token.span,
+                },
+            )?;
+
+            is_ref = if matches!(self.current_token.token.clone(), Token::BitAnd) {
+                self.next_token();
+                true
+            } else {
+                false
+            };
+
+            let mut receiver_type = self.parse_type()?;
+
+            if matches!(receiver_type, Type::SelfTy)
+                && let Some(ref target) = obj_type
+            {
+                receiver_type = target.clone();
+            }
+
+            obj_type = Some(receiver_type);
+
+            self.expect(
+                Token::RightParen,
+                ParseError::UnclosedDelimiter {
+                    open_token: Box::new(open_paren_obj_tok),
+                    open_span: open_paren_obj_span,
+                    expected_token: Box::new(Token::RightParen),
+                    found_tok: Box::new(self.current_token.token.clone()),
+                    found_span: self.current_token.span,
+                },
+            )?;
+        }
 
         let name = match self.current_token.token.clone() {
             Token::LowerIdent(fun_name) => fun_name,
@@ -532,14 +615,29 @@ impl Parser {
                 span: expr.span(),
             }];
 
-            return Ok(Statement::Func {
-                name,
-                params,
-                return_type,
-                body,
-                span,
-                ending_span: self.current_token.span,
-            });
+            return if !is_method {
+                Ok(Statement::Func {
+                    name,
+                    params,
+                    return_type,
+                    body,
+                    span,
+                    ending_span: self.current_token.span,
+                })
+            } else {
+                Ok(Statement::Method {
+                    obj_name,
+                    obj_span,
+                    obj_type: obj_type.unwrap(),
+                    is_ref_obj: is_ref,
+                    name,
+                    params,
+                    return_type,
+                    body,
+                    span,
+                    ending_span: self.current_token.span,
+                })
+            };
         }
 
         self.expect(Token::LeftBrace, self.unexpected(&self.current_token))?;
@@ -547,14 +645,29 @@ impl Parser {
         let (body, ending_span) = self.parse_block()?;
         let ending_span = ending_span.unwrap();
 
-        Ok(Statement::Func {
-            name,
-            params,
-            return_type,
-            body,
-            span,
-            ending_span,
-        })
+        if is_method {
+            Ok(Statement::Method {
+                obj_name,
+                obj_span,
+                obj_type: obj_type.unwrap(),
+                name,
+                is_ref_obj: is_ref,
+                params,
+                return_type,
+                body,
+                span,
+                ending_span,
+            })
+        } else {
+            Ok(Statement::Func {
+                name,
+                params,
+                return_type,
+                body,
+                span,
+                ending_span,
+            })
+        }
     }
 
     pub fn parse_extern(&mut self) -> Result<Statement, ParseError> {
@@ -844,10 +957,10 @@ impl Parser {
         let mut methods = Vec::new();
 
         while !matches!(self.current_token.token, Token::RightBrace | Token::Eof) {
-            let method = self.parse_statement()?;
+            let method = self.parse_function(Some(target.clone()))?;
 
             match method {
-                Statement::Func { .. } => {
+                Statement::Func { .. } | Statement::Method { .. } => {
                     methods.push(method);
                     self.skip_terminators();
                 }
@@ -1019,6 +1132,7 @@ impl Statement {
             Statement::ExternFunc { span, .. } => *span,
             Statement::Func { span, .. } => *span,
             Statement::Struct { span, .. } => *span,
+            Statement::Method { span, .. } => *span,
             Statement::Extend { span, .. } => *span,
             Statement::Break { span } => *span,
             Statement::Continue { span } => *span,

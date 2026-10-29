@@ -1,12 +1,12 @@
-using string (starts_with, ends_with)
+using String (startsWith, endsWith)
 
 extend String {
-    func get(s: String, idx: Int) -> Char {
+    func (s: String) get(idx: Int) -> Char {
         if idx >= s.len() || idx < 0 {
-            return 'a'
+            'a'
+        } else {
+            s[idx]
         }
-
-        return s[idx]
     }
 }
 
@@ -14,14 +14,14 @@ func main() {
     println("Violette".get(0))
 
     print("Does `Violette` start with `Vio`: ")
-    println("Violette".starts_with("Vio"))
+    println("Violette".startsWith("Vio"))
 
     print("Does `Violette` start with `Vim`: ")
-    println("Violette".starts_with("Vim"))
+    println("Violette".startsWith("Vim"))
 
     print("Does `Violette` ends with `lette`: ")
-    println("Violette".ends_with("lette"))
+    println("Violette".endsWith("lette"))
 
     print("Does `Violette` ends with `latte`: ")
-    println("Violette".ends_with("latte"))
+    println("Violette".endsWith("latte"))
 }

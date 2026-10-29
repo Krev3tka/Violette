@@ -1,10 +1,10 @@
-using math
+using Math
 
 func main() {
     println(
         (-64.0)
         .abs()
         .sqrt()
-        .hypot(15.to_float())
+        .hypot(15.toFloat())
     )
 }

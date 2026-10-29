@@ -19,21 +19,22 @@ struct Transaction {
 }
 
 extend Database {
-    func close(db: Database) {}
+    func (db: &Self) close() {}
 
-    func begin_transaction(db: Database) -> Transaction = Transaction { is_closed: true }
+    func (db: &Database) begin_transaction() -> Transaction =
+        Transaction { is_closed: true }
 }
 
 extend Transaction {
-    func rollback(tx: Transaction) {}
+    func (tx: Transaction) rollback() {}
 
-    func acquire_lock(tx: Transaction) -> Lock = Lock{}
+    func (tx: Transaction) acquire_lock() -> Lock = Lock{}
 }
 
 struct Lock {}
 
 extend Lock {
-    func release(l: Lock) {}
+    func (l: Lock) release() {}
 }
 
 func main() {

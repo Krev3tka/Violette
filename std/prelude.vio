@@ -1,17 +1,17 @@
-using math (
+using Math (
     abs,
     pow,
     sign,
-    is_even,
-    is_odd,
-    is_positive,
-    is_negative,
-    is_zero,
+    isEven,
+    isOdd,
+    isPositive,
+    isNegative,
+    isZero,
     min,
     max,
     clamp
 )
 
-using int (to_float, to_string)
-using float (to_int, to_string)
-using string (len, is_empty, to_int, to_float)
+using Int (toFloat, toString)
+using Float (toInt, toString)
+using String (len, isEmpty, toInt, toFloat)

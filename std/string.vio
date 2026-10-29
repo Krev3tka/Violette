@@ -1,19 +1,19 @@
-package string
+package String
 
 extern func vio_str_len(s: String) -> Int
 extern func vio_str_to_int(s: String) -> Int
 extern func vio_str_to_float(s: String) -> Float64
 
 extend String {
-    func len(s: String) -> Int {
+    func (s: Self) len() -> Int {
         return vio_str_len(s)
     }
 
-    func is_empty(s: String) -> Bool {
+    func (s: Self) isEmpty() -> Bool {
         return s.len() == 0
     }
 
-    func repeat(s: String, n: Int) -> String {
+    func (s: Self) repeat(n: Int) -> String {
         var res = ""
 
         for i in 0..<n {
@@ -23,7 +23,7 @@ extend String {
         return res
     }
 
-    func starts_with(s: String, prefix: String) -> Bool {
+    func (s: Self) startsWith(prefix: String) -> Bool {
         if prefix.len() > s.len() {
             return false
         }
@@ -37,7 +37,7 @@ extend String {
         return true
     }
 
-    func ends_with(s: String, suffix: String) -> Bool {
+    func (s: Self) endsWith(suffix: String) -> Bool {
         if suffix.len() > s.len() {
             return false
         }
@@ -53,6 +53,6 @@ extend String {
         return true
     }
 
-    func to_int(s: String) -> Int = vio_str_to_int(s)
-    func to_float(s: String) -> Float64 = vio_str_to_float(s)
+    func (s: Self) toInt() -> Int = vio_str_to_int(s)
+    func (s: Self) toFloat() -> Float64 = vio_str_to_float(s)
 }

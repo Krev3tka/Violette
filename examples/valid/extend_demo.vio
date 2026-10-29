@@ -1,4 +1,4 @@
-using math
+using Math
 
 struct Point {
     x: Float64,
@@ -10,7 +10,7 @@ extend Point {
         return Point { x: x, y: y }
     }
 
-    func distance(p: Point, other: Point) -> Float64 {
+    func (p: Self) distance(other: Point) -> Float64 {
         let dx = p.x - other.x
         let dy = p.y - other.y
         return ((dx * dx) + (dy * dy)).sqrt()

@@ -62,6 +62,11 @@ impl Parser {
     }
 
     fn parse_type_inner(&mut self) -> Result<Type, ParseError> {
+        if matches!(self.current_token.token.clone(), Token::SelfType) {
+            self.next_token();
+            return Ok(Type::SelfTy);
+        }
+
         if matches!(self.current_token.token, Token::Fun) {
             self.next_token();
 

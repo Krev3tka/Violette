@@ -301,6 +301,24 @@ impl ClearSpan for Statement {
                 }
                 *span = Span::default();
             }
+            Statement::Method {
+                obj_span,
+                params,
+                body,
+                span,
+                ending_span,
+                ..
+            } => {
+                for param in params {
+                    param.clear_span();
+                }
+                for stmt in body {
+                    stmt.clear_span();
+                }
+                *obj_span = Span::default();
+                *span = Span::default();
+                *ending_span = Span::default()
+            }
             Statement::Extend { methods, span, .. } => {
                 for method in methods {
                     method.clear_span();

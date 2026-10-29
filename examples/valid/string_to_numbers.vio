@@ -1,5 +1,5 @@
-let int_num = "65387".to_int()
-let float_num = "375.28".to_float()
+let int_num = "65387".toInt()
+let float_num = "375.28".toFloat()
 
 println(int_num)
 println(float_num)

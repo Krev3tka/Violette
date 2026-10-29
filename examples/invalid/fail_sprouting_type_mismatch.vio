@@ -1,7 +1,7 @@
-func add_five(a: Int) -> Int {
+func addFive(a: Int) -> Int {
     return a + 5
 }
 
 println(
-    "https://archlinux.org" ~> add_five
+    "https://archlinux.org" ~> addFive
 )

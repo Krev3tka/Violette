@@ -410,6 +410,7 @@ impl Lexer {
                     "return" => Token::Return,
                     "struct" => Token::Struct,
                     "extend" => Token::Extend,
+                    "Self" => Token::SelfType,
                     "protocol" => Token::Protocol,
                     "variant" => Token::Variant,
                     "type" => Token::Type,

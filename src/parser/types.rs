@@ -53,6 +53,8 @@ pub enum Type {
 
     Array(Box<Type>),
 
+    SelfTy,
+
     Fn {
         params: Vec<Type>,
         ret: Option<Box<Type>>,

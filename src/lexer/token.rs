@@ -101,6 +101,11 @@ pub enum Token {
     /// Char literal
     Char(char),
 
+    /// `Self` type
+    ///
+    /// Used for annotating type of struct inside of it or in `extend` block
+    SelfType,
+
     /// Assignment operator `=`
     Assign,
 
