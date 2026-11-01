@@ -45,7 +45,7 @@ pub enum Token {
 
     Protocol,
 
-    Variant,
+    Enum,
 
     Type,
 

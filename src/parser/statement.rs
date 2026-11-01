@@ -365,7 +365,7 @@ impl Parser {
             }
             Token::Struct => self.parse_struct(),
             Token::Extend => self.parse_extend(),
-            Token::Variant => self.parse_variant(),
+            Token::Enum => self.parse_enum(),
             _ => {
                 let expr = self.parse_expression(Lowest)?;
                 if !matches!(
@@ -393,14 +393,14 @@ impl Parser {
         self.allowed_struct_literal = saved;
 
         self.next_token();
-        let mut _block = Vec::new();
+        let block: Vec<Statement>;
 
         if matches!(self.current_token.token.clone(), Token::LeftBrace) {
             self.next_token();
-            (_block, _) = self.parse_block()?;
+            (block, _) = self.parse_block()?;
         } else {
             self.next_token();
-            _block = vec![Statement::Expression {
+            block = vec![Statement::Expression {
                 expression: self.parse_expression(Lowest)?,
                 span,
             }];
@@ -409,7 +409,7 @@ impl Parser {
 
         Ok(ElseIf {
             condition,
-            block: _block,
+            block,
             span,
         })
     }
@@ -811,7 +811,7 @@ impl Parser {
         Ok(Statement::Struct { name, fields, span })
     }
 
-    pub fn parse_variant(&mut self) -> Result<Statement, ParseError> {
+    pub fn parse_enum(&mut self) -> Result<Statement, ParseError> {
         let start_span = self.current_token.span;
         self.next_token();
 

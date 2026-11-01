@@ -1,4 +1,4 @@
-variant Response {
+enum Response {
     Win(Int),
     Fail(String),
     Failed,

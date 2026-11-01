@@ -1,4 +1,4 @@
-package ifelse
+package IfElse
 
 func if_else(x: Float32) -> Float64 {
     if x > 5.0 {

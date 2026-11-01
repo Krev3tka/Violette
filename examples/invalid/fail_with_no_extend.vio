@@ -6,7 +6,7 @@ struct Point {
 }
 
 func distance(p: Point) -> Float64 {
-    return sqrt((p.x * p.x) + (p.y * p.y))
+    return (p.x * p.x) + (p.y * p.y).sqrt()
 }
 
 func main() {

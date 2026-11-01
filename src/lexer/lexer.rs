@@ -412,7 +412,7 @@ impl Lexer {
                     "extend" => Token::Extend,
                     "Self" => Token::SelfType,
                     "protocol" => Token::Protocol,
-                    "variant" => Token::Variant,
+                    "enum" => Token::Enum,
                     "type" => Token::Type,
                     "export" => Token::Export,
                     "local" => Token::Local,
