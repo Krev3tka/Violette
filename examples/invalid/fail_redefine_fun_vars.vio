@@ -6,6 +6,7 @@ func main() {
     var x = 5
 
     let x = 7
+    let x = 9
 }
 
 func double(x: Float64) -> Float64 {

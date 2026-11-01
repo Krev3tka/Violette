@@ -110,7 +110,7 @@ pub enum Statement {
         span: Span,
     },
 
-    Variant {
+    Enum {
         name: String,
         cases: Vec<VariantCase>,
         span: Span,
@@ -603,6 +603,8 @@ impl Parser {
             _ => return Err(self.unexpected(&self.current_token)),
         };
 
+        span = span.merge(&self.current_token.span);
+
         if matches!(self.current_token.token.clone(), Token::Assign) {
             self.next_token();
             self.skip_terminators();
@@ -903,7 +905,7 @@ impl Parser {
             },
         )?;
 
-        Ok(Statement::Variant {
+        Ok(Statement::Enum {
             name,
             cases,
             span: start_span.merge(&self.current_token.span),
@@ -1136,7 +1138,7 @@ impl Statement {
             Statement::Extend { span, .. } => *span,
             Statement::Break { span } => *span,
             Statement::Continue { span } => *span,
-            Statement::Variant { span, .. } => *span,
+            Statement::Enum { span, .. } => *span,
             Statement::Defer { span, .. } => *span,
         }
     }

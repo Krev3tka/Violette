@@ -21,11 +21,13 @@ pub struct Codegen {
     lambda_count: usize,
     is_main: bool,
     scope_defers: Vec<Vec<String>>,
+    scopes: Vec<HashMap<String, String>>,
     struct_names: HashSet<String>,
     variant_cases: HashMap<String, (String, bool)>,
     user_funcs: HashSet<String>,
     slice_types: HashSet<String>,
     methods_taking_ref: HashSet<String>,
+    var_versions: usize,
 }
 
 impl Codegen {
@@ -41,11 +43,13 @@ impl Codegen {
             lambda_count: 0,
             is_main: false,
             scope_defers: Vec::new(),
+            scopes: Vec::new(),
             struct_names: HashSet::new(),
             variant_cases: HashMap::new(),
             user_funcs: HashSet::new(),
             slice_types: HashSet::new(),
             methods_taking_ref: HashSet::new(),
+            var_versions: 0,
         }
     }
 
@@ -117,7 +121,7 @@ impl Codegen {
                 TypedStmtKind::Struct { name, .. } => {
                     self.struct_names.insert(name.clone());
                 }
-                TypedStmtKind::Variant { name, cases } => {
+                TypedStmtKind::Enum { name, cases } => {
                     for c in cases {
                         self.variant_cases
                             .insert(c.name.clone(), (name.clone(), c.payload.is_some()));
@@ -149,7 +153,7 @@ impl Codegen {
 
         for s in &prg.declarations {
             match s.kind {
-                TypedStmtKind::Struct { .. } | TypedStmtKind::Variant { .. } => {
+                TypedStmtKind::Struct { .. } | TypedStmtKind::Enum { .. } => {
                     lines.push(self.emit_statement(s)?)
                 }
                 _ => {}
@@ -204,7 +208,7 @@ impl Codegen {
             match &s.kind {
                 TypedStmtKind::Const { .. }
                 | TypedStmtKind::Struct { .. }
-                | TypedStmtKind::Variant { .. } => continue,
+                | TypedStmtKind::Enum { .. } => continue,
                 TypedStmtKind::Func { name, body, .. } if name == "main" => {
                     self.is_main = true;
                     lines.push("int main(void) {".to_string());
@@ -392,7 +396,7 @@ impl Codegen {
                     ));
                 }
 
-                let clean = name.replace("$", "_arg_");
+                let clean = self.resolve_var_name(name);
 
                 if *is_ref {
                     format!("(*{})", clean)
@@ -793,9 +797,30 @@ impl Codegen {
 
     pub fn emit_statement(&mut self, stmt: &TypedStmt) -> Result<String, CodegenError> {
         Ok(match &stmt.kind {
-            TypedStmtKind::Let { name, ty, value }
-            | TypedStmtKind::Const { name, ty, value }
-            | TypedStmtKind::Var { name, ty, value } => {
+            TypedStmtKind::Let { name, ty, value } | TypedStmtKind::Var { name, ty, value } => {
+                let val_str = self.emit_expression(value)?;
+
+                let is_shadowed = self.scopes.iter().any(|scope| scope.contains_key(name));
+
+                if is_shadowed {
+                    let c_name = format!("{}_{}", name, self.var_versions);
+                    self.var_versions += 1;
+
+                    self.scopes
+                        .last_mut()
+                        .unwrap()
+                        .insert(name.clone(), c_name.clone());
+
+                    format!("{} {} = {};", self.c_type(ty), c_name, val_str)
+                } else {
+                    self.scopes
+                        .last_mut()
+                        .unwrap()
+                        .insert(name.clone(), name.clone());
+                    format!("{} {} = {};", self.c_type(ty), name, val_str)
+                }
+            }
+            TypedStmtKind::Const { name, ty, value } => {
                 let val_str = self.emit_expression(value)?;
                 format!("{} {} = {};", self.c_type(ty), name, val_str)
             }
@@ -941,7 +966,7 @@ impl Codegen {
                 }
                 lines.join("\n")
             }
-            TypedStmtKind::Variant { name, cases } => {
+            TypedStmtKind::Enum { name, cases } => {
                 let mut c_cases = Vec::new();
                 for case in cases {
                     c_cases.push(format!("VIO_TAG_{}_{}", name, case.name));
@@ -1013,6 +1038,15 @@ impl Codegen {
             parameters
         };
 
+        self.scopes.push(HashMap::new());
+
+        for p in params {
+            self.scopes
+                .last_mut()
+                .unwrap()
+                .insert(p.name.clone(), p.name.clone());
+        }
+
         let body_str = if ret != "void" {
             let has_explicit_return = Self::does_block_return(body);
 
@@ -1037,10 +1071,14 @@ impl Codegen {
             self.emit_block(body)?
         };
 
+        self.scopes.pop();
+
         Ok(format!("{ret} {c_name}({parameters}) {{\n{body_str}\n}}\n"))
     }
 
     pub fn emit_block(&mut self, body: &[TypedStmt]) -> Result<String, CodegenError> {
+        self.scopes.push(HashMap::new());
+
         let mut lines = Vec::new();
         let mut string_vars: Vec<String> = Vec::new();
 
@@ -1078,6 +1116,8 @@ impl Codegen {
         for name in string_vars.iter().rev() {
             lines.push(format!("    vio_str_release({});", name));
         }
+
+        self.scopes.pop();
 
         Ok(lines.join("\n"))
     }
@@ -1235,6 +1275,16 @@ impl Codegen {
             Ty::Ref { inner, .. } => self.type_to_prefix(inner),
             _ => Cow::from("unknown"),
         }
+    }
+
+    fn resolve_var_name(&self, name: &str) -> String {
+        for scope in self.scopes.iter().rev() {
+            if let Some(c_name) = scope.get(name) {
+                return c_name.clone();
+            }
+        }
+
+        name.replace("$", "_arg_")
     }
 
     fn does_block_return(body: &[TypedStmt]) -> bool {

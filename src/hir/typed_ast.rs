@@ -204,7 +204,7 @@ pub enum TypedStmtKind {
         methods: Vec<TypedStmt>,
     },
 
-    Variant {
+    Enum {
         name: String,
         cases: Vec<VariantCase>,
     },

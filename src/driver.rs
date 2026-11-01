@@ -41,7 +41,7 @@ fn filter_declarations(
     let filtered = declarations
         .into_iter()
         .filter_map(|stmt| match stmt {
-            Statement::ExternFunc { .. } | Statement::Variant { .. } => Some(stmt),
+            Statement::ExternFunc { .. } | Statement::Enum { .. } => Some(stmt),
             Statement::Func { ref name, .. }
             | Statement::Const { ref name, .. }
             | Statement::Struct { ref name, .. } => {

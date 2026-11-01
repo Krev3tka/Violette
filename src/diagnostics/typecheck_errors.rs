@@ -63,7 +63,7 @@ impl Diagnostics for TypeError {
                 def_kind,
             } => {
                 let kind_str = match def_kind {
-                    DefinitionKind::Var => "variable",
+                    DefinitionKind::Var => "variable", // unused, variables are redefinable
                     DefinitionKind::Fun => "function",
                     DefinitionKind::Struct => "struct",
                 };

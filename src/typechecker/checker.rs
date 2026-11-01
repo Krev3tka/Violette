@@ -320,7 +320,7 @@ impl Checker {
 
                     self.current_self_type = None;
                 }
-                Statement::Variant { name, cases, .. } => {
+                Statement::Enum { name, cases, .. } => {
                     for case in cases {
                         let ty = case.payload.clone().map(|ty| self.resolve(&ty));
                         self.variant_cases
@@ -849,8 +849,8 @@ impl Checker {
                     span: *span,
                 }
             }
-            Statement::Variant { name, cases, span } => TypedStmt {
-                kind: TypedStmtKind::Variant {
+            Statement::Enum { name, cases, span } => TypedStmt {
+                kind: TypedStmtKind::Enum {
                     name: name.clone(),
                     cases: cases.clone(),
                 },
@@ -2901,7 +2901,7 @@ impl Checker {
                 | Statement::Continue { .. }
                 | Statement::ExternFunc { .. }
                 | Statement::Extend { .. }
-                | Statement::Variant { .. }
+                | Statement::Enum { .. }
                 | Statement::Defer { .. } => continue,
                 Statement::Expression { expression, .. } => {
                     if let Expression::If {

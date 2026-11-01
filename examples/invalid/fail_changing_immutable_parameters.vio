@@ -1,5 +1,5 @@
 func calculate_price(price: Float64) -> Float64 {
-    let price = price * 1.2 // Error: assignment to immutable parameter
+    price = price * 1.2 // Error: assignment to immutable parameter
 
     return price
 }

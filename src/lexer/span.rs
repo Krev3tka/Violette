@@ -326,7 +326,7 @@ impl ClearSpan for Statement {
 
                 *span = Span::default();
             }
-            Statement::Variant { cases, span, .. } => {
+            Statement::Enum { cases, span, .. } => {
                 for case in cases {
                     case.clear_span()
                 }
