@@ -66,4 +66,7 @@ pub enum LexError {
 
     /// Used for empty char literals
     EmptyChar,
+
+    /// Used for wrong lambda parameter number
+    InvalidLambdaParamSuffix,
 }

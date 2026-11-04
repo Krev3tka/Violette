@@ -320,6 +320,38 @@ impl Lexer {
                 }
             }
 
+            '#' => {
+                if self.peek_char().is_numeric() {
+                    self.read_char();
+
+                    let num_token = self.read_number_literal(self.current_pos());
+
+                    if let Token::Int(num) = num_token.token {
+                        if num <= 255 {
+                            SpannedToken {
+                                token: Token::HashTagNum(num as u8),
+                                span: Span::new(start, self.current_pos()),
+                            }
+                        } else {
+                            SpannedToken {
+                                token: Token::Illegal(LexError::InvalidLambdaParamSuffix),
+                                span: Span::new(start, self.current_pos()),
+                            }
+                        }
+                    } else {
+                        SpannedToken {
+                            token: Token::Illegal(LexError::InvalidLambdaParamSuffix),
+                            span: Span::new(start, self.current_pos()),
+                        }
+                    }
+                } else {
+                    SpannedToken {
+                        token: Token::Illegal(LexError::InvalidLambdaParamSuffix),
+                        span: Span::new(start, self.current_pos()),
+                    }
+                }
+            }
+
             '\0' => SpannedToken {
                 token: Token::Eof,
                 span: Span::new(start, start),

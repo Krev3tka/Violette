@@ -112,7 +112,7 @@ pub enum Statement {
 
     Enum {
         name: String,
-        cases: Vec<VariantCase>,
+        cases: Vec<EnumCase>,
         span: Span,
     },
 }
@@ -163,7 +163,7 @@ pub struct MatchArm {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct VariantCase {
+pub struct EnumCase {
     pub name: String,
     pub payload: Option<Type>,
     pub span: Span,
@@ -875,7 +875,7 @@ impl Parser {
                 None
             };
 
-            cases.push(VariantCase {
+            cases.push(EnumCase {
                 name: case_name,
                 payload,
                 span: case_span,

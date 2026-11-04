@@ -1,24 +1,29 @@
 func main () {
-    let add = \x: Int, y: Int, => x + y
-    let subtract = \x: Float64, y: Float64 => { x - y }
+    let add: fun(Int, Int) -> Int = { #0 + #1 }
 
-    let multiply = \x: Int, y: Int, => {
-        println(x)
-        println(y)
+    let subtract: fun(Float64, Float64) -> Float64 = {
+        let a = #0
+        let b = #1
+
+        a - b
+    }
+
+    let multiply: fun(Int, Int) -> Int = {
+        let x = #0
+        let y = #1
+
+        println("First multiplier: " + x.toString())
+        println("Second multiplier: " + y.toString())
+
         x * y
     }
 
-    let divide = \x: Int, y: Int  => {
-        return x / y
-    }
-
-    let power = \x: Float64, y: Float64 -> Float64 => {
-        x ** y
+    let divide: fun(Int, Int) -> Int = {
+        return #0 / #1
     }
 
     println(add(5, 7))
     println(subtract(5.0, 7.0))
     println(multiply(5, 7))
     println(divide(5, 7))
-    println(power(5.0, 7.0))
 }

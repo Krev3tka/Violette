@@ -199,6 +199,40 @@ mod lexing_tests {
     }
 
     #[test]
+    fn lambda_params_check() {
+        let input = "
+        let lambda1 = { #0 + #1 }
+        let lambdaManyParams = { #0 + #1 * #102 }";
+
+        assert_tokens(
+            input,
+            vec![
+                Token::Newline,
+                Token::Let,
+                Token::LowerIdent("lambda1".to_string()),
+                Token::Assign,
+                Token::LeftBrace,
+                Token::HashTagNum(0),
+                Token::Add,
+                Token::HashTagNum(1),
+                Token::RightBrace,
+                Token::Newline,
+                Token::Let,
+                Token::LowerIdent("lambdaManyParams".to_string()),
+                Token::Assign,
+                Token::LeftBrace,
+                Token::HashTagNum(0),
+                Token::Add,
+                Token::HashTagNum(1),
+                Token::Multiply,
+                Token::HashTagNum(102),
+                Token::RightBrace,
+                Token::Eof,
+            ],
+        )
+    }
+
+    #[test]
     fn final_test() {
         let input = "
         /*

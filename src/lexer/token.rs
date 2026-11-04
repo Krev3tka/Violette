@@ -245,6 +245,9 @@ pub enum Token {
     /// Arrow operator `->`
     Arrow,
 
+    /// Lambda numbered parameter, e.g. `#0`, `#1`
+    HashTagNum(u8),
+
     /// Keyword `using`
     Using,
 

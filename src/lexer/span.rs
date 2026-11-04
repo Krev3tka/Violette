@@ -1,6 +1,6 @@
 use crate::lexer::token::Token;
 use crate::parser::expression::CallArg;
-use crate::parser::statement::{FuncParam, MatchArm, StructParam, VariantCase};
+use crate::parser::statement::{EnumCase, FuncParam, MatchArm, StructParam};
 use crate::parser::{Expression, Statement};
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Ord, PartialOrd, Default)]
@@ -193,6 +193,9 @@ impl ClearSpan for Expression {
                 *closing_span = None;
                 *span = Span::default();
             }
+            Expression::NumberedParam { span, .. } => {
+                *span = Span::default();
+            }
         }
     }
 }
@@ -357,7 +360,7 @@ impl ClearSpan for StructParam {
     }
 }
 
-impl ClearSpan for VariantCase {
+impl ClearSpan for EnumCase {
     fn clear_span(&mut self) {
         self.span = Span::default();
     }

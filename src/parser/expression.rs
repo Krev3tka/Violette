@@ -105,6 +105,11 @@ pub enum Expression {
         span: Span,
     },
 
+    NumberedParam {
+        index: u8,
+        span: Span,
+    },
+
     Lambda {
         params: Vec<FuncParam>,
         return_type: Option<Type>,
@@ -426,6 +431,27 @@ impl Parser {
                         right: Box::new(right),
                         span: start_span.merge(&self.current_token.span),
                     }
+                }
+            }
+            Token::HashTagNum(idx) => {
+                let span = self.current_token.span;
+
+                let index = *idx;
+
+                // self.next_token();
+
+                Expression::NumberedParam { index, span }
+            }
+            Token::LeftBrace => {
+                let start_span = self.current_token.span;
+                self.next_token();
+                self.skip_terminators();
+
+                let (body, _) = self.parse_block()?;
+
+                Expression::Block {
+                    body,
+                    span: start_span.merge(&self.current_token.span),
                 }
             }
             Token::Equals
@@ -1377,6 +1403,7 @@ impl Expression {
             Expression::Lambda { span, .. } => *span,
             Expression::Range { span, .. } => *span,
             Expression::If { span, .. } => *span,
+            Expression::NumberedParam { span, .. } => *span,
         }
     }
 }

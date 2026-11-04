@@ -2,7 +2,7 @@
 use crate::lexer::span::Span;
 use crate::lexer::token::Token;
 use crate::parser::expression::RangeKind;
-use crate::parser::statement::{FuncParam, StructParam, VariantCase};
+use crate::parser::statement::{EnumCase, FuncParam, StructParam};
 use crate::typechecker::error::TypeError;
 use crate::typechecker::types::Ty;
 
@@ -206,7 +206,7 @@ pub enum TypedStmtKind {
 
     Enum {
         name: String,
-        cases: Vec<VariantCase>,
+        cases: Vec<EnumCase>,
     },
 
     Error {
