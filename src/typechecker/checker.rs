@@ -203,8 +203,14 @@ impl Checker {
                             }
                             struct_name.clone()
                         }
-                        Ty::Int => "int".to_string(),
-                        Ty::Float => "float64".to_string(),
+                        Ty::Sized { signed: true } => "int".to_string(),
+                        Ty::Sized { signed: false } => "uint".to_string(),
+                        Ty::Int {
+                            signed: false,
+                            bits,
+                        } => format!("int{bits}"),
+                        Ty::Int { signed: true, bits } => format!("uint{bits}"),
+                        Ty::Float { bits } => format!("float{bits}"),
                         Ty::String => "string".to_string(),
                         Ty::Char => "char".to_string(),
                         Ty::Bool => "bool".to_string(),
@@ -334,9 +340,52 @@ impl Checker {
             Type::Named(path) => {
                 let name = path.segments.last().unwrap();
                 match name.as_str() {
-                    "Int" | "Int8" | "Int16" | "Int32" | "Int64" | "UInt" | "UInt8" | "UInt16"
-                    | "UInt32" | "UInt64" => Ty::Int,
-                    "Float32" | "Float64" => Ty::Float,
+                    "Int" => Ty::Sized { signed: true },
+                    "Int8" => Ty::Int {
+                        bits: 8,
+                        signed: true,
+                    },
+                    "Int16" => Ty::Int {
+                        bits: 16,
+                        signed: true,
+                    },
+                    "Int32" => Ty::Int {
+                        bits: 32,
+                        signed: true,
+                    },
+                    "Int64" => Ty::Int {
+                        bits: 64,
+                        signed: true,
+                    },
+                    "Int128" => Ty::Int {
+                        bits: 128,
+                        signed: true,
+                    },
+
+                    "UInt" => Ty::Sized { signed: false },
+                    "UInt8" => Ty::Int {
+                        bits: 8,
+                        signed: false,
+                    },
+                    "UInt16" => Ty::Int {
+                        bits: 16,
+                        signed: false,
+                    },
+                    "UInt32" => Ty::Int {
+                        bits: 32,
+                        signed: false,
+                    },
+                    "UInt64" => Ty::Int {
+                        bits: 64,
+                        signed: false,
+                    },
+                    "UInt128" => Ty::Int {
+                        bits: 128,
+                        signed: false,
+                    },
+
+                    "Float32" => Ty::Float { bits: 32 },
+                    "Float64" => Ty::Float { bits: 64 },
                     "String" => Ty::String,
                     "Bool" => Ty::Bool,
                     "Char" => Ty::Char,
@@ -533,7 +582,12 @@ impl Checker {
                 });
             }
 
-            self.defined(variable.clone(), Ty::Int, BindingKind::Var, stmt.span());
+            self.defined(
+                variable.clone(),
+                Ty::Sized { signed: true },
+                BindingKind::Var,
+                stmt.span(),
+            );
 
             let body = self.check_block(body);
 
@@ -1147,8 +1201,8 @@ impl Checker {
             "print".to_string(),
             Ty::Fn {
                 params: vec![Ty::Union(vec![
-                    Ty::Int,
-                    Ty::Float,
+                    Ty::Sized { signed: true },
+                    Ty::Float { bits: 64 },
                     Ty::String,
                     Ty::Bool,
                     Ty::Char,
@@ -1162,8 +1216,8 @@ impl Checker {
             "println".to_string(),
             Ty::Fn {
                 params: vec![Ty::Union(vec![
-                    Ty::Int,
-                    Ty::Float,
+                    Ty::Sized { signed: true },
+                    Ty::Float { bits: 64 },
                     Ty::String,
                     Ty::Bool,
                     Ty::Char,
@@ -1390,8 +1444,14 @@ impl Checker {
 
     pub fn type_to_prefix<'a>(&self, ty: &'a Ty) -> Cow<'a, str> {
         match ty {
-            Ty::Int => Cow::from("int"),
-            Ty::Float => Cow::from("float64"),
+            Ty::Sized { signed: true } => Cow::from("int"),
+            Ty::Sized { signed: false } => Cow::from("uint"),
+            Ty::Int { signed: true, bits } => Cow::from(format!("int{bits}")),
+            Ty::Int {
+                signed: false,
+                bits,
+            } => Cow::from(format!("uint{bits}")),
+            Ty::Float { bits } => Cow::from(format!("float{bits}")),
             Ty::String => Cow::from("string"),
             Ty::Char => Cow::from("char"),
             Ty::Bool => Cow::from("bool"),
@@ -1401,5 +1461,36 @@ impl Checker {
             }
             _ => Cow::from("unknown"),
         }
+    }
+
+    pub fn unify_numeric_types(&mut self, left: &Ty, right: &Ty) -> Option<Ty> {
+        // 1. identical types
+        if left == right && (matches!(left, Ty::Int { .. } | Ty::Float { .. })) {
+            return Some(left.clone());
+        }
+
+        // 2. One of operands is a literal, second is integer
+        if let (Ty::Int { bits, signed }, Ty::Sized { .. })
+        | (Ty::Sized { .. }, Ty::Int { bits, signed }) = (left, right)
+        {
+            return Some(Ty::Int {
+                bits: *bits,
+                signed: *signed,
+            });
+        }
+
+        // 3. One of operands is a literal, second is floating
+        if let (Ty::Float { bits }, Ty::Sized { .. }) | (Ty::Sized { .. }, Ty::Float { bits }) =
+            (left, right)
+        {
+            return Some(Ty::Float { bits: *bits });
+        }
+
+        // 4. Two literals
+        if let (Ty::Sized { signed: s1 }, Ty::Sized { signed: s2 }) = (left, right) {
+            return Some(Ty::Sized { signed: *s1 && *s2 });
+        }
+
+        None
     }
 }

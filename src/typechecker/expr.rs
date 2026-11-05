@@ -17,12 +17,12 @@ impl Checker {
         match expr {
             Expression::IntLiteral { val, span } => TypedExpr {
                 kind: TypedExprKind::IntLiteral { val: *val },
-                ty: Ty::Int,
+                ty: Ty::Sized { signed: true },
                 span: *span,
             },
             Expression::FloatLiteral { val, span } => TypedExpr {
                 kind: TypedExprKind::FloatLiteral { val: *val },
-                ty: Ty::Float,
+                ty: Ty::Float { bits: 64 },
                 span: *span,
             },
             Expression::BoolLiteral { val, span } => TypedExpr {
@@ -129,97 +129,92 @@ impl Checker {
                 let right_ty = typed_right.clone().ty;
 
                 let ty = match operator {
-                    Token::Add => match (&left_ty, &right_ty) {
-                        (Ty::Int, Ty::Int) => Ty::Int,
-                        (Ty::Float, Ty::Float) => Ty::Float,
-                        (Ty::String, Ty::String) => Ty::String,
-                        (Ty::Error, _) | (_, Ty::Error) => Ty::Error,
-                        _ => {
-                            self.errors.push(TypeError::InvalidBinaryOperator {
-                                operator: operator.clone(),
-                                left: Box::new(left_ty.clone()),
-                                right: Box::new(right_ty.clone()),
-                                span: *span,
-                            });
+                    Token::Add if left_ty == Ty::String && right_ty == Ty::String => Ty::String,
+
+                    Token::Add
+                    | Token::Subtract
+                    | Token::Multiply
+                    | Token::Divide
+                    | Token::Power => {
+                        if left_ty == Ty::Error || right_ty == Ty::Error {
                             Ty::Error
-                        }
-                    },
-                    Token::Subtract | Token::Multiply | Token::Divide | Token::Power => {
-                        match (&left_ty, &right_ty) {
-                            (Ty::Int, Ty::Int) => Ty::Int,
-                            (Ty::Float, Ty::Float) => Ty::Float,
-                            (Ty::Error, _) | (_, Ty::Error) => Ty::Error,
-                            _ => {
-                                self.errors.push(TypeError::InvalidBinaryOperator {
-                                    operator: operator.clone(),
-                                    left: Box::new(left_ty.clone()),
-                                    right: Box::new(right_ty.clone()),
-                                    span: *span,
-                                });
-                                Ty::Error
-                            }
+                        } else if let Some(res_ty) = self.unify_numeric_types(&left_ty, &right_ty) {
+                            res_ty
+                        } else {
+                            self.errors.push(TypeError::InvalidBinaryOperator {
+                                left: Box::new(left_ty),
+                                operator: operator.clone(),
+                                right: Box::new(right_ty),
+                                span: expr.span(),
+                            });
+
+                            Ty::Error
                         }
                     }
-                    Token::Modulus => match (&left_ty, &right_ty) {
-                        (Ty::Int, Ty::Int) => Ty::Int,
-                        (Ty::Error, _) | (_, Ty::Error) => Ty::Error,
-                        _ => {
-                            self.errors.push(TypeError::InvalidBinaryOperator {
-                                operator: operator.clone(),
-                                left: Box::new(left_ty.clone()),
-                                right: Box::new(right_ty.clone()),
-                                span: *span,
-                            });
-                            Ty::Error
-                        }
-                    },
                     Token::Less | Token::Greater | Token::LessOrEquals | Token::GreaterOrEquals => {
-                        match (&left_ty, &right_ty) {
-                            (Ty::Int, Ty::Int) | (Ty::Float, Ty::Float) => Ty::Bool,
-                            (Ty::Error, _) | (_, Ty::Error) => Ty::Error,
-                            _ => {
-                                self.errors.push(TypeError::InvalidBinaryOperator {
-                                    operator: operator.clone(),
-                                    left: Box::new(left_ty.clone()),
-                                    right: Box::new(right_ty.clone()),
-                                    span: *span,
-                                });
-                                Ty::Error
-                            }
+                        if self.unify_numeric_types(&left_ty, &right_ty).is_some() {
+                            Ty::Bool
+                        } else {
+                            self.errors.push(TypeError::InvalidBinaryOperator {
+                                left: Box::new(left_ty),
+                                operator: operator.clone(),
+                                right: Box::new(right_ty),
+                                span: expr.span(),
+                            });
+
+                            Ty::Error
                         }
                     }
-                    Token::Equals | Token::NotEquals => match (&left_ty, &right_ty) {
-                        (Ty::Error, _) | (_, Ty::Error) => Ty::Error,
-                        _ => {
-                            if left_ty != right_ty {
-                                self.errors.push(TypeError::InvalidBinaryOperator {
-                                    operator: operator.clone(),
-                                    left: Box::new(left_ty.clone()),
-                                    right: Box::new(right_ty.clone()),
-                                    span: *span,
-                                });
-                                return TypedExpr::error(
-                                    *span,
-                                    TypeError::InvalidBinaryOperator {
-                                        operator: operator.clone(),
-                                        left: Box::new(left_ty.clone()),
-                                        right: Box::new(right_ty.clone()),
-                                        span: *span,
-                                    },
-                                );
-                            }
+                    Token::Equals | Token::NotEquals => {
+                        let compatible = left_ty == right_ty
+                            || self.unify_numeric_types(&left_ty, &right_ty).is_some();
+
+                        if compatible {
                             Ty::Bool
+                        } else {
+                            self.errors.push(TypeError::InvalidBinaryOperator {
+                                left: Box::new(left_ty),
+                                operator: operator.clone(),
+                                right: Box::new(right_ty),
+                                span: expr.span(),
+                            });
+
+                            Ty::Error
                         }
-                    },
+                    }
                     Token::LogicAnd | Token::LogicOr => {
                         self.expect(&left_ty, &Ty::Bool, expr.span());
                         self.expect(&right_ty, &Ty::Bool, expr.span());
                         Ty::Bool
                     }
-                    Token::BitAnd | Token::BitOr | Token::BitNot | Token::BitXOR => {
-                        self.expect(&left_ty, &Ty::Int, expr.span());
-                        self.expect(&right_ty, &Ty::Int, expr.span());
-                        Ty::Int
+                    Token::BitAnd
+                    | Token::BitOr
+                    | Token::BitNot
+                    | Token::BitXOR
+                    | Token::Modulus => {
+                        if let Some(res_ty) = self.unify_numeric_types(&left_ty, &right_ty) {
+                            if !matches!(res_ty, Ty::Float { .. }) {
+                                res_ty
+                            } else {
+                                self.errors.push(TypeError::InvalidBinaryOperator {
+                                    left: Box::new(left_ty),
+                                    operator: operator.clone(),
+                                    right: Box::new(right_ty),
+                                    span: expr.span(),
+                                });
+
+                                Ty::Error
+                            }
+                        } else {
+                            self.errors.push(TypeError::InvalidBinaryOperator {
+                                left: Box::new(left_ty),
+                                operator: operator.clone(),
+                                right: Box::new(right_ty),
+                                span: expr.span(),
+                            });
+
+                            Ty::Error
+                        }
                     }
                     _ => Ty::Error,
                 };
@@ -248,8 +243,50 @@ impl Checker {
                         Ty::Bool
                     }
                     Token::Subtract => match right_ty {
-                        Ty::Int => Ty::Int,
-                        Ty::Float => Ty::Float,
+                        Ty::Int {
+                            bits: 8,
+                            signed: true,
+                        }
+                        | Ty::Int {
+                            bits: 16,
+                            signed: true,
+                        }
+                        | Ty::Int {
+                            bits: 32,
+                            signed: true,
+                        }
+                        | Ty::Int {
+                            bits: 64,
+                            signed: true,
+                        }
+                        | Ty::Int {
+                            bits: 128,
+                            signed: true,
+                        }
+                        | Ty::Int {
+                            bits: 8,
+                            signed: false,
+                        }
+                        | Ty::Int {
+                            bits: 16,
+                            signed: false,
+                        }
+                        | Ty::Int {
+                            bits: 32,
+                            signed: false,
+                        }
+                        | Ty::Int {
+                            bits: 64,
+                            signed: false,
+                        }
+                        | Ty::Int {
+                            bits: 128,
+                            signed: false,
+                        }
+                        | Ty::Sized { signed: false }
+                        | Ty::Sized { signed: true }
+                        | Ty::Float { bits: 32 }
+                        | Ty::Float { bits: 64 } => right_ty,
                         _ => {
                             self.errors.push(TypeError::InvalidUnaryOperator {
                                 operator: operator.clone(),
@@ -261,9 +298,55 @@ impl Checker {
                         }
                     },
                     Token::BitNot => {
-                        self.expect(&right_ty, &Ty::Int, expr.span());
+                        match right_ty {
+                            Ty::Int {
+                                bits: 8,
+                                signed: true,
+                            }
+                            | Ty::Int {
+                                bits: 16,
+                                signed: true,
+                            }
+                            | Ty::Int {
+                                bits: 32,
+                                signed: true,
+                            }
+                            | Ty::Int {
+                                bits: 64,
+                                signed: true,
+                            }
+                            | Ty::Int {
+                                bits: 128,
+                                signed: true,
+                            }
+                            | Ty::Int {
+                                bits: 8,
+                                signed: false,
+                            }
+                            | Ty::Int {
+                                bits: 16,
+                                signed: false,
+                            }
+                            | Ty::Int {
+                                bits: 32,
+                                signed: false,
+                            }
+                            | Ty::Int {
+                                bits: 64,
+                                signed: false,
+                            }
+                            | Ty::Int {
+                                bits: 128,
+                                signed: false,
+                            }
+                            | Ty::Sized { signed: false }
+                            | Ty::Sized { signed: true } => {}
+                            _ => {
+                                self.expect(&right_ty, &Ty::Sized { signed: true }, expr.span());
+                            }
+                        };
 
-                        Ty::Int
+                        right_ty
                     }
                     Token::BitAnd => match right.as_ref() {
                         Expression::Identifier { name, .. } => match self.env.lookup(name) {
@@ -321,8 +404,50 @@ impl Checker {
                 }
 
                 let ty = match typed_left.ty {
-                    Ty::Int => Ty::Int,
-                    Ty::Float => Ty::Float,
+                    Ty::Int {
+                        bits: 8,
+                        signed: true,
+                    }
+                    | Ty::Int {
+                        bits: 16,
+                        signed: true,
+                    }
+                    | Ty::Int {
+                        bits: 32,
+                        signed: true,
+                    }
+                    | Ty::Int {
+                        bits: 64,
+                        signed: true,
+                    }
+                    | Ty::Int {
+                        bits: 128,
+                        signed: true,
+                    }
+                    | Ty::Int {
+                        bits: 8,
+                        signed: false,
+                    }
+                    | Ty::Int {
+                        bits: 16,
+                        signed: false,
+                    }
+                    | Ty::Int {
+                        bits: 32,
+                        signed: false,
+                    }
+                    | Ty::Int {
+                        bits: 64,
+                        signed: false,
+                    }
+                    | Ty::Int {
+                        bits: 128,
+                        signed: false,
+                    }
+                    | Ty::Sized { signed: false }
+                    | Ty::Sized { signed: true }
+                    | Ty::Float { bits: 32 }
+                    | Ty::Float { bits: 64 } => typed_left.ty.clone(),
                     Ty::Error => Ty::Error,
                     _ => {
                         self.errors.push(TypeError::InvalidUnaryOperator {
@@ -357,11 +482,15 @@ impl Checker {
                     .as_ref()
                     .map(|e| Box::new(self.check_expr(e.as_ref(), expected)));
 
-                let start_ty = typed_start.as_ref().map_or(Ty::Int, |s| s.ty.clone());
-                let end_ty = typed_end.as_ref().map_or(Ty::Int, |e| e.ty.clone());
+                let start_ty = typed_start
+                    .as_ref()
+                    .map_or(Ty::Sized { signed: true }, |s| s.ty.clone());
+                let end_ty = typed_end
+                    .as_ref()
+                    .map_or(Ty::Sized { signed: true }, |e| e.ty.clone());
 
-                self.expect(&start_ty, &Ty::Int, expr.span());
-                self.expect(&end_ty, &Ty::Int, expr.span());
+                self.expect(&start_ty, &Ty::Sized { signed: true }, expr.span());
+                self.expect(&end_ty, &Ty::Sized { signed: true }, expr.span());
 
                 TypedExpr {
                     kind: TypedExprKind::Range {
@@ -371,7 +500,7 @@ impl Checker {
                     },
                     ty: Ty::Generic {
                         name: "Range".to_string(),
-                        param: Box::new(Ty::Int),
+                        param: Box::new(Ty::Sized { signed: true }),
                     },
                     span: *span,
                 }
@@ -384,7 +513,7 @@ impl Checker {
                     matches!(typed_index.ty, Ty::Generic { ref name, .. } if name == "Range");
 
                 if !is_slice {
-                    self.expect(&typed_index.ty, &Ty::Int, index.span());
+                    self.expect(&typed_index.ty, &Ty::Sized { signed: true }, index.span());
                 }
 
                 let el_ty = match typed_left.ty {
@@ -887,7 +1016,7 @@ impl Checker {
                             object: Box::new(obj),
                             name: name.clone(),
                         },
-                        ty: Ty::Int,
+                        ty: Ty::Sized { signed: true },
                         span: *span,
                     };
                 }
@@ -1033,8 +1162,54 @@ impl Checker {
                     obj_ty = self.infer(object.as_ref(), None);
                     let sig_name = match &obj_ty {
                         Ty::Struct(s) => format!("{}.{}", s, name),
-                        Ty::Int => format!("int.{}", name),
-                        Ty::Float => format!("float64.{}", name),
+                        Ty::Int {
+                            bits: 8,
+                            signed: true,
+                        } => format!("int{}.{}", 8, name),
+                        Ty::Int {
+                            bits: 16,
+                            signed: true,
+                        } => format!("int{}.{}", 16, name),
+                        Ty::Int {
+                            bits: 32,
+                            signed: true,
+                        } => format!("int{}.{}", 32, name),
+                        Ty::Int {
+                            bits: 64,
+                            signed: true,
+                        } => format!("int{}.{}", 64, name),
+                        Ty::Int {
+                            bits: 128,
+                            signed: true,
+                        } => format!("int{}.{}", 128, name),
+
+                        Ty::Int {
+                            bits: 8,
+                            signed: false,
+                        } => format!("uint{}.{}", 8, name),
+                        Ty::Int {
+                            bits: 16,
+                            signed: false,
+                        } => format!("uint{}.{}", 16, name),
+                        Ty::Int {
+                            bits: 32,
+                            signed: false,
+                        } => format!("uint{}.{}", 32, name),
+                        Ty::Int {
+                            bits: 64,
+                            signed: false,
+                        } => format!("uint{}.{}", 64, name),
+                        Ty::Int {
+                            bits: 128,
+                            signed: false,
+                        } => format!("uint{}.{}", 128, name),
+
+                        Ty::Sized { signed: false } | Ty::Sized { signed: true } => {
+                            format!("int.{}", name)
+                        }
+
+                        Ty::Float { bits: 32 } => format!("float{}.{}", 32, name),
+                        Ty::Float { bits: 64 } => format!("float{}.{}", 64, name),
                         Ty::String => format!("string.{}", name),
                         Ty::Char => format!("char.{}", name),
                         Ty::Bool => format!("bool.{}", name),

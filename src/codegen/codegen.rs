@@ -55,8 +55,15 @@ impl Codegen {
 
     pub fn c_type(&mut self, ty: &Ty) -> String {
         match ty {
-            Ty::Int => "int64_t".to_string(),
-            Ty::Float => "double".to_string(),
+            Ty::Sized { signed: true } => "int64_t".to_string(),
+            Ty::Sized { signed: false } => "uint64_t".to_string(),
+            Ty::Int { bits, signed: true } => format!("int{bits}_t"),
+            Ty::Int {
+                bits,
+                signed: false,
+            } => format!("uint{bits}_t"),
+            Ty::Float { bits: 32 } => "float".to_string(),
+            Ty::Float { bits: 64 } => "double".to_string(),
             Ty::Bool => "bool".to_string(),
             Ty::Char => "uint32_t".to_string(),
             Ty::String => "VioString".to_string(),
@@ -420,8 +427,9 @@ impl Codegen {
                     && args.len() == 1
                 {
                     let suffix = match &args[0].ty {
-                        Ty::Int => "int",
-                        Ty::Float => "float",
+                        Ty::Sized { signed: true } | Ty::Int { .. } => "int",
+                        Ty::Sized { signed: false } => "uint",
+                        Ty::Float { bits: _ } => "float",
                         Ty::Bool => "bool",
                         Ty::String => "string",
                         Ty::Char => "char",
@@ -528,7 +536,7 @@ impl Codegen {
 
                 let param_tys = match &expr.ty {
                     Ty::Fn { params, .. } => params.clone(),
-                    _ => vec![Ty::Int; params.len()],
+                    _ => vec![Ty::Sized { signed: true }; params.len()],
                 };
 
                 let mut param_strs = Vec::new();
@@ -1164,8 +1172,52 @@ impl Codegen {
             Type::Named(path) => {
                 let name = path.segments.last().unwrap();
                 match name.as_str() {
-                    "Int" => Ty::Int,
-                    "Float32" | "Float64" => Ty::Float,
+                    "Int" => Ty::Sized { signed: true },
+                    "Int8" => Ty::Int {
+                        bits: 8,
+                        signed: true,
+                    },
+                    "Int16" => Ty::Int {
+                        bits: 16,
+                        signed: true,
+                    },
+                    "Int32" => Ty::Int {
+                        bits: 32,
+                        signed: true,
+                    },
+                    "Int64" => Ty::Int {
+                        bits: 64,
+                        signed: true,
+                    },
+                    "Int128" => Ty::Int {
+                        bits: 128,
+                        signed: true,
+                    },
+
+                    "UInt" => Ty::Sized { signed: false },
+                    "UInt8" => Ty::Int {
+                        bits: 8,
+                        signed: false,
+                    },
+                    "UInt16" => Ty::Int {
+                        bits: 16,
+                        signed: false,
+                    },
+                    "UInt32" => Ty::Int {
+                        bits: 32,
+                        signed: false,
+                    },
+                    "UInt64" => Ty::Int {
+                        bits: 64,
+                        signed: false,
+                    },
+                    "UInt128" => Ty::Int {
+                        bits: 128,
+                        signed: false,
+                    },
+
+                    "Float32" => Ty::Float { bits: 32 },
+                    "Float64" => Ty::Float { bits: 64 },
                     "String" => Ty::String,
                     "Bool" => Ty::Bool,
                     "Char" => Ty::Char,
@@ -1265,8 +1317,14 @@ impl Codegen {
 
     fn type_to_prefix<'a>(&self, ty: &'a Ty) -> Cow<'a, str> {
         match ty {
-            Ty::Int => Cow::from("int"),
-            Ty::Float => Cow::from("float64"),
+            Ty::Sized { signed: true } => Cow::from("int"),
+            Ty::Sized { signed: false } => Cow::from("uint"),
+            Ty::Int { signed: true, bits } => Cow::from(format!("int{bits}")),
+            Ty::Int {
+                signed: false,
+                bits,
+            } => Cow::from(format!("uint{bits}")),
+            Ty::Float { bits } => Cow::from(format!("float{bits}")),
             Ty::String => Cow::from("string"),
             Ty::Char => Cow::from("char"),
             Ty::Bool => Cow::from("bool"),

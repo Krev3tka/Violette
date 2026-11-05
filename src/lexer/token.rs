@@ -71,6 +71,9 @@ pub enum Token {
     /// 64-bit signed integer literal
     Int64(i64),
 
+    /// 128-bit signed integer literal
+    Int128(i128),
+
     /// Pointer-sized unsigned integer literal
     Uint(usize),
 
@@ -85,6 +88,9 @@ pub enum Token {
 
     /// 64-bit unsigned integer literal
     Uint64(u64),
+
+    /// 128-bit signed integer literal
+    Uint128(u128),
 
     /// 32-bit float literal
     Float32(f32),
@@ -259,7 +265,6 @@ pub enum Token {
 
     /// End of file marker
     Eof,
-
     /// Unrecognized or illegal token
     Illegal(LexError),
 }

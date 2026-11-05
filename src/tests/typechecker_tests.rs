@@ -49,7 +49,7 @@ let y = x + 1",
                 vec![InvalidBinaryOperator {
                     operator: Token::NotEquals,
                     left: Box::new(Ty::Bool),
-                    right: Box::new(Ty::Int),
+                    right: Box::new(Ty::Sized { signed: true }),
                     span: Span::new(Position { line: 2, col: 9 }, Position { line: 2, col: 17 })
                 }],
                 vec![],
@@ -57,7 +57,7 @@ let y = x + 1",
                 vec![InvalidBinaryOperator {
                     operator: Token::NotEquals,
                     left: Box::new(Ty::Bool),
-                    right: Box::new(Ty::Int),
+                    right: Box::new(Ty::Sized { signed: true }),
                     span: Span::new(Position { line: 2, col: 9 }, Position { line: 2, col: 18 })
                 }],
             ]
@@ -112,7 +112,7 @@ print()
             vec![
                 vec![
                     Mismatch {
-                        expected: Ty::Int,
+                        expected: Ty::Sized { signed: true },
                         found: Ty::String,
                         span: Span::new(
                             Position { line: 7, col: 8 },
@@ -128,7 +128,7 @@ print()
                 ],
                 vec![Mismatch {
                     expected: Ty::String,
-                    found: Ty::Int,
+                    found: Ty::Sized { signed: true },
                     span: Span::new(Position { line: 4, col: 5 }, Position { line: 4, col: 11 })
                 }],
                 vec![
@@ -140,7 +140,7 @@ print()
                     },
                     NotCallable {
                         name: "5".to_string(),
-                        ty: Ty::Int,
+                        ty: Ty::Sized { signed: true },
                         span: Span::new(Position { line: 6, col: 1 }, Position { line: 6, col: 2 })
                     }
                 ]

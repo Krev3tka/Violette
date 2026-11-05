@@ -2,8 +2,16 @@ use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub enum Ty {
-    Int,
-    Float,
+    Int {
+        bits: u8,
+        signed: bool,
+    },
+    Sized {
+        signed: bool,
+    },
+    Float {
+        bits: u8,
+    },
     Bool,
     String,
     #[default]
@@ -31,8 +39,30 @@ pub enum Ty {
 impl fmt::Display for Ty {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Ty::Int => write!(f, "Int"),
-            Ty::Float => write!(f, "Float"),
+            Ty::Int { bits, signed } => {
+                let mut res = String::from("Int");
+
+                if !*signed {
+                    res = String::from("UInt");
+                }
+
+                match bits {
+                    8 => res.push('8'),
+                    16 => res.push_str("16"),
+                    32 => res.push_str("32"),
+                    64 => res.push_str("64"),
+                    128 => res.push_str("128"),
+                    _ => unreachable!(),
+                };
+
+                write!(f, "{res}")
+            }
+            Ty::Sized { signed } => {
+                write!(f, "{}Int", if !*signed { "U" } else { "" })
+            }
+            Ty::Float { bits } => {
+                write!(f, "Float{bits}")
+            }
             Ty::Bool => write!(f, "Bool"),
             Ty::String => write!(f, "String"),
             Ty::Struct(name) => write!(f, "{}", name),

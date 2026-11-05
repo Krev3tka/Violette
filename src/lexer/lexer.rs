@@ -593,6 +593,10 @@ impl Lexer {
                     Ok(v) => Token::Int64(v),
                     Err(_) => Token::Illegal(LexError::InvalidNumberSuffix(suffix)),
                 },
+                ("i128", false) => match cleaned.parse::<i128>() {
+                    Ok(v) => Token::Int128(v),
+                    Err(_) => Token::Illegal(LexError::InvalidNumberSuffix(suffix)),
+                },
 
                 ("u8", false) => match cleaned.parse::<u8>() {
                     Ok(v) => Token::Uint8(v),
