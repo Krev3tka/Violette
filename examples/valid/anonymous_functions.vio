@@ -1,14 +1,14 @@
 func main () {
-    let add: fun(Int, Int) -> Int = { #0 + #1 }
+    let add: func(Int, Int) -> Int = { #0 + #1 }
 
-    let subtract: fun(Float64, Float64) -> Float64 = {
+    let subtract: func(Float64, Float64) -> Float64 = {
         let a = #0
         let b = #1
 
         a - b
     }
 
-    let multiply: fun(Int, Int) -> Int = {
+    let multiply: func(Int, Int) -> Int = {
         let x = #0
         let y = #1
 
@@ -18,7 +18,7 @@ func main () {
         x * y
     }
 
-    let divide: fun(Int, Int) -> Int = {
+    let divide: func(Int, Int) -> Int = {
         return #0 / #1
     }
 

@@ -1,0 +1,21 @@
+func splitHead(arr: [Int]) -> (Int, [Int]) {
+    let head = arr[0]
+    let rest = arr[1..<arr.len]
+
+    (head, rest)
+}
+
+let arr = [3, 6, 5, 9, 7]
+
+let splitted = splitHead(arr)
+
+let head = splitted[0]
+let rest = splitted[1]
+
+println(head)
+
+for i in 0..<(rest.len / 2) {
+    print(i * 2)
+    print("th element of `rest`: ")
+    println(rest[i * 2])
+}

@@ -68,6 +68,14 @@ impl ClearSpan for Expression {
 
                 *span = Span::default();
             }
+            Expression::TupleLiteral { values, span } => {
+                for v in values {
+                    v.value.clear_span();
+                    v.span = Span::default();
+                }
+
+                *span = Span::default();
+            }
             Expression::Infix {
                 left, right, span, ..
             } => {

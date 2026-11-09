@@ -1,5 +1,6 @@
 use crate::lexer::span::Span;
 use crate::lexer::token::Token;
+use crate::parser::Expression::TupleLiteral;
 use crate::parser::Precedence::{Lowest, Prefix};
 use crate::parser::parser::{MAX_DEPTH, Parser};
 use crate::parser::statement::{ElseIf, FuncParam, MatchArm};
@@ -41,6 +42,11 @@ pub enum Expression {
 
     ArrayLiteral {
         values: Vec<Expression>,
+        span: Span,
+    },
+
+    TupleLiteral {
+        values: Vec<TupleElem>,
         span: Span,
     },
 
@@ -137,6 +143,12 @@ pub enum Expression {
 #[derive(Debug, PartialEq, Clone)]
 pub struct CallArg {
     pub label: Option<String>,
+    pub value: Expression,
+    pub span: Span,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct TupleElem {
     pub value: Expression,
     pub span: Span,
 }
@@ -361,51 +373,120 @@ impl Parser {
                         self.next_token();
 
                         if matches!(self.current_token.token.clone(), Token::RightParen) {
-                            let expr =
-                                self.parse_operator_as_lambda(operator.clone(), operator_span);
                             self.paren_depth -= 1;
-                            return expr;
-                        }
+                            self.parse_operator_as_lambda(operator.clone(), operator_span)?
+                        } else if matches!(operator, Token::Subtract) {
+                            let expr = self.parse_expression(Lowest)?;
 
-                        if matches!(operator, Token::Subtract) {
-                            self.paren_depth += 1
+                            self.next_token();
+
+                            expr
                         } else {
                             let expr = self.parse_right_section(operator, start_span)?;
                             self.skip_terminators();
 
-                            return if matches!(self.peek_token.token, Token::RightParen) {
+                            if matches!(self.peek_token.token, Token::RightParen) {
                                 self.next_token();
                                 self.paren_depth -= 1;
-                                Ok(expr)
+                                expr
                             } else {
-                                Err(ParseError::UnclosedDelimiter {
+                                return Err(ParseError::UnclosedDelimiter {
                                     open_token: Box::new(open_token),
                                     open_span,
                                     expected_token: Box::new(Token::RightParen),
                                     found_tok: Box::new(self.peek_token.token.clone()),
                                     found_span: self.peek_token.span,
-                                })
-                            };
+                                });
+                            }
                         }
                     }
-                    _ => {}
-                }
+                    Token::RightParen => {
+                        self.paren_depth -= 1;
 
-                let expr = self.parse_expression(Lowest)?;
-                self.skip_terminators();
+                        TupleLiteral {
+                            values: vec![],
+                            span: open_span.merge(&self.current_token.span),
+                        }
+                    }
+                    _ => {
+                        let first = self.parse_expression(Lowest)?;
+                        self.skip_terminators();
 
-                if matches!(self.peek_token.token, Token::RightParen) {
-                    self.next_token();
-                    self.paren_depth -= 1;
-                    expr
-                } else {
-                    return Err(ParseError::UnclosedDelimiter {
-                        open_token: Box::new(open_token),
-                        open_span,
-                        expected_token: Box::new(Token::RightParen),
-                        found_tok: Box::new(self.peek_token.token.clone()),
-                        found_span: self.peek_token.span,
-                    });
+                        if matches!(self.peek_token.token, Token::RightParen) {
+                            self.next_token();
+                            self.paren_depth -= 1;
+                            first
+                        } else if matches!(self.peek_token.token, Token::Comma) {
+                            self.next_token();
+                            self.next_token();
+                            self.skip_terminators();
+
+                            let mut values = vec![TupleElem {
+                                value: first.clone(),
+                                span: first.span(),
+                            }];
+
+                            if matches!(self.current_token.token, Token::RightParen) {
+                                self.paren_depth -= 1;
+                                return Ok(TupleLiteral {
+                                    values,
+                                    span: open_span.merge(&self.current_token.span),
+                                });
+                            }
+
+                            while !matches!(self.current_token.token, Token::RightParen) {
+                                let saved = self.allowed_bare_sections;
+                                self.allowed_bare_sections = true;
+
+                                let elem_value = self.parse_expression(Lowest)?;
+
+                                self.allowed_bare_sections = saved;
+
+                                values.push(TupleElem {
+                                    value: elem_value.clone(),
+                                    span: elem_value.span(),
+                                });
+
+                                self.skip_terminators();
+
+                                if matches!(self.peek_token.token, Token::Comma) {
+                                    self.next_token();
+                                    self.next_token();
+                                    self.skip_terminators();
+
+                                    if matches!(self.current_token.token, Token::RightParen) {
+                                        break;
+                                    }
+                                } else if matches!(self.peek_token.token, Token::RightParen) {
+                                    self.next_token();
+                                    break;
+                                } else {
+                                    return Err(ParseError::UnclosedDelimiter {
+                                        open_token: Box::new(open_token),
+                                        open_span,
+                                        expected_token: Box::new(Token::RightParen),
+                                        found_tok: Box::new(self.peek_token.token.clone()),
+                                        found_span: self.peek_token.span,
+                                    });
+                                }
+                            }
+
+                            self.paren_depth -= 1;
+
+                            TupleLiteral {
+                                values,
+                                span: open_span.merge(&self.current_token.span),
+                            }
+                        } else {
+                            return Err(ParseError::UnclosedDelimiter {
+                                open_token: Box::new(open_token),
+                                open_span,
+                                expected_token: Box::new(Token::RightParen),
+                                found_tok: Box::new(self.peek_token.token.clone()),
+                                found_span: self.peek_token.span,
+                            });
+                        }
+                    }
                 }
             }
             Token::Subtract
@@ -1389,6 +1470,7 @@ impl Expression {
             Expression::BoolLiteral { span, .. } => *span,
             Expression::StringLiteral { span, .. } => *span,
             Expression::ArrayLiteral { span, .. } => *span,
+            Expression::TupleLiteral { span, .. } => *span,
             Expression::StructLiteral { span, .. } => *span,
             Expression::CharLiteral { span, .. } => *span,
             Expression::Prefix { span, .. } => *span,

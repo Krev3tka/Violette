@@ -34,6 +34,7 @@ pub enum Ty {
     },
     Char,
     Array(Box<Ty>),
+    Tuple(Vec<Ty>),
 }
 
 impl fmt::Display for Ty {
@@ -67,6 +68,16 @@ impl fmt::Display for Ty {
             Ty::String => write!(f, "String"),
             Ty::Struct(name) => write!(f, "{}", name),
             Ty::Unit => write!(f, "Void"),
+            Ty::Array(inner) => write!(f, "[{}]", inner.as_ref()),
+            Ty::Tuple(inner) => write!(
+                f,
+                "({})",
+                inner
+                    .iter()
+                    .map(|ty| ty.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
             Ty::Ref {
                 inner,
                 is_mut: true,
@@ -82,7 +93,7 @@ impl fmt::Display for Ty {
                     .collect::<Vec<_>>()
                     .join(", ");
 
-                write!(f, "func({}) -> {}", p, ret)
+                write!(f, "fun({}) -> {}", p, ret)
             }
             Ty::Union(variants) => {
                 let v = variants

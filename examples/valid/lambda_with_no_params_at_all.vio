@@ -1,0 +1,5 @@
+let f: func() -> Int = { 42 }
+let x = { 42 }
+
+println(f())
+println(x)

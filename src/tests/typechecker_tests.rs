@@ -117,7 +117,8 @@ print()
                         span: Span::new(
                             Position { line: 7, col: 8 },
                             Position { line: 7, col: 12 }
-                        )
+                        ),
+                        annotation_span: Box::new(None),
                     },
                     ArityMismatch {
                         name: "double".to_string(),
@@ -129,7 +130,8 @@ print()
                 vec![Mismatch {
                     expected: Ty::String,
                     found: Ty::Sized { signed: true },
-                    span: Span::new(Position { line: 4, col: 5 }, Position { line: 4, col: 11 })
+                    span: Span::new(Position { line: 4, col: 5 }, Position { line: 4, col: 11 }),
+                    annotation_span: Box::new(None),
                 }],
                 vec![
                     ArityMismatch {

@@ -32,9 +32,6 @@ pub enum Token {
 
     Func,
 
-    /// Keyword `fun`, used for function type annotations
-    Fun,
-
     Extern,
 
     Return,

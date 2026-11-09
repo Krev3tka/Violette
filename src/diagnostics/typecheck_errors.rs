@@ -142,8 +142,18 @@ impl Diagnostics for TypeError {
                 expected,
                 found,
                 span,
+                annotation_span,
             } => {
-                let labels = [Label::primary(
+                let optional_second_label_which_may_appear_sometimes_due_to_possible_type_annotation_in_a_couple_of_cases_and_also_storing_error_hint_message =
+                    annotation_span.as_ref().map(|ann_span| {
+                        Label::secondary(
+                            *Box::new(ann_span),
+                            format!("expected due to this type annotation: {}", expected),
+                            path.to_string(),
+                        )
+                    });
+
+                let mut labels = vec![Label::primary(
                     *span,
                     format!(
                         "there's a type mismatch, expected `{}`, got `{}`",
@@ -151,6 +161,12 @@ impl Diagnostics for TypeError {
                     ),
                     path.to_string(),
                 )];
+
+                if let Some(label) = optional_second_label_which_may_appear_sometimes_due_to_possible_type_annotation_in_a_couple_of_cases_and_also_storing_error_hint_message {
+                    labels.push(label);
+                }
+
+                // labels.reverse();
 
                 self.report(
                     path.to_string(),

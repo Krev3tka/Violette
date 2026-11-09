@@ -17,7 +17,13 @@ impl Checker {
         match expr {
             Expression::IntLiteral { val, span } => TypedExpr {
                 kind: TypedExprKind::IntLiteral { val: *val },
-                ty: Ty::Sized { signed: true },
+                ty: if let Some(ty) = expected
+                    && matches!(ty, Ty::Int { .. } | Ty::Sized { .. })
+                {
+                    ty.clone()
+                } else {
+                    Ty::Sized { signed: true }
+                },
                 span: *span,
             },
             Expression::FloatLiteral { val, span } => TypedExpr {
@@ -76,6 +82,82 @@ impl Checker {
                     span: *span,
                 }
             }
+
+            Expression::TupleLiteral { values, span } => {
+                if let Some(expected_ty) = expected
+                    && let Ty::Tuple(expected_tys) = expected_ty
+                {
+                    if expected_tys.len() != values.len() {
+                        let so_called_real_tys: Vec<_> = values
+                            .iter()
+                            .map(|elem| self.infer(&elem.value, None))
+                            .collect();
+
+                        self.errors.push(TypeError::Mismatch {
+                            expected: expected_ty.clone(),
+                            found: Ty::Tuple(so_called_real_tys.clone()),
+                            span: *span,
+                            annotation_span: Box::new(self.current_type_span),
+                        });
+                        TypedExpr::error(
+                            *span,
+                            TypeError::Mismatch {
+                                expected: expected_ty.clone(),
+                                found: Ty::Tuple(so_called_real_tys),
+                                span: *span,
+                                annotation_span: Box::new(self.current_type_span),
+                            },
+                        )
+                    } else {
+                        let mut elem_tys = Vec::new();
+                        let mut typed_values = Vec::new();
+
+                        for (i, elem) in values.iter().enumerate() {
+                            if let Some(exp_ty) = expected_tys.get(i) {
+                                let typed = self.check_expr(&elem.value, Some(exp_ty));
+
+                                let saved_err_count = self.errors.len();
+
+                                self.expect(&typed.ty, exp_ty, elem.span);
+
+                                typed_values.push(typed.clone());
+                                if saved_err_count != self.errors.len() {
+                                    elem_tys.push(exp_ty.clone());
+                                } else {
+                                    elem_tys.push(typed.ty.clone());
+                                }
+                            };
+                        }
+
+                        TypedExpr {
+                            kind: TypedExprKind::TupleLiteral {
+                                values: typed_values,
+                            },
+                            ty: Ty::Tuple(elem_tys),
+                            span: *span,
+                        }
+                    }
+                } else {
+                    let mut elem_tys = Vec::new();
+                    let mut typed_values = Vec::new();
+
+                    for elem in values.iter() {
+                        let typed = self.check_expr(&elem.value, None);
+
+                        typed_values.push(typed.clone());
+                        elem_tys.push(typed.ty.clone());
+                    }
+
+                    TypedExpr {
+                        kind: TypedExprKind::TupleLiteral {
+                            values: typed_values,
+                        },
+                        ty: Ty::Tuple(elem_tys),
+                        span: *span,
+                    }
+                }
+            }
+
             Expression::Identifier { name, span } => {
                 if let Some((variant_name, None)) = self.variant_cases.get(name) {
                     return TypedExpr {
@@ -522,6 +604,28 @@ impl Checker {
                             Ty::Array(inner.clone())
                         } else {
                             *inner.clone()
+                        }
+                    }
+                    Ty::Tuple(tys) => {
+                        if is_slice {
+                            self.errors.push(TypeError::Unsupported {
+                                desc: "Range expression indexing on tuples".to_string(),
+                                span: typed_index.span,
+                            });
+                            Ty::Error
+                        } else {
+                            if let TypedExprKind::IntLiteral { val, .. } = typed_index.kind
+                                && 0 <= val
+                                && val < tys.len() as isize
+                            {
+                                tys[val as usize].clone()
+                            } else {
+                                self.errors.push(TypeError::Unsupported {
+                                    desc: "Indexing not by integer".to_string(),
+                                    span: typed_index.span,
+                                });
+                                Ty::Error
+                            }
                         }
                     }
                     Ty::String => {
@@ -1523,6 +1627,7 @@ impl Checker {
                                         expected: target_ty.clone(),
                                         found: Ty::Struct(var_name.clone()),
                                         span: *pat_span,
+                                        annotation_span: Box::new(self.current_type_span),
                                     });
                                 } else if expected_payload.is_some() {
                                     self.errors.push(TypeError::Unsupported {
@@ -1555,6 +1660,7 @@ impl Checker {
                                             expected: target_ty.clone(),
                                             found: Ty::Struct(var_name.clone()),
                                             span: *pat_span,
+                                            annotation_span: Box::new(self.current_type_span),
                                         });
                                     } else if expected_payload.is_some() {
                                         self.errors.push(TypeError::Unsupported {
@@ -1593,6 +1699,7 @@ impl Checker {
                                             expected: target_ty.clone(),
                                             found: Ty::Struct(var_name),
                                             span: *pat_span,
+                                            annotation_span: Box::new(self.current_type_span),
                                         });
                                     } else if let Some(payload_ty) = expected_payload {
                                         if args.len() != 1 {
@@ -1658,6 +1765,7 @@ impl Checker {
                                             expected: target_ty.clone(),
                                             found: Ty::Struct(var_name),
                                             span: *pat_span,
+                                            annotation_span: Box::new(self.current_type_span),
                                         });
                                     } else if let Some(payload_ty) = expected_payload {
                                         if args.len() != 1 {
@@ -1804,8 +1912,13 @@ impl Checker {
                 // 1. lambdas
                 let numbered_params = self.collect_numbered_params(body);
 
-                if !numbered_params.is_empty() {
-                    let max_idx = *numbered_params.iter().max().unwrap();
+                let is_expected_fn = matches!(expected, Some(Ty::Fn { .. }));
+
+                if !numbered_params.is_empty() || is_expected_fn {
+                    let max_idx = match numbered_params.iter().max() {
+                        Some(&max) => max as usize + 1,
+                        None => 0,
+                    };
 
                     let (expected_fn_params, expected_ret) = match expected {
                         Some(Ty::Fn { params, ret }) => (Some(params), Some(ret.as_ref())),
@@ -1817,14 +1930,13 @@ impl Checker {
 
                     self.env.push();
 
-                    for i in 0..=max_idx {
-                        let mut ty = if let Some(expected_p) =
-                            expected_fn_params.and_then(|ps| ps.get(i as usize))
-                        {
-                            expected_p.clone()
-                        } else {
-                            Ty::Infer
-                        };
+                    for i in 0..max_idx {
+                        let mut ty =
+                            if let Some(expected_p) = expected_fn_params.and_then(|ps| ps.get(i)) {
+                                expected_p.clone()
+                            } else {
+                                Ty::Infer
+                            };
 
                         if ty == Ty::Infer {
                             self.errors.push(TypeError::Unsupported {
@@ -1924,7 +2036,14 @@ impl Checker {
                     ty: last_ty,
                     span: *span,
                 }
-            }
+            } // _ => {
+              //     TypedExpr::error(
+              //         expr.span(),
+              //         TypeError::Unreachable {
+              //             span: expr.span()
+              //         }
+              //     )
+              // }
         }
     }
 
@@ -1944,6 +2063,11 @@ impl Checker {
             Expression::ArrayLiteral { values, .. } => {
                 for val in values {
                     self.collect_expr_params(val, set);
+                }
+            }
+            Expression::TupleLiteral { values, .. } => {
+                for elem in values {
+                    self.collect_expr_params(&elem.value, set);
                 }
             }
             Expression::StructLiteral { fields, .. } => {
@@ -2006,8 +2130,15 @@ impl Checker {
                     self.collect_stmt_params(s, set);
                 }
             }
-            Expression::Block { .. } | Expression::Lambda { .. } => {}
-            _ => {}
+            Expression::Block { .. }
+            | Expression::Lambda { .. }
+            | Expression::IntLiteral { .. }
+            | Expression::FloatLiteral { .. }
+            | Expression::BoolLiteral { .. }
+            | Expression::CharLiteral { .. }
+            | Expression::Identifier { .. }
+            | Expression::StringLiteral { .. }
+            | Expression::Field { .. } => {}
         }
     }
 }

@@ -1,0 +1,7 @@
+func isEven(n: Int) -> Bool =
+    if n == 0 { true } else { isOdd(n - 1) }
+
+func isOdd(n: Int) -> Bool =
+    if n == 0 { false } else { isEven(n - 1) }
+
+println(isEven(42))

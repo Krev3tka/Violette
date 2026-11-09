@@ -53,6 +53,8 @@ pub enum Type {
 
     Array(Box<Type>),
 
+    Tuple(Vec<Type>),
+
     SelfTy,
 
     Fn {

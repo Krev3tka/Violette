@@ -1,0 +1,10 @@
+//func divMod(a: Int, b: Int) -> (Int, Int) =
+//    (a / b, a % b)
+
+let divMod: func(Int, Int) -> (Int, Int) = {
+    (#0 / #1, #0 % #1)
+}
+
+let res = divMod(42, 5)
+println(res[0])
+println(res[1])

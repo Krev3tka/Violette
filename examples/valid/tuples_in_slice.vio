@@ -1,0 +1,13 @@
+let users: [(Int, String)] = [
+    (1, "Alice"),
+    (2, "Bob"),
+    (3, "Charlie")
+]
+
+for i in 0..<users.len {
+    let u = users[i]
+    print("ID: ")
+    print(u[0])
+    print(", Name: ")
+    println(u[1])
+}

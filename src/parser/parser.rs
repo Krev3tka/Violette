@@ -1,5 +1,5 @@
 use crate::lexer::lexer::Lexer;
-use crate::lexer::span::SpannedToken;
+use crate::lexer::span::{Span, SpannedToken};
 use crate::lexer::token::Token;
 use crate::parser::expression::token_precedence;
 use crate::parser::types::{Type, TypePath};
@@ -11,6 +11,7 @@ pub struct Parser {
     lexer: Lexer,
     pub current_token: SpannedToken,
     pub peek_token: SpannedToken,
+    pub prev_span: Span,
     pub depth: u32,
     pub allowed_struct_literal: bool,
     pub allowed_bare_sections: bool,
@@ -26,6 +27,7 @@ impl Parser {
             lexer,
             current_token: curr_spanned_token,
             peek_token: peek_spanned_token,
+            prev_span: Span::default(),
             depth: 0,
             allowed_struct_literal: true,
             allowed_bare_sections: false,
@@ -67,7 +69,40 @@ impl Parser {
             return Ok(Type::SelfTy);
         }
 
-        if matches!(self.current_token.token, Token::Fun) {
+        if matches!(self.current_token.token, Token::LeftParen) {
+            let open_paren_tok = self.current_token.token.clone();
+            let open_paren_span = self.current_token.span;
+
+            self.next_token();
+
+            let mut types = Vec::new();
+
+            if !matches!(self.current_token.token, Token::RightParen) {
+                loop {
+                    types.push(self.parse_type()?);
+                    if matches!(self.current_token.token, Token::Comma) {
+                        self.next_token();
+                    } else {
+                        break;
+                    }
+                }
+            }
+
+            self.expect(
+                Token::RightParen,
+                ParseError::UnclosedDelimiter {
+                    open_token: Box::new(open_paren_tok),
+                    open_span: open_paren_span,
+                    expected_token: Box::new(Token::RightParen),
+                    found_tok: Box::new(self.current_token.token.clone()),
+                    found_span: self.current_token.span,
+                },
+            )?;
+
+            return Ok(Type::Tuple(types));
+        }
+
+        if matches!(self.current_token.token, Token::Func) {
             self.next_token();
 
             let open_paren_tok = self.current_token.token.clone();
@@ -226,6 +261,8 @@ impl Parser {
     }
 
     pub fn next_token(&mut self) {
+        self.prev_span = self.current_token.span;
+
         self.current_token = std::mem::replace(&mut self.peek_token, self.lexer.next_token());
 
         if self.paren_depth > 0 {

@@ -36,6 +36,7 @@ pub enum TypeError {
         expected: Ty,
         found: Ty,
         span: Span,
+        annotation_span: Box<Option<Span>>,
     },
 
     UnknownName {

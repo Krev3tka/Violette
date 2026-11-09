@@ -24,6 +24,20 @@ pub struct FnSig {
     pub is_dynamic_method: bool,
 }
 
+#[derive(Default)]
+pub struct Checker {
+    pub funcs: HashMap<String, FnSig>,
+    pub structs: HashMap<String, StructSig>,
+    pub variant_cases: HashMap<String, (String, Option<Ty>)>,
+    pub env: Env,
+    pub current_ret: Ty,
+    pub errors: Vec<TypeError>,
+    pub main_fn_span: Option<Span>,
+    pub in_loop: bool,
+    pub current_type_span: Option<Span>,
+    current_self_type: Option<Ty>,
+}
+
 #[derive(Clone, Debug)]
 pub struct ParamSig {
     pub label: String,
@@ -31,19 +45,6 @@ pub struct ParamSig {
 }
 
 pub type StructSig = Vec<(String, Ty, Span)>;
-
-#[derive(Default)]
-pub struct Checker {
-    pub funcs: HashMap<String, FnSig>,
-    pub structs: HashMap<String, StructSig>,
-    pub variant_cases: HashMap<String, (String, Option<Ty>)>,
-    pub env: Env,
-    pub(crate) current_ret: Ty,
-    pub errors: Vec<TypeError>,
-    pub main_fn_span: Option<Span>,
-    pub in_loop: bool,
-    current_self_type: Option<Ty>,
-}
 
 impl Checker {
     pub fn collect_signatures(&mut self, program: &[Statement]) {
@@ -407,6 +408,8 @@ impl Checker {
 
             Type::Array(inner) => Ty::Array(Box::new(self.resolve(inner.as_ref()))),
 
+            Type::Tuple(inner) => Ty::Tuple(inner.iter().map(|t| self.resolve(t)).collect()),
+
             Type::Fn { params, ret } => Ty::Fn {
                 params: params.iter().map(|t| self.resolve(t)).collect(),
                 ret: Box::new(ret.as_ref().map_or(Ty::Unit, |t| self.resolve(t))),
@@ -620,6 +623,8 @@ impl Checker {
                 type_span,
                 span,
             } => {
+                self.current_type_span = *type_span;
+
                 let expected = annotated_type.as_ref().map(|t| self.resolve(t));
                 let typed_val = self.check_expr(value, expected.as_ref());
 
@@ -640,6 +645,8 @@ impl Checker {
                     stmt.span(),
                 );
 
+                self.current_type_span = None;
+
                 TypedStmt {
                     kind: TypedStmtKind::Var {
                         name: name.clone(),
@@ -655,8 +662,10 @@ impl Checker {
                 value,
                 annotated_type,
                 span,
-                ..
+                type_span,
             } => {
+                self.current_type_span = *type_span;
+
                 let expected = annotated_type.as_ref().map(|t| self.resolve(t));
                 let typed_val = self.check_expr(value, expected.as_ref());
 
@@ -674,6 +683,8 @@ impl Checker {
                     BindingKind::Let,
                     stmt.span(),
                 );
+
+                self.current_type_span = None;
 
                 TypedStmt {
                     kind: TypedStmtKind::Let {
@@ -882,6 +893,7 @@ impl Checker {
                                 expected: target.clone(),
                                 found: receiver,
                                 span: *obj_span,
+                                annotation_span: Box::new(self.current_type_span),
                             });
                         }
 
@@ -1292,6 +1304,7 @@ impl Checker {
                 expected: expected.clone(),
                 found: actual.clone(),
                 span,
+                annotation_span: Box::new(self.current_type_span),
             })
         }
     }
@@ -1397,6 +1410,8 @@ impl Checker {
                         {
                             return true;
                         }
+                    } else {
+                        return true;
                     }
                 }
                 Statement::Return { .. } => return true,

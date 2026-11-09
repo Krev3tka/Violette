@@ -189,7 +189,9 @@ impl Parser {
         match &self.current_token.token {
             Token::Var | Token::Let => {
                 let kw_token = self.current_token.token.clone();
+
                 self.next_token();
+
                 let name = match &self.current_token.token {
                     Token::LowerIdent(var_name) => var_name.clone(),
                     Token::UpperIdent(_) => {
@@ -226,7 +228,7 @@ impl Parser {
 
                     type_span = Some(self.current_token.span);
                     annotated_type = Some(self.parse_type()?);
-                    type_span = Some(type_span.unwrap().merge(&self.current_token.span));
+                    type_span = Some(type_span.unwrap().merge(&self.prev_span));
                 }
 
                 self.expect(
@@ -237,6 +239,8 @@ impl Parser {
                         span: self.current_token.span,
                     },
                 )?;
+
+                self.skip_terminators();
 
                 let value = self.parse_expression(Lowest)?;
                 self.next_token();

@@ -63,6 +63,10 @@ pub enum TypedExprKind {
         values: Vec<TypedExpr>,
     },
 
+    TupleLiteral {
+        values: Vec<TypedExpr>,
+    },
+
     Prefix {
         operator: Token,
         right: Box<TypedExpr>,

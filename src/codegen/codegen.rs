@@ -26,6 +26,7 @@ pub struct Codegen {
     variant_cases: HashMap<String, (String, bool)>,
     user_funcs: HashSet<String>,
     slice_types: HashSet<String>,
+    tuple_types: HashSet<Vec<String>>,
     methods_taking_ref: HashSet<String>,
     var_versions: usize,
 }
@@ -48,6 +49,7 @@ impl Codegen {
             variant_cases: HashMap::new(),
             user_funcs: HashSet::new(),
             slice_types: HashSet::new(),
+            tuple_types: HashSet::new(),
             methods_taking_ref: HashSet::new(),
             var_versions: 0,
         }
@@ -73,6 +75,13 @@ impl Codegen {
                 let inner_c = self.c_type(inner.as_ref());
                 self.slice_types.insert(inner_c.clone());
                 format!("VioSlice_{}", inner_c)
+            }
+            Ty::Tuple(inner) => {
+                let inner_c = inner.iter().map(|t| self.c_type(t)).collect::<Vec<_>>();
+
+                self.tuple_types.insert(inner_c.clone());
+
+                format!("VioTuple_{}", inner_c.join("_"))
             }
             Ty::Unit => "void".to_string(),
             Ty::Fn { params, ret } => {
@@ -252,12 +261,34 @@ impl Codegen {
         let mut final_lines = Vec::new();
         final_lines.push("#include \"vio_runtime.h\"\n".to_string());
 
+        // 7. Tuple headers (Lousy forward declaration)
+        for tys in &self.tuple_types {
+            let name = format!("VioTuple_{}", tys.join("_"));
+            final_lines.push(format!("typedef struct {name} {name};\n"));
+        }
+
+        // 8. Slices
+
         for slice_ty in &self.slice_types {
             final_lines.push(format!(
                 "typedef struct {{\n    int64_t len;\n    {slice_ty}* data;\n}} VioSlice_{slice_ty};"
             ));
         }
         final_lines.push("\n".to_string());
+
+        // 9. Tuples
+
+        for tys in &self.tuple_types {
+            let name = format!("VioTuple_{}", tys.join("_"));
+            let fields = tys
+                .iter()
+                .enumerate()
+                .map(|(i, t)| format!(" {} _{};", t, i))
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            final_lines.push(format!("struct {name} {{\n{fields}\n}};\n",))
+        }
 
         if !self.typedefs.is_empty() {
             final_lines.extend(self.typedefs.clone());
@@ -391,6 +422,8 @@ impl Codegen {
 
                 if matches!(left.ty, Ty::String) {
                     format!("vio_str_get({}, {})", left_str, index_str)
+                } else if matches!(left.ty, Ty::Tuple(_)) {
+                    format!("{}._{}", left_str, index_str)
                 } else {
                     format!("{}.data[{}]", left_str, index_str)
                 }
@@ -794,6 +827,29 @@ impl Codegen {
                     values.len()
                 )
             }
+            TypedExprKind::TupleLiteral { values, .. } => {
+                let c_vals = values
+                    .iter()
+                    .map(|expr| self.emit_expression(expr))
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                let c_types = values
+                    .iter()
+                    .map(|expr| self.c_type(&expr.ty))
+                    .collect::<Vec<_>>();
+
+                self.tuple_types.insert(c_types.clone());
+
+                if !values.is_empty() {
+                    format!(
+                        "(VioTuple_{}) {{ {} }}",
+                        c_types.join("_"),
+                        c_vals.join(", "),
+                    )
+                } else {
+                    format!("(VioTuple_{}) {{ 0 }}", c_types.join("_"),)
+                }
+            }
             _ => {
                 return Err(CodegenError::Unsupported(format!(
                     "this expression: {:?}",
@@ -1140,11 +1196,13 @@ impl Codegen {
             for s in init {
                 stmts_c.push(self.emit_statement(s)?);
             }
+
             if let TypedStmtKind::Expression(expr) = &last.kind {
                 stmts_c.push(format!("{} = {};", res_var, self.emit_expression(expr)?));
             } else {
                 stmts_c.push(self.emit_statement(last)?);
             }
+
             Ok(stmts_c.join("\n"))
         } else {
             Err(CodegenError::Unsupported("empty block".to_string()))
