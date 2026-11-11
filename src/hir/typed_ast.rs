@@ -3,6 +3,7 @@ use crate::lexer::span::Span;
 use crate::lexer::token::Token;
 use crate::parser::expression::RangeKind;
 use crate::parser::statement::{EnumCase, FuncParam, StructParam};
+use crate::parser::types::BindingPattern;
 use crate::typechecker::error::TypeError;
 use crate::typechecker::types::Ty;
 
@@ -143,13 +144,13 @@ pub enum TypedStmtKind {
     Expression(TypedExpr),
 
     Var {
-        name: String,
+        pattern: BindingPattern,
         ty: Ty,
         value: TypedExpr,
     },
 
     Let {
-        name: String,
+        pattern: BindingPattern,
         ty: Ty,
         value: TypedExpr,
     },

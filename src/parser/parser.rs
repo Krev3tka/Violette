@@ -155,8 +155,6 @@ impl Parser {
             let open_bracket_span = self.current_token.span;
             self.next_token();
 
-            let arr_type = self.parse_type()?;
-
             self.expect(
                 Token::RightBracket,
                 ParseError::UnclosedDelimiter {
@@ -167,6 +165,8 @@ impl Parser {
                     found_span: self.current_token.span,
                 },
             )?;
+
+            let arr_type = self.parse_type()?;
 
             return Ok(Type::Array(Box::new(arr_type)));
         }

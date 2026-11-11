@@ -1,4 +1,4 @@
-func splitHead(arr: [Int]) -> (Int, [Int]) {
+func splitHead(arr: []Int) -> (Int, []Int) {
     let head = arr[0]
     let rest = arr[1..<arr.len]
 
@@ -7,10 +7,12 @@ func splitHead(arr: [Int]) -> (Int, [Int]) {
 
 let arr = [3, 6, 5, 9, 7]
 
-let splitted = splitHead(arr)
+//let splitted = splitHead(arr)
+//
+//let head = splitted[0]
+//let rest = splitted[1]
 
-let head = splitted[0]
-let rest = splitted[1]
+let (head, rest) = splitHead(arr)
 
 println(head)
 

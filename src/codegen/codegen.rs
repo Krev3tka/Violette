@@ -5,7 +5,7 @@ use crate::lexer::span::Span;
 use crate::lexer::token::Token;
 use crate::parser::expression::RangeKind;
 use crate::parser::statement::FuncParam;
-use crate::parser::types::Type;
+use crate::parser::types::{BindingPattern, Type};
 use crate::typechecker::checker::Checker;
 use crate::typechecker::error::BindingKind;
 use crate::typechecker::types::Ty;
@@ -29,6 +29,7 @@ pub struct Codegen {
     tuple_types: HashSet<Vec<String>>,
     methods_taking_ref: HashSet<String>,
     var_versions: usize,
+    tmp_var_count: usize,
 }
 
 impl Codegen {
@@ -52,6 +53,7 @@ impl Codegen {
             tuple_types: HashSet::new(),
             methods_taking_ref: HashSet::new(),
             var_versions: 0,
+            tmp_var_count: 0,
         }
     }
 
@@ -165,7 +167,7 @@ impl Codegen {
             lines.push("\n".to_string())
         }
 
-        // 3. Structs and Variants
+        // 3. Structs and Enums
 
         for s in &prg.declarations {
             match s.kind {
@@ -261,7 +263,7 @@ impl Codegen {
         let mut final_lines = Vec::new();
         final_lines.push("#include \"vio_runtime.h\"\n".to_string());
 
-        // 7. Tuple headers (Lousy forward declaration)
+        // 7. Tuple headers (Fucking forward declaration)
         for tys in &self.tuple_types {
             let name = format!("VioTuple_{}", tys.join("_"));
             final_lines.push(format!("typedef struct {name} {name};\n"));
@@ -861,27 +863,73 @@ impl Codegen {
 
     pub fn emit_statement(&mut self, stmt: &TypedStmt) -> Result<String, CodegenError> {
         Ok(match &stmt.kind {
-            TypedStmtKind::Let { name, ty, value } | TypedStmtKind::Var { name, ty, value } => {
+            TypedStmtKind::Let { pattern, ty, value }
+            | TypedStmtKind::Var { pattern, ty, value } => {
                 let val_str = self.emit_expression(value)?;
 
-                let is_shadowed = self.scopes.iter().any(|scope| scope.contains_key(name));
+                let names = match pattern {
+                    BindingPattern::Ident(name) => vec![name.clone()],
+                    BindingPattern::Tuple(names) => names.clone(),
+                };
 
-                if is_shadowed {
-                    let c_name = format!("{}_{}", name, self.var_versions);
-                    self.var_versions += 1;
+                if names.len() == 1 {
+                    let name = names[0].clone();
 
-                    self.scopes
-                        .last_mut()
-                        .unwrap()
-                        .insert(name.clone(), c_name.clone());
+                    let is_shadowed = self.scopes.iter().any(|scope| scope.contains_key(&name));
 
-                    format!("{} {} = {};", self.c_type(ty), c_name, val_str)
+                    if is_shadowed {
+                        let c_name = format!("{}_{}", name, self.var_versions);
+                        self.var_versions += 1;
+
+                        self.scopes
+                            .last_mut()
+                            .unwrap()
+                            .insert(name.clone(), c_name.clone());
+
+                        format!("{} {} = {};", self.c_type(ty), c_name, val_str)
+                    } else {
+                        self.scopes
+                            .last_mut()
+                            .unwrap()
+                            .insert(name.clone(), name.clone());
+                        format!("{} {} = {};", self.c_type(ty), name, val_str)
+                    }
                 } else {
-                    self.scopes
-                        .last_mut()
-                        .unwrap()
-                        .insert(name.clone(), name.clone());
-                    format!("{} {} = {};", self.c_type(ty), name, val_str)
+                    let mut lines = Vec::new();
+
+                    let tmp_name = format!("_tmp{}", self.tmp_var_count);
+
+                    self.tmp_var_count += 1;
+
+                    lines.push(format!("{} {} = {};", self.c_type(ty), tmp_name, val_str));
+
+                    let elem_tys = match ty {
+                        Ty::Tuple(tys) => tys.clone(),
+                        _ => unreachable!("Destructuring non-tuple type"),
+                    };
+
+                    for (i, name) in names.iter().enumerate() {
+                        let is_shadowed = self.scopes.iter().any(|scope| scope.contains_key(name));
+
+                        let c_name = if is_shadowed {
+                            let n = format!("{}_{}", name, self.var_versions);
+                            self.var_versions += 1;
+                            n
+                        } else {
+                            name.clone()
+                        };
+
+                        self.scopes
+                            .last_mut()
+                            .unwrap()
+                            .insert(name.clone(), c_name.clone());
+
+                        let elem_c_ty = self.c_type(&elem_tys[i]);
+
+                        lines.push(format!("{} {} = {}._{};", elem_c_ty, c_name, tmp_name, i));
+                    }
+
+                    lines.join("\n")
                 }
             }
             TypedStmtKind::Const { name, ty, value } => {
@@ -1144,16 +1192,14 @@ impl Codegen {
         self.scopes.push(HashMap::new());
 
         let mut lines = Vec::new();
-        let mut string_vars: Vec<String> = Vec::new();
+        let string_vars: Vec<String> = Vec::new();
 
         self.scope_defers.push(Vec::new());
 
         for s in body {
-            if let TypedStmtKind::Let { name, ty, .. } | TypedStmtKind::Var { name, ty, .. } =
-                &s.kind
-            {
+            if let TypedStmtKind::Let { ty, .. } | TypedStmtKind::Var { ty, .. } = &s.kind {
                 if matches!(ty, Ty::String) {
-                    string_vars.push(name.clone());
+                    // string_vars.push(name.clone());
                 }
             } else if let TypedStmtKind::Defer { callee, .. } = &s.kind {
                 let c_callee = self.emit_statement(callee)?;

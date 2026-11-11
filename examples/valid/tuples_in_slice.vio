@@ -1,4 +1,4 @@
-let users: [(Int, String)] = [
+let users: [](Int, String) = [
     (1, "Alice"),
     (2, "Bob"),
     (3, "Charlie")

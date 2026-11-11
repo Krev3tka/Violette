@@ -6,7 +6,7 @@ use crate::lexer::token::Token;
 use crate::parser::expression::CallArg;
 use crate::parser::parser::Parser;
 use crate::parser::statement::{ElseIf, FuncParam, MatchArm, StructParam};
-use crate::parser::types::Type;
+use crate::parser::types::{BindingPattern, Type};
 use crate::parser::{Expression, Precedence, Statement};
 
 #[inline]
@@ -147,7 +147,7 @@ pub fn expr_stmt(expr: Expression) -> Statement {
 
 pub fn let_stmt(name: &str, value: Expression) -> Statement {
     Statement::Let {
-        name: name.to_string(),
+        pattern: BindingPattern::Ident(name.to_string()),
         value,
         span: dummy_span(),
         annotated_type: None,

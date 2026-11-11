@@ -12,7 +12,7 @@ pub enum Precedence {
     BitAnd,      // &
     Equals,      // == !=
     LessGreater, // < > <= >=
-    Range,       // : ..
+    Range,       // ..< ..=
     Sprout,      // ~>
     Shift,       // >> <<
     Sum,         // + -
@@ -75,4 +75,10 @@ pub enum Type {
 #[derive(Clone, Debug, PartialEq)]
 pub struct TypePath {
     pub segments: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum BindingPattern {
+    Ident(String),
+    Tuple(Vec<String>),
 }

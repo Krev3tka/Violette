@@ -3,7 +3,7 @@ use crate::lexer::token::Token;
 use crate::parser::Precedence::Lowest;
 use crate::parser::parser::{MAX_DEPTH, Parser};
 use crate::parser::program::ImportItem;
-use crate::parser::types::Type;
+use crate::parser::types::{BindingPattern, Type};
 use crate::parser::{Expression, ParseError};
 use crate::typechecker::error::BindingKind;
 
@@ -15,7 +15,7 @@ pub enum Statement {
     },
 
     Var {
-        name: String,
+        pattern: BindingPattern,
         annotated_type: Option<Type>,
         type_span: Option<Span>,
         value: Expression,
@@ -23,7 +23,7 @@ pub enum Statement {
     },
 
     Let {
-        name: String,
+        pattern: BindingPattern,
         annotated_type: Option<Type>,
         type_span: Option<Span>,
         value: Expression,
@@ -192,8 +192,33 @@ impl Parser {
 
                 self.next_token();
 
-                let name = match &self.current_token.token {
-                    Token::LowerIdent(var_name) => var_name.clone(),
+                let mut open_span = None;
+
+                let names = match &self.current_token.token {
+                    Token::LowerIdent(var_name) => vec![var_name.clone()],
+                    Token::LeftParen => {
+                        open_span = Some(self.current_token.span);
+
+                        self.next_token();
+
+                        let mut tuple_names = Vec::new();
+
+                        while !matches!(self.current_token.token, Token::RightParen) {
+                            if let Token::LowerIdent(var_name) = self.current_token.token.clone() {
+                                tuple_names.push(var_name);
+                            }
+
+                            self.next_token();
+
+                            if matches!(self.current_token.token.clone(), Token::Comma) {
+                                self.next_token();
+                            }
+                        }
+
+                        open_span = Some(open_span.unwrap().merge(&self.current_token.span));
+
+                        tuple_names
+                    }
                     Token::UpperIdent(_) => {
                         return Err(ParseError::ExpectedLowercaseIdent {
                             context: match kw_token {
@@ -245,18 +270,32 @@ impl Parser {
                 let value = self.parse_expression(Lowest)?;
                 self.next_token();
 
+                let pattern = if names.len() == 1 {
+                    BindingPattern::Ident(names[0].clone())
+                } else {
+                    BindingPattern::Tuple(names)
+                };
+
                 match kw_token {
                     Token::Var => Ok(Statement::Var {
-                        name,
+                        pattern,
                         value,
-                        span,
+                        span: if let Some(op_span) = open_span {
+                            op_span
+                        } else {
+                            span
+                        },
                         annotated_type,
                         type_span,
                     }),
                     Token::Let => Ok(Statement::Let {
-                        name,
+                        pattern,
                         value,
-                        span,
+                        span: if let Some(op_span) = open_span {
+                            op_span
+                        } else {
+                            span
+                        },
                         annotated_type,
                         type_span,
                     }),

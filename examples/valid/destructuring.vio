@@ -1,0 +1,7 @@
+func divMod(a: Int, b: Int) -> (Int, Int) =
+    (a / b, a % b)
+
+let (div, mod) = divMod(75, 4)
+
+println("Div: " + div.toString())
+println("Mod: " + mod.toString())

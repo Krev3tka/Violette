@@ -4,7 +4,7 @@ use crate::lexer::token::Token;
 use crate::parser::expression::CallArg;
 use crate::parser::program::Program;
 use crate::parser::statement::FuncParam;
-use crate::parser::types::Type;
+use crate::parser::types::{BindingPattern, Type};
 use crate::parser::{Expression, Statement};
 use crate::typechecker::env::Env;
 pub use crate::typechecker::error::TypeError;
@@ -617,7 +617,7 @@ impl Checker {
     pub fn check_stmt(&mut self, stmt: &Statement) -> TypedStmt {
         match stmt {
             Statement::Var {
-                name,
+                pattern,
                 value,
                 annotated_type,
                 type_span,
@@ -628,37 +628,78 @@ impl Checker {
                 let expected = annotated_type.as_ref().map(|t| self.resolve(t));
                 let typed_val = self.check_expr(value, expected.as_ref());
 
-                let final_ty = if let Some(expected_ty) = expected {
+                if let BindingPattern::Tuple(_) = pattern
+                    && !matches!(typed_val.ty, Ty::Tuple(_))
+                {
+                    self.errors.push(TypeError::Unsupported {
+                        desc: "Destructuring non-tuple type".to_string(),
+                        span: *span,
+                    });
+                    return TypedStmt::error(
+                        *span,
+                        TypeError::Unsupported {
+                            desc: "Destructuring non-tuple type".to_string(),
+                            span: *span,
+                        },
+                    );
+                }
+
+                let final_ty = if let Some(ref expected_ty) = expected {
                     let err_span = type_span.unwrap_or(value.span());
 
-                    self.expect(&typed_val.ty, &expected_ty, err_span);
+                    self.expect(&typed_val.ty, expected_ty, err_span);
 
                     expected_ty
                 } else {
-                    typed_val.ty.clone()
+                    &typed_val.ty
                 };
 
-                self.defined(
-                    name.clone(),
-                    final_ty.clone(),
-                    BindingKind::Var,
-                    stmt.span(),
-                );
+                match pattern {
+                    BindingPattern::Ident(name) => self.defined(
+                        name.clone(),
+                        final_ty.clone(),
+                        BindingKind::Var,
+                        stmt.span(),
+                    ),
+                    BindingPattern::Tuple(names) => {
+                        if let Ty::Tuple(elem_tys) = &final_ty {
+                            if names.len() != elem_tys.len() {
+                                self.errors.push(TypeError::Unsupported {
+                                    desc: format!(
+                                        "Destructuring tuple of length {} into {} variables",
+                                        elem_tys.len(),
+                                        names.len()
+                                    ),
+                                    span: *span,
+                                })
+                            } else {
+                                for (name, elem_ty) in names.iter().zip(elem_tys.iter()) {
+                                    self.defined(
+                                        name.clone(),
+                                        elem_ty.clone(),
+                                        BindingKind::Var,
+                                        stmt.span(),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
 
                 self.current_type_span = None;
 
                 TypedStmt {
                     kind: TypedStmtKind::Var {
-                        name: name.clone(),
-                        ty: final_ty,
-                        value: typed_val,
+                        pattern: pattern.clone(),
+                        ty: final_ty.clone(),
+                        value: self.check_expr(value, expected.as_ref()),
                     },
                     ty: Ty::Unit,
                     span: *span,
                 }
             }
             Statement::Let {
-                name,
+                pattern,
                 value,
                 annotated_type,
                 span,
@@ -668,6 +709,22 @@ impl Checker {
 
                 let expected = annotated_type.as_ref().map(|t| self.resolve(t));
                 let typed_val = self.check_expr(value, expected.as_ref());
+
+                if let BindingPattern::Tuple(_) = pattern
+                    && !matches!(typed_val.ty, Ty::Tuple(_))
+                {
+                    self.errors.push(TypeError::Unsupported {
+                        desc: "Destructuring non-tuple type".to_string(),
+                        span: *span,
+                    });
+                    return TypedStmt::error(
+                        *span,
+                        TypeError::Unsupported {
+                            desc: "Destructuring non-tuple type".to_string(),
+                            span: *span,
+                        },
+                    );
+                }
 
                 let final_ty = if let Some(expected_ty) = expected {
                     self.expect(&typed_val.ty, &expected_ty, value.span());
@@ -677,18 +734,43 @@ impl Checker {
                     typed_val.ty.clone()
                 };
 
-                self.defined(
-                    name.clone(),
-                    final_ty.clone(),
-                    BindingKind::Let,
-                    stmt.span(),
-                );
+                match pattern {
+                    BindingPattern::Ident(name) => self.defined(
+                        name.clone(),
+                        final_ty.clone(),
+                        BindingKind::Var,
+                        stmt.span(),
+                    ),
+                    BindingPattern::Tuple(names) => {
+                        if let Ty::Tuple(elem_tys) = &final_ty {
+                            if names.len() != elem_tys.len() {
+                                self.errors.push(TypeError::Unsupported {
+                                    desc: format!(
+                                        "Destructuring tuple of length {} into {} variables",
+                                        elem_tys.len(),
+                                        names.len()
+                                    ),
+                                    span: *span,
+                                })
+                            } else {
+                                for (name, elem_ty) in names.iter().zip(elem_tys.iter()) {
+                                    self.defined(
+                                        name.clone(),
+                                        elem_ty.clone(),
+                                        BindingKind::Var,
+                                        stmt.span(),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
 
                 self.current_type_span = None;
 
                 TypedStmt {
                     kind: TypedStmtKind::Let {
-                        name: name.clone(),
+                        pattern: pattern.clone(),
                         ty: final_ty.clone(),
                         value: typed_val,
                     },

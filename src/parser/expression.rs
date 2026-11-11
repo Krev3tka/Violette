@@ -4,7 +4,7 @@ use crate::parser::Expression::TupleLiteral;
 use crate::parser::Precedence::{Lowest, Prefix};
 use crate::parser::parser::{MAX_DEPTH, Parser};
 use crate::parser::statement::{ElseIf, FuncParam, MatchArm};
-use crate::parser::types::Type;
+use crate::parser::types::{BindingPattern, Type};
 use crate::parser::{ParseError, Precedence, Statement};
 use crate::typechecker::error::BindingKind;
 
@@ -348,6 +348,17 @@ impl Parser {
                 self.skip_terminators();
 
                 match self.current_token.token.clone() {
+                    Token::Subtract if matches!(self.peek_token.token, Token::RightParen) => {
+                        let operator = self.current_token.token.clone();
+
+                        let operator_span = self.current_token.span;
+
+                        self.next_token();
+
+                        self.paren_depth -= 1;
+
+                        return self.parse_operator_as_lambda(operator, operator_span);
+                    }
                     Token::Equals
                     | Token::NotEquals
                     | Token::Less
@@ -356,7 +367,6 @@ impl Parser {
                     | Token::GreaterOrEquals
                     | Token::Sprout
                     | Token::Add
-                    | Token::Subtract
                     | Token::Multiply
                     | Token::Divide
                     | Token::Modulus
@@ -374,13 +384,7 @@ impl Parser {
 
                         if matches!(self.current_token.token.clone(), Token::RightParen) {
                             self.paren_depth -= 1;
-                            self.parse_operator_as_lambda(operator.clone(), operator_span)?
-                        } else if matches!(operator, Token::Subtract) {
-                            let expr = self.parse_expression(Lowest)?;
-
-                            self.next_token();
-
-                            expr
+                            return self.parse_operator_as_lambda(operator.clone(), operator_span);
                         } else {
                             let expr = self.parse_right_section(operator, start_span)?;
                             self.skip_terminators();
@@ -683,7 +687,7 @@ impl Parser {
                                 Expression::Block {
                                     body: vec![
                                         Statement::Let {
-                                            name: "_tmp".to_string(),
+                                            pattern: BindingPattern::Ident("_tmp".to_string()),
                                             annotated_type: None,
                                             type_span: None,
                                             value: middle,

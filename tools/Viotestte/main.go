@@ -40,6 +40,7 @@ var ExpectedOutputs = map[string]string{
 	"characteristics.vio":     "A\nя\n⼆",
 	"double_inequality.vio": "x: 1",
 	"defer.vio":  "1\n2\n3\n4",
+	"destructuring.vio": "Div: 18\nMod: 3",
 	"div_mod_tuples.vio": "8\n2",
 	"escape_chars.vio": "Quotes: \"Hello, Violette!\"\nBackslash: \\",
 	"extern_fun.vio":      "64\n8\n3",
