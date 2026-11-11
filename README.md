@@ -4,7 +4,7 @@
 
 [![Language](https://img.shields.io/badge/language-Rust-orange.svg)](https://www.rust-lang.org/)
 [![Backend](https://img.shields.io/badge/backend-C99%20%2F%20GNU99-blue.svg)](#)
-[![Version](https://img.shields.io/badge/version-v0.2.0-purple.svg)](Violettech_v0.4.md)
+[![Version](https://img.shields.io/badge/version-v0.4.0-purple.svg)](Violettech_v0.4.md)
 [![License](https://img.shields.io/badge/license-BSD_3--Clause-blue.svg)](LICENSE)
 
 ---
