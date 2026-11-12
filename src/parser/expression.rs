@@ -357,7 +357,7 @@ impl Parser {
 
                         self.paren_depth -= 1;
 
-                        return self.parse_operator_as_lambda(operator, operator_span);
+                        self.parse_operator_as_lambda(operator, operator_span)?
                     }
                     Token::Equals
                     | Token::NotEquals
@@ -384,7 +384,7 @@ impl Parser {
 
                         if matches!(self.current_token.token.clone(), Token::RightParen) {
                             self.paren_depth -= 1;
-                            return self.parse_operator_as_lambda(operator.clone(), operator_span);
+                            self.parse_operator_as_lambda(operator.clone(), operator_span)?
                         } else {
                             let expr = self.parse_right_section(operator, start_span)?;
                             self.skip_terminators();

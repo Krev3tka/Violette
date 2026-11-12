@@ -15,6 +15,7 @@ const TestPaths = "../../examples/"
 var ExpectedErrors = map[string]string{
 	"fail_breaking_bad.vio":      "found `break` outside of a loop",
 	"fail_constatation.vio":      "couldn't assign again to const variable",
+	"fail_if_expr_scoping.vio":       "found something undefined: `z`",
 	"fail_having_too_many_labels_is_bad.vio": "Positional argument cannot follow named argument",
 	"fail_if_no_else_expr.vio": "this `if` block needs an `else` branch",
 	"fail_named_params.vio": "Unknown argument label `who`",

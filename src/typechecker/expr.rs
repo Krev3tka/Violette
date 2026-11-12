@@ -1,5 +1,6 @@
 use crate::hir::typed_ast::{
-    TypedElseIf, TypedExpr, TypedExprKind, TypedMatchArm, TypedStmtKind, TypedStructLiteralField,
+    TypedElseIf, TypedExpr, TypedExprKind, TypedMatchArm, TypedStmt, TypedStmtKind,
+    TypedStructLiteralField,
 };
 use crate::lexer::span::Span;
 use crate::lexer::token::Token;
@@ -1499,12 +1500,16 @@ impl Checker {
                 let typed_cond = self.check_expr(condition.as_ref(), Some(&Ty::Bool));
                 self.expect(&typed_cond.ty, &Ty::Bool, *span);
 
-                let then_ty = if let Some((last, _)) = then_block.split_last()
-                    && let Statement::Expression { expression, .. } = last
-                {
-                    self.infer(expression, expected)
-                } else {
-                    Ty::Unit
+                self.env.push();
+                let typed_then: Vec<_> = then_block.iter().map(|s| self.check_stmt(s)).collect();
+                self.env.pop();
+
+                let then_ty = match typed_then.last() {
+                    Some(TypedStmt {
+                        kind: TypedStmtKind::Expression(expr),
+                        ..
+                    }) => expr.ty.clone(),
+                    _ => Ty::Unit,
                 };
 
                 if !matches!(then_ty, Ty::Unit) && else_block.is_empty() {
@@ -1525,10 +1530,14 @@ impl Checker {
                     };
                 }
 
+                self.env.push();
+                let typed_else = else_block.iter().map(|s| self.check_stmt(s)).collect();
+                self.env.pop();
+
                 TypedExpr {
                     kind: TypedExprKind::If {
                         condition: Box::new(typed_cond),
-                        then_block: then_block.iter().map(|s| self.check_stmt(s)).collect(),
+                        then_block: typed_then,
                         else_if: else_if
                             .iter()
                             .map(|elif| TypedElseIf {
@@ -1536,7 +1545,7 @@ impl Checker {
                                 block: self.check_block(&elif.block),
                             })
                             .collect(),
-                        else_block: else_block.iter().map(|s| self.check_stmt(s)).collect(),
+                        else_block: typed_else,
                         closing_span: *closing_span,
                     },
                     ty: then_ty,
