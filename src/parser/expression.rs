@@ -532,11 +532,25 @@ impl Parser {
                 self.next_token();
                 self.skip_terminators();
 
-                let (body, _) = self.parse_block()?;
+                let (body, end_span) = self.parse_block()?;
 
-                Expression::Block {
+                let block_span = start_span.merge(&end_span.unwrap_or(start_span));
+
+                let block_expr = Expression::Block {
                     body,
-                    span: start_span.merge(&self.current_token.span),
+                    span: block_span,
+                };
+
+                if matches!(self.current_token.token.clone(), Token::LeftParen) {
+                    let args = self.parse_call_args()?;
+
+                    Expression::Call {
+                        function: Box::new(block_expr),
+                        args,
+                        span: block_span.merge(&self.current_token.span),
+                    }
+                } else {
+                    block_expr
                 }
             }
             Token::Equals
@@ -570,7 +584,6 @@ impl Parser {
             }
             Token::If => self.parse_if_expression()?,
             Token::Match => self.parse_match_expression()?,
-            Token::BackSlash => self.parse_lambda()?,
             _ => return Err(self.unexpected(&self.current_token)),
         };
 
@@ -1155,6 +1168,7 @@ impl Parser {
         Ok(args)
     }
 
+    #[allow(dead_code)]
     pub fn parse_lambda(&mut self) -> Result<Expression, ParseError> {
         let start_span = self.current_token.span;
 

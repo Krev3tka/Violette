@@ -770,7 +770,10 @@ impl Checker {
                     }
                 }
 
-                let callee = if matches!(function.as_ref(), Expression::Lambda { .. }) {
+                let callee = if matches!(
+                    function.as_ref(),
+                    Expression::Lambda { .. } | Expression::Block { .. }
+                ) {
                     let arg_types: Vec<Ty> =
                         args.iter().map(|a| self.infer(&a.value, None)).collect();
 
@@ -822,16 +825,18 @@ impl Checker {
                             typed_args.push(typed_arg);
                         }
 
-                        let typed_function =
-                            if matches!(function.as_ref(), Expression::Lambda { .. }) {
-                                let expected_fn = Ty::Fn {
-                                    params: params.clone(),
-                                    ret: ret.clone(),
-                                };
-                                self.check_expr(function.as_ref(), Some(&expected_fn))
-                            } else {
-                                self.check_expr(function.as_ref(), None)
+                        let typed_function = if matches!(
+                            function.as_ref(),
+                            Expression::Lambda { .. } | Expression::Block { .. }
+                        ) {
+                            let expected_fn = Ty::Fn {
+                                params: params.clone(),
+                                ret: ret.clone(),
                             };
+                            self.check_expr(function.as_ref(), Some(&expected_fn))
+                        } else {
+                            self.check_expr(function.as_ref(), None)
+                        };
 
                         TypedExpr {
                             kind: TypedExprKind::Call {
@@ -1919,6 +1924,7 @@ impl Checker {
             }
             Expression::Block { body, span } => {
                 // 1. lambdas
+
                 let numbered_params = self.collect_numbered_params(body);
 
                 let is_expected_fn = matches!(expected, Some(Ty::Fn { .. }));
@@ -1969,7 +1975,9 @@ impl Checker {
                         param_tys.push(ty);
                     }
 
-                    let ret = if let Some(exp_ret) = expected_ret {
+                    let ret = if let Some(exp_ret) = expected_ret
+                        && exp_ret != &Ty::Infer
+                    {
                         exp_ret.clone()
                     } else {
                         let explicit_ret = body.iter().find_map(|s| {
@@ -2013,7 +2021,7 @@ impl Checker {
                             body: typed_body,
                         },
                         ty: Ty::Fn {
-                            params: param_tys,
+                            params: param_tys.clone(),
                             ret: Box::new(final_ret.clone()),
                         },
                         span: *span,

@@ -18,12 +18,12 @@ func main () {
         x * y
     }
 
-    let divide: func(Int, Int) -> Int = {
+    let div = {
         return #0 / #1
-    }
+    }(125, 5)
 
     println(add(5, 7))
     println(subtract(5.0, 7.0))
     println(multiply(5, 7))
-    println(divide(5, 7))
+    println(div)
 }

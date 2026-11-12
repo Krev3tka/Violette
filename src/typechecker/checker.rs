@@ -1356,6 +1356,10 @@ impl Checker {
             return;
         }
 
+        if expected == &Ty::Infer {
+            return;
+        }
+
         if let (
             Ty::Ref {
                 inner: exp_in,

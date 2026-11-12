@@ -34,7 +34,7 @@ var ExpectedErrors = map[string]string{
 }
 
 var ExpectedOutputs = map[string]string{
-    "anonymous_functions.vio": "12\n-2\nFirst multiplier: 5\nSecond multiplier: 7\n35\n0",
+    "anonymous_functions.vio": "12\n-2\nFirst multiplier: 5\nSecond multiplier: 7\n35\n25",
     "array.vio": "1\n2\n3\n5",
     "binary_search.vio": "3",
 	"bits.vio":            "452",
