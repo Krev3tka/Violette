@@ -201,7 +201,7 @@ impl Diagnostics for TypeError {
                     *span,
                     format!(
                         "method not found on type `{}`",
-                        match ty {
+                        match ty.as_ref() {
                             Ty::Struct(s) => s.clone(),
                             _ => format!("{}", ty),
                         }
@@ -215,7 +215,7 @@ impl Diagnostics for TypeError {
                     format!(
                         "no method named `{}` found for type `{}`",
                         method,
-                        match ty {
+                        match ty.as_ref() {
                             Ty::Struct(s) => s.clone(),
                             _ => format!("{}", ty),
                         }

@@ -78,6 +78,7 @@ pub enum Statement {
 
     Func {
         name: String,
+        generic_params: Vec<String>,
         params: Vec<FuncParam>,
         return_type: Option<Type>,
         body: Vec<Statement>,
@@ -618,6 +619,51 @@ impl Parser {
 
         self.next_token();
 
+        let mut generic_params = Vec::new();
+
+        if matches!(self.current_token.token.clone(), Token::LeftBracket) {
+            let open_bracket_tok = self.current_token.token.clone();
+            let open_bracket_span = self.current_token.span;
+
+            self.next_token();
+
+            while !matches!(
+                self.current_token.token.clone(),
+                Token::RightBracket | Token::Eof
+            ) {
+                let type_param_name = match self.current_token.token.clone() {
+                    Token::UpperIdent(type_name) => type_name,
+                    _ => {
+                        return Err(ParseError::ExpectedIdentifier {
+                            context: "in generic type annotation",
+                            found: self.current_token.token.clone(),
+                            span: self.current_token.span,
+                        });
+                    }
+                };
+
+                generic_params.push(type_param_name);
+                self.next_token();
+
+                if matches!(self.current_token.token, Token::Comma) {
+                    self.next_token();
+                } else {
+                    break;
+                }
+            }
+
+            self.expect(
+                Token::RightBracket,
+                ParseError::UnclosedDelimiter {
+                    open_token: Box::new(open_bracket_tok),
+                    open_span: open_bracket_span,
+                    expected_token: Box::new(Token::RightBracket),
+                    found_tok: Box::new(self.current_token.token.clone()),
+                    found_span: self.current_token.span,
+                },
+            )?;
+        }
+
         let open_paren_tok = self.current_token.token.clone();
         let open_paren_span = self.current_token.span;
 
@@ -663,6 +709,7 @@ impl Parser {
             return if !is_method {
                 Ok(Statement::Func {
                     name,
+                    generic_params,
                     params,
                     return_type,
                     body,
@@ -706,6 +753,7 @@ impl Parser {
         } else {
             Ok(Statement::Func {
                 name,
+                generic_params,
                 params,
                 return_type,
                 body,

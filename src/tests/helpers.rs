@@ -196,6 +196,7 @@ pub fn func(
 ) -> Statement {
     Statement::Func {
         name: name.to_string(),
+        generic_params: vec![],
         params,
         return_type: ret,
         body,

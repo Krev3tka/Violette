@@ -27,6 +27,11 @@ pub struct Codegen {
     user_funcs: HashSet<String>,
     slice_types: HashSet<String>,
     tuple_types: HashSet<Vec<String>>,
+    type_subst: HashMap<String, Ty>,
+    generic_funcs: HashMap<String, TypedStmt>,
+    emitted_monomorphs: HashSet<String>,
+    mono_prototypes: Vec<String>,
+    mono_bodies: Vec<String>,
     methods_taking_ref: HashSet<String>,
     var_versions: usize,
     tmp_var_count: usize,
@@ -51,6 +56,11 @@ impl Codegen {
             user_funcs: HashSet::new(),
             slice_types: HashSet::new(),
             tuple_types: HashSet::new(),
+            type_subst: HashMap::new(),
+            generic_funcs: HashMap::new(),
+            emitted_monomorphs: HashSet::new(),
+            mono_prototypes: Vec::new(),
+            mono_bodies: Vec::new(),
             methods_taking_ref: HashSet::new(),
             var_versions: 0,
             tmp_var_count: 0,
@@ -107,6 +117,13 @@ impl Codegen {
 
                 type_name
             }
+            Ty::Param(name) => {
+                if let Some(inner) = self.type_subst.get(name).cloned() {
+                    self.c_type(&inner)
+                } else {
+                    String::from("MaybeNotRegisteredGenericType")
+                }
+            }
             Ty::Infer => "int64_t".to_string(),
             _ => "unknown".to_string(),
         }
@@ -116,8 +133,18 @@ impl Codegen {
         // 1. Extern-functions
 
         for s in &prg.declarations {
-            if let TypedStmtKind::Func { name, .. } = &s.kind {
-                self.user_funcs.insert(name.clone());
+            if let TypedStmtKind::Func {
+                name,
+                generic_params,
+                ..
+            } = &s.kind
+            {
+                if !generic_params.is_empty() {
+                    self.user_funcs.insert(name.clone());
+                    self.generic_funcs.insert(name.clone(), s.clone());
+                } else {
+                    self.user_funcs.insert(name.clone());
+                }
             }
 
             if let TypedStmtKind::Extend { target, methods } = &s.kind {
@@ -184,10 +211,11 @@ impl Codegen {
             match &s.kind {
                 TypedStmtKind::Func {
                     name,
+                    generic_params,
                     params,
                     return_type,
                     ..
-                } if name != "main" => {
+                } if name != "main" && generic_params.is_empty() => {
                     let c_name = if name.starts_with("vio_") {
                         name.clone()
                     } else {
@@ -227,6 +255,9 @@ impl Codegen {
                 TypedStmtKind::Const { .. }
                 | TypedStmtKind::Struct { .. }
                 | TypedStmtKind::Enum { .. } => continue,
+                TypedStmtKind::Func { generic_params, .. } if !generic_params.is_empty() => {
+                    continue;
+                }
                 TypedStmtKind::Func { name, body, .. } if name == "main" => {
                     self.is_main = true;
                     lines.push("int main(void) {".to_string());
@@ -302,7 +333,17 @@ impl Codegen {
             final_lines.push("\n".to_string());
         }
 
+        if !self.mono_prototypes.is_empty() {
+            final_lines.extend(self.mono_prototypes.clone());
+            final_lines.push("\n".to_string());
+        }
+
         final_lines.extend(lines.into_iter().skip(1));
+
+        if !self.mono_bodies.is_empty() {
+            final_lines.extend(self.mono_bodies.clone());
+            final_lines.push("\n".to_string());
+        }
 
         if !self.lifted_lambdas.is_empty() {
             final_lines.extend(self.lifted_lambdas.clone());
@@ -446,7 +487,11 @@ impl Codegen {
                     clean
                 }
             }
-            TypedExprKind::Call { function, args } => {
+            TypedExprKind::Call {
+                function,
+                args,
+                generic_types,
+            } => {
                 if let TypedExprKind::Identifier { name, .. } = &function.kind
                     && let Some((variant_name, true)) = self.variant_cases.get(name).cloned()
                 {
@@ -488,16 +533,79 @@ impl Codegen {
 
                 let f = self.emit_expression(function.as_ref())?;
                 let c_fn_name = if self.user_funcs.contains(&f) {
-                    format!("vio_user_{}", f)
+                    let monomorphed_types = if !generic_types.is_empty() {
+                        generic_types
+                            .iter()
+                            .map(|t| self.type_to_prefix(t).to_string())
+                            .collect::<Vec<_>>()
+                            .join("_")
+                    } else {
+                        String::new()
+                    };
+
+                    format!(
+                        "vio_user_{}{}",
+                        f,
+                        if !monomorphed_types.is_empty() {
+                            format!("_{}", monomorphed_types)
+                        } else {
+                            String::new()
+                        }
+                    )
                 } else {
-                    f
+                    f.clone()
                 };
+
+                if !generic_types.is_empty() && !self.emitted_monomorphs.contains(&c_fn_name) {
+                    self.emitted_monomorphs.insert(c_fn_name.clone());
+                    let generic = self.generic_funcs.get(&f);
+
+                    if let Some(fun) = generic
+                        && let TypedStmtKind::Func {
+                            generic_params,
+                            params,
+                            return_type,
+                            body,
+                            ..
+                        } = fun.kind.clone()
+                    {
+                        let map: HashMap<_, _> = generic_params
+                            .into_iter()
+                            .zip(generic_types.clone())
+                            .collect();
+
+                        let saved_type_subst = self.type_subst.clone();
+                        let saved_scopes = self.scopes.clone();
+                        let saved_main = self.is_main;
+
+                        self.type_subst = map;
+                        self.scopes = vec![HashMap::new()];
+                        self.is_main = false;
+
+                        let ret = self.c_type(&return_type);
+                        let params_c = self.format_params(&params);
+                        self.mono_prototypes
+                            .push(format!("{} {}({});", ret, c_fn_name, params_c));
+
+                        let body_c = self.emit_block(&body)?;
+
+                        self.mono_bodies.push(format!(
+                            "{} {}({}) {{\n    {}\n}}",
+                            ret, c_fn_name, params_c, body_c
+                        ));
+
+                        self.is_main = saved_main;
+                        self.scopes = saved_scopes;
+                        self.type_subst = saved_type_subst;
+                    }
+                }
 
                 let a = args
                     .iter()
                     .map(|arg| self.emit_expression(arg))
                     .collect::<Result<Vec<_>, _>>()?
                     .join(", ");
+
                 format!("{}({})", c_fn_name, a)
             }
             TypedExprKind::MethodCall { object, name, args } => {
@@ -710,7 +818,7 @@ impl Codegen {
                     let (case_name, bind_var) = match &arm.pattern.kind {
                         TypedExprKind::Identifier { name, .. }
                         | TypedExprKind::Field { name, .. } => (name.clone(), None),
-                        TypedExprKind::Call { function, args } => {
+                        TypedExprKind::Call { function, args, .. } => {
                             let name = match &function.kind {
                                 TypedExprKind::Identifier { name, .. } => name.clone(),
                                 _ => unreachable!(),
@@ -1043,6 +1151,7 @@ impl Codegen {
                 params,
                 return_type,
                 body,
+                ..
             } => {
                 let c_name = if name == "main"
                     || name.starts_with("vio_")
@@ -1070,6 +1179,7 @@ impl Codegen {
                         params,
                         return_type,
                         body,
+                        ..
                     } = &method.kind
                     {
                         let c_name = format!("vio_user_{}_{}", self.type_to_prefix(target), name);
@@ -1325,7 +1435,13 @@ impl Codegen {
                     "String" => Ty::String,
                     "Bool" => Ty::Bool,
                     "Char" => Ty::Char,
-                    _ => Ty::Struct(name.clone()),
+                    _ => {
+                        if self.type_subst.contains_key(name) {
+                            Ty::Param(name.clone())
+                        } else {
+                            Ty::Struct(name.clone())
+                        }
+                    }
                 }
             }
             Type::Array(inner) => {

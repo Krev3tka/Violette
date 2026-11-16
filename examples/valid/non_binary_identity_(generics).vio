@@ -1,0 +1,9 @@
+func identity[T](x: T) -> T = x
+
+let a = identity(42)
+let b = identity("Me")
+let c = identity(true)
+
+println(a)
+println(b)
+println(c)

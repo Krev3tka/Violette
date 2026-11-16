@@ -71,6 +71,7 @@ var ExpectedOutputs = map[string]string{
     "mutating_parameters.vio": "11\n2\n1",
     "mutual_recursion.vio": "true",
     "named_params.vio": "Hello, Alice from me\nHello, Alice from you\nHello, Alice from her",
+    "non_binary_identity_(generics).vio": "42\nMe\ntrue",
     "operator_lambdas_without_literals.vio": "1.8\n78125\nHello, Violette",
     "pipelining_numbers.vio": "10\n-1",
 	"point.vio":          "3.5",

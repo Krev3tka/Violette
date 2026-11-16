@@ -33,7 +33,7 @@ pub enum LoopControlKind {
 #[derive(Debug, Clone, PartialEq)]
 pub enum TypeError {
     Mismatch {
-        expected: Ty,
+        expected: Box<Ty>,
         found: Ty,
         span: Span,
         annotation_span: Box<Option<Span>>,
@@ -129,7 +129,7 @@ pub enum TypeError {
     },
 
     MethodFoundAsGlobal {
-        ty: Ty,
+        ty: Box<Ty>,
         method: String,
         span: Span,
         help: String,

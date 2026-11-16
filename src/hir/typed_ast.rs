@@ -92,6 +92,7 @@ pub enum TypedExprKind {
     Call {
         function: Box<TypedExpr>,
         args: Vec<TypedExpr>,
+        generic_types: Vec<Ty>,
     },
 
     Block {
@@ -194,6 +195,7 @@ pub enum TypedStmtKind {
 
     Func {
         name: String,
+        generic_params: Vec<String>,
         params: Vec<FuncParam>,
         return_type: Ty,
         body: Vec<TypedStmt>,

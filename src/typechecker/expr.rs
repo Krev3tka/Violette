@@ -7,10 +7,10 @@ use crate::lexer::token::Token;
 use crate::parser::statement::FuncParam;
 use crate::parser::types::Type;
 use crate::parser::{Expression, Statement};
-use crate::typechecker::checker::{Checker, TypeError};
+use crate::typechecker::checker::{Checker, ParamSig, TypeError};
 use crate::typechecker::error::BindingKind;
 use crate::typechecker::types::Ty;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 impl Checker {
     #[allow(dead_code)]
@@ -71,7 +71,7 @@ impl Checker {
                 let values: Vec<_> = values
                     .iter()
                     .map(|expr| {
-                        let typed = self.check_expr(expr, expected);
+                        let typed = self.check_expr(expr, Some(&target_elem_ty));
                         self.expect(&typed.ty, &target_elem_ty, expr.span());
                         typed
                     })
@@ -95,7 +95,7 @@ impl Checker {
                             .collect();
 
                         self.errors.push(TypeError::Mismatch {
-                            expected: expected_ty.clone(),
+                            expected: Box::new(expected_ty.clone()),
                             found: Ty::Tuple(so_called_real_tys.clone()),
                             span: *span,
                             annotation_span: Box::new(self.current_type_span),
@@ -103,7 +103,7 @@ impl Checker {
                         TypedExpr::error(
                             *span,
                             TypeError::Mismatch {
-                                expected: expected_ty.clone(),
+                                expected: Box::new(expected_ty.clone()),
                                 found: Ty::Tuple(so_called_real_tys),
                                 span: *span,
                                 annotation_span: Box::new(self.current_type_span),
@@ -317,15 +317,15 @@ impl Checker {
                 right,
                 span,
             } => {
-                let right_ty = self.infer(right.as_ref(), None);
+                let typed_right = self.check_expr(right.as_ref(), None);
 
                 let ty = match operator {
                     Token::LogicNot => {
-                        self.expect(&right_ty, &Ty::Bool, expr.span());
+                        self.expect(&typed_right.ty, &Ty::Bool, expr.span());
 
                         Ty::Bool
                     }
-                    Token::Subtract => match right_ty {
+                    Token::Subtract => match typed_right.ty.clone() {
                         Ty::Int {
                             bits: 8,
                             signed: true,
@@ -369,11 +369,11 @@ impl Checker {
                         | Ty::Sized { signed: false }
                         | Ty::Sized { signed: true }
                         | Ty::Float { bits: 32 }
-                        | Ty::Float { bits: 64 } => right_ty,
+                        | Ty::Float { bits: 64 } => typed_right.ty.clone(),
                         _ => {
                             self.errors.push(TypeError::InvalidUnaryOperator {
                                 operator: operator.clone(),
-                                operand: right_ty,
+                                operand: typed_right.ty.clone(),
                                 span: *span,
                             });
 
@@ -381,7 +381,7 @@ impl Checker {
                         }
                     },
                     Token::BitNot => {
-                        match right_ty {
+                        match typed_right.ty.clone() {
                             Ty::Int {
                                 bits: 8,
                                 signed: true,
@@ -425,11 +425,15 @@ impl Checker {
                             | Ty::Sized { signed: false }
                             | Ty::Sized { signed: true } => {}
                             _ => {
-                                self.expect(&right_ty, &Ty::Sized { signed: true }, expr.span());
+                                self.expect(
+                                    &typed_right.ty,
+                                    &Ty::Sized { signed: true },
+                                    expr.span(),
+                                );
                             }
                         };
 
-                        right_ty
+                        typed_right.ty.clone()
                     }
                     Token::BitAnd => match right.as_ref() {
                         Expression::Identifier { name, .. } => match self.env.lookup(name) {
@@ -461,7 +465,7 @@ impl Checker {
                 TypedExpr {
                     kind: TypedExprKind::Prefix {
                         operator: operator.clone(),
-                        right: Box::new(self.check_expr(right, expected)),
+                        right: Box::new(typed_right),
                     },
                     ty,
                     span: *span,
@@ -581,9 +585,9 @@ impl Checker {
                         end: typed_end,
                         range_kind: range_kind.clone(),
                     },
-                    ty: Ty::Generic {
+                    ty: Ty::Instantiated {
                         name: "Range".to_string(),
-                        param: Box::new(Ty::Sized { signed: true }),
+                        args: vec![Ty::Sized { signed: true }],
                     },
                     span: *span,
                 }
@@ -593,21 +597,21 @@ impl Checker {
                 let typed_index = self.check_expr(index.as_ref(), None);
 
                 let is_slice =
-                    matches!(typed_index.ty, Ty::Generic { ref name, .. } if name == "Range");
+                    matches!(typed_index.ty, Ty::Instantiated { ref name, .. } if name == "Range");
 
                 if !is_slice {
                     self.expect(&typed_index.ty, &Ty::Sized { signed: true }, index.span());
                 }
 
                 let el_ty = match typed_left.ty {
-                    Ty::Array(inner) => {
+                    Ty::Array(ref inner) => {
                         if is_slice {
                             Ty::Array(inner.clone())
                         } else {
                             *inner.clone()
                         }
                     }
-                    Ty::Tuple(tys) => {
+                    Ty::Tuple(ref tys) => {
                         if is_slice {
                             self.errors.push(TypeError::Unsupported {
                                 desc: "Range expression indexing on tuples".to_string(),
@@ -649,8 +653,8 @@ impl Checker {
 
                 TypedExpr {
                     kind: TypedExprKind::Index {
-                        left: Box::new(self.check_expr(left.as_ref(), expected)),
-                        index: Box::new(self.check_expr(index.as_ref(), expected)),
+                        left: Box::new(typed_left),
+                        index: Box::new(typed_index),
                     },
                     ty: el_ty,
                     span: *span,
@@ -699,6 +703,7 @@ impl Checker {
                                     .iter()
                                     .map(|e| self.check_expr(&e.value, None))
                                     .collect(),
+                                generic_types: vec![],
                             },
                             ty: Ty::Struct(variant_name),
                             span: *span,
@@ -715,6 +720,7 @@ impl Checker {
                                 .iter()
                                 .map(|e| self.check_expr(&e.value, None))
                                 .collect(),
+                            generic_types: vec![],
                         },
                         ty: Ty::Struct(variant_name),
                         span: *span,
@@ -726,8 +732,10 @@ impl Checker {
                     && !args.is_empty()
                 {
                     let first_arg_ty = self.infer(&args[0].value, None);
+
                     if let Ty::Struct(ref s_name) = first_arg_ty {
                         let method_name = format!("{}.{}", s_name, name);
+
                         if let Some(sig) = self.funcs.get(&method_name).cloned() {
                             if args.len() != sig.params.len() {
                                 self.errors.push(TypeError::ArityMismatch {
@@ -749,6 +757,7 @@ impl Checker {
                                                 self.check_expr(&e.value, Some(&param_ty.ty))
                                             })
                                             .collect(),
+                                        generic_types: vec![],
                                     },
                                     ty: sig.ret,
                                     span: *span,
@@ -762,6 +771,7 @@ impl Checker {
                                 kind: TypedExprKind::Call {
                                     function: Box::new(self.check_expr(function.as_ref(), None)),
                                     args: typed_args,
+                                    generic_types: vec![],
                                 },
                                 ty: sig.ret,
                                 span: *span,
@@ -789,16 +799,61 @@ impl Checker {
                 if let Expression::Identifier { name, .. } = function.as_ref()
                     && let Some(sig) = self.funcs.get(name).cloned()
                 {
-                    let typed_args = self.resolve_args(name.clone(), &sig.params, args, *span);
+                    if sig.generic_params.is_empty() {
+                        let typed_args = self.resolve_args(name.clone(), &sig.params, args, *span);
 
-                    return TypedExpr {
-                        kind: TypedExprKind::Call {
-                            function: Box::new(self.check_expr(function.as_ref(), None)),
-                            args: typed_args,
-                        },
-                        ty: sig.ret,
-                        span: *span,
-                    };
+                        return TypedExpr {
+                            kind: TypedExprKind::Call {
+                                function: Box::new(self.check_expr(function.as_ref(), None)),
+                                args: typed_args,
+                                generic_types: vec![],
+                            },
+                            ty: sig.ret,
+                            span: *span,
+                        };
+                    } else {
+                        let mut resolved_generics = HashMap::new();
+
+                        for (arg, param) in args.iter().zip(sig.params.clone()) {
+                            if let Ty::Param(generic_name) = param.ty.clone()
+                                && !resolved_generics.contains_key(&generic_name)
+                            {
+                                resolved_generics
+                                    .insert(generic_name.clone(), self.infer(&arg.value, None));
+                            }
+                        }
+
+                        let resolved_param_sigs: Vec<_> = sig
+                            .params
+                            .iter()
+                            .map(|sign| ParamSig {
+                                label: sign.label.clone(),
+                                ty: self.resolve_generics(sign.ty.clone(), &resolved_generics),
+                            })
+                            .collect();
+
+                        let args =
+                            self.resolve_args(name.clone(), &resolved_param_sigs, args, *span);
+
+                        let ret = self.resolve_generics(sig.ret, &resolved_generics);
+
+                        let mut generic_types = Vec::new();
+
+                        for name in sig.generic_params {
+                            generic_types
+                                .push(resolved_generics.get(&name).cloned().unwrap_or(Ty::Error));
+                        }
+
+                        return TypedExpr {
+                            kind: TypedExprKind::Call {
+                                function: Box::new(self.check_expr(function.as_ref(), expected)),
+                                args,
+                                generic_types,
+                            },
+                            ty: ret,
+                            span: *span,
+                        };
+                    }
                 }
 
                 match callee {
@@ -846,6 +901,7 @@ impl Checker {
                                     .zip(params.iter())
                                     .map(|(e, param_ty)| self.check_expr(&e.value, Some(param_ty)))
                                     .collect(),
+                                generic_types: vec![],
                             },
                             ty: *ret,
                             span: *span,
@@ -858,6 +914,7 @@ impl Checker {
                                 .iter()
                                 .map(|e| self.check_expr(&e.value, None))
                                 .collect(),
+                            generic_types: vec![],
                         },
                         ty: Ty::Error,
                         span: *span,
@@ -884,6 +941,7 @@ impl Checker {
                                     .iter()
                                     .map(|e| self.check_expr(&e.value, None))
                                     .collect(),
+                                generic_types: vec![],
                             },
                             ty: Ty::Error,
                             span: *span,
@@ -1145,7 +1203,7 @@ impl Checker {
                     };
                 }
 
-                let res_ty = match obj.ty {
+                let res_ty = match obj.ty.clone() {
                     Ty::Struct(s) => match self.structs.get(&s) {
                         Some(struct_sig) => {
                             match struct_sig
@@ -1174,7 +1232,7 @@ impl Checker {
                     Ty::Error => Ty::Error,
                     _ => {
                         self.errors.push(TypeError::NoFields {
-                            ty: obj.ty,
+                            ty: obj.ty.clone(),
                             span: *span,
                         });
                         Ty::Error
@@ -1183,7 +1241,7 @@ impl Checker {
 
                 TypedExpr {
                     kind: TypedExprKind::Field {
-                        object: Box::new(self.check_expr(object.as_ref(), expected)),
+                        object: Box::new(obj),
                         name: name.clone(),
                     },
                     ty: res_ty,
@@ -1457,7 +1515,7 @@ impl Checker {
                             && global_sig.params[0].ty == obj_ty
                         {
                             self.errors.push(TypeError::MethodFoundAsGlobal {
-                                ty: obj_ty.clone(),
+                                ty: Box::new(obj_ty.clone()),
                                 method: name.clone(),
                                 span: *span,
                                 help: format!(
@@ -1638,7 +1696,7 @@ impl Checker {
                             {
                                 if var_name != &target_variant_name {
                                     self.errors.push(TypeError::Mismatch {
-                                        expected: target_ty.clone(),
+                                        expected: Box::new(target_ty.clone()),
                                         found: Ty::Struct(var_name.clone()),
                                         span: *pat_span,
                                         annotation_span: Box::new(self.current_type_span),
@@ -1671,7 +1729,7 @@ impl Checker {
                                 {
                                     if var_name != obj_name || var_name != &target_variant_name {
                                         self.errors.push(TypeError::Mismatch {
-                                            expected: target_ty.clone(),
+                                            expected: Box::new(target_ty.clone()),
                                             found: Ty::Struct(var_name.clone()),
                                             span: *pat_span,
                                             annotation_span: Box::new(self.current_type_span),
@@ -1710,7 +1768,7 @@ impl Checker {
                                 {
                                     if var_name != target_variant_name {
                                         self.errors.push(TypeError::Mismatch {
-                                            expected: target_ty.clone(),
+                                            expected: Box::new(target_ty.clone()),
                                             found: Ty::Struct(var_name),
                                             span: *pat_span,
                                             annotation_span: Box::new(self.current_type_span),
@@ -1776,7 +1834,7 @@ impl Checker {
                                 {
                                     if var_name != *obj_name || var_name != target_variant_name {
                                         self.errors.push(TypeError::Mismatch {
-                                            expected: target_ty.clone(),
+                                            expected: Box::new(target_ty.clone()),
                                             found: Ty::Struct(var_name),
                                             span: *pat_span,
                                             annotation_span: Box::new(self.current_type_span),
@@ -1857,6 +1915,7 @@ impl Checker {
                                     ty: p_ty,
                                     span: b_span,
                                 }],
+                                generic_types: vec![],
                             },
                             ty: Ty::Struct(target_variant_name.clone()),
                             span: p_span,

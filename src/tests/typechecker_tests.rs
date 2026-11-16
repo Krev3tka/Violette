@@ -112,7 +112,7 @@ print()
             vec![
                 vec![
                     Mismatch {
-                        expected: Ty::Sized { signed: true },
+                        expected: Box::new(Ty::Sized { signed: true }),
                         found: Ty::String,
                         span: Span::new(
                             Position { line: 7, col: 8 },
@@ -128,7 +128,7 @@ print()
                     }
                 ],
                 vec![Mismatch {
-                    expected: Ty::String,
+                    expected: Box::new(Ty::String),
                     found: Ty::Sized { signed: true },
                     span: Span::new(Position { line: 4, col: 5 }, Position { line: 4, col: 11 }),
                     annotation_span: Box::new(None),

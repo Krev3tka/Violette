@@ -18,10 +18,14 @@ pub enum Ty {
     Unit,
     Struct(String),
     Union(Vec<Ty>),
-    Generic {
+
+    Param(String),
+
+    Instantiated {
         name: String,
-        param: Box<Ty>,
+        args: Vec<Ty>,
     },
+
     Fn {
         params: Vec<Ty>,
         ret: Box<Ty>,

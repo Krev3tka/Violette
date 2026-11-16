@@ -16,9 +16,10 @@ use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Debug)]
 pub struct FnSig {
+    pub generic_params: Vec<String>,
     pub params: Vec<ParamSig>,
     pub ret: Ty,
-    span: Span,
+    pub span: Span,
 
     /// Is it a method and isn't it static? (not static => dynamic, don't try to find any logic here)
     pub is_dynamic_method: bool,
@@ -35,7 +36,8 @@ pub struct Checker {
     pub main_fn_span: Option<Span>,
     pub in_loop: bool,
     pub current_type_span: Option<Span>,
-    current_self_type: Option<Ty>,
+    pub current_self_type: Option<Ty>,
+    pub current_generics: Vec<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -61,11 +63,15 @@ impl Checker {
                     params,
                     return_type,
                     span,
+                    generic_params,
                     ..
                 } => {
                     if name == "main" {
                         self.main_fn_span = Some(*span)
                     }
+
+                    let saved_generics =
+                        std::mem::replace(&mut self.current_generics, generic_params.clone());
 
                     let params: Vec<_> = params
                         .iter()
@@ -113,9 +119,13 @@ impl Checker {
                     }
 
                     self.defined(name.clone(), f, BindingKind::Var, *span);
+
+                    self.current_generics = saved_generics;
+
                     self.funcs.insert(
                         name.clone(),
                         FnSig {
+                            generic_params: generic_params.clone(),
                             params,
                             ret,
                             span: *span,
@@ -157,6 +167,7 @@ impl Checker {
                     self.funcs.insert(
                         name.clone(),
                         FnSig {
+                            generic_params: vec![],
                             params,
                             ret,
                             span: *span,
@@ -264,6 +275,7 @@ impl Checker {
                             self.funcs.insert(
                                 full_name,
                                 FnSig {
+                                    generic_params: vec![],
                                     params: params_ty,
                                     ret: ret_ty,
                                     span: *func_span,
@@ -313,6 +325,7 @@ impl Checker {
                             self.funcs.insert(
                                 full_name,
                                 FnSig {
+                                    generic_params: vec![],
                                     params: params_ty,
                                     ret: ret_ty,
                                     span: *func_span,
@@ -390,7 +403,13 @@ impl Checker {
                     "String" => Ty::String,
                     "Bool" => Ty::Bool,
                     "Char" => Ty::Char,
-                    _ => Ty::Struct(name.clone()),
+                    _ => {
+                        if self.current_generics.contains(name) {
+                            Ty::Param(name.clone())
+                        } else {
+                            Ty::Struct(name.clone())
+                        }
+                    }
                 }
             }
 
@@ -421,9 +440,9 @@ impl Checker {
                 Ty::Union(resolved)
             }
 
-            Type::Generic { name, param } => Ty::Generic {
+            Type::Generic { name, param } => Ty::Instantiated {
                 name: name.clone(),
-                param: Box::new(self.resolve(param)),
+                args: vec![self.resolve(param)],
             },
 
             Type::Infer => Ty::Infer,
@@ -435,6 +454,7 @@ impl Checker {
 
         if let Statement::Func {
             name,
+            generic_params,
             params,
             return_type,
             body,
@@ -442,6 +462,9 @@ impl Checker {
             ..
         } = stmt
         {
+            let saved_generics =
+                std::mem::replace(&mut self.current_generics, generic_params.clone());
+
             self.current_ret = return_type.as_ref().map_or(Ty::Unit, |t| self.resolve(t));
             for p in params {
                 let mut ty = self.resolve(&p.param_type);
@@ -465,9 +488,12 @@ impl Checker {
             self.check_returns(stmt);
             self.env.pop();
 
+            self.current_generics = saved_generics;
+
             TypedStmt {
                 kind: TypedStmtKind::Func {
                     name: name.clone(),
+                    generic_params: generic_params.clone(),
                     params: params.clone(),
                     return_type: ret,
                     body,
@@ -528,6 +554,7 @@ impl Checker {
             TypedStmt {
                 kind: TypedStmtKind::Func {
                     name: name.clone(),
+                    generic_params: vec![],
                     params,
                     return_type: ret,
                     body,
@@ -545,7 +572,7 @@ impl Checker {
     pub fn check_for_stmt(&mut self, stmt: &Statement) -> TypedStmt {
         self.env.push();
 
-        self.in_loop = true;
+        let prev_loop = std::mem::replace(&mut self.in_loop, true);
 
         let res = if let Statement::While {
             condition,
@@ -609,7 +636,7 @@ impl Checker {
 
         self.env.pop();
 
-        self.in_loop = false;
+        self.in_loop = prev_loop;
 
         res
     }
@@ -692,7 +719,7 @@ impl Checker {
                     kind: TypedStmtKind::Var {
                         pattern: pattern.clone(),
                         ty: final_ty.clone(),
-                        value: self.check_expr(value, expected.as_ref()),
+                        value: typed_val,
                     },
                     ty: Ty::Unit,
                     span: *span,
@@ -831,16 +858,19 @@ impl Checker {
                 }
             }
             Statement::Return { value, span } => {
-                let ty = match value {
-                    Some(v) => self.infer(v, None),
-                    None => Ty::Unit,
-                };
+                let val = value.as_ref().map(|expr| self.check_expr(expr, None));
 
                 let cur_ref = &self.current_ret.clone();
 
-                self.expect(&ty, cur_ref, stmt.span());
-
-                let val = value.as_ref().map(|expr| self.check_expr(expr, None));
+                self.expect(
+                    &if let Some(v) = val.clone() {
+                        v.ty
+                    } else {
+                        Ty::Unit
+                    },
+                    cur_ref,
+                    stmt.span(),
+                );
 
                 TypedStmt {
                     kind: TypedStmtKind::Return { value: val },
@@ -856,6 +886,7 @@ impl Checker {
             } => {
                 let ret = return_type.as_ref().map_or(Ty::Unit, |t| self.resolve(t));
                 let sig = FnSig {
+                    generic_params: vec![],
                     params: params
                         .iter()
                         .map(|p| ParamSig {
@@ -972,7 +1003,7 @@ impl Checker {
 
                         if receiver != target {
                             self.errors.push(TypeError::Mismatch {
-                                expected: target.clone(),
+                                expected: Box::new(target.clone()),
                                 found: receiver,
                                 span: *obj_span,
                                 annotation_span: Box::new(self.current_type_span),
@@ -1026,10 +1057,14 @@ impl Checker {
 
     pub fn check_struct(&mut self, stmt: &Statement) -> TypedStmt {
         if let Statement::Struct { name, fields, .. } = stmt {
+            self.env.push();
+
             for f in fields {
                 let ty = self.resolve(&f.param_type);
                 self.defined(f.name.clone(), ty, BindingKind::Var, stmt.span())
             }
+
+            self.env.pop();
 
             TypedStmt {
                 kind: TypedStmtKind::Struct {
@@ -1387,7 +1422,7 @@ impl Checker {
 
         if !matches!(actual, Ty::Error) && !matches!(expected, Ty::Error) && actual != expected {
             self.errors.push(TypeError::Mismatch {
-                expected: expected.clone(),
+                expected: Box::new(expected.clone()),
                 found: actual.clone(),
                 span,
                 annotation_span: Box::new(self.current_type_span),
@@ -1417,6 +1452,50 @@ impl Checker {
                     close_brace_span: *ending_span,
                 })
             }
+        }
+    }
+
+    pub fn resolve_generics(&mut self, ty: Ty, resolved: &HashMap<String, Ty>) -> Ty {
+        match &ty {
+            Ty::Param(name) => resolved.get(name).unwrap_or(&ty).clone(),
+            Ty::Instantiated { args, name } => {
+                for arg in args {
+                    self.resolve_generics(arg.clone(), resolved);
+                }
+
+                resolved.get(name).unwrap_or(&Ty::Unit).clone()
+            }
+            Ty::Fn { params, ret } => Ty::Fn {
+                params: params
+                    .iter()
+                    .map(|param| self.resolve_generics(param.clone(), resolved))
+                    .collect(),
+                ret: Box::new(self.resolve_generics(ret.as_ref().clone(), resolved)),
+            },
+            Ty::Ref { inner, is_mut } => Ty::Ref {
+                inner: Box::new(self.resolve_generics(inner.as_ref().clone(), resolved)),
+                is_mut: *is_mut,
+            },
+            Ty::Array(inner) => Ty::Array(Box::new(
+                self.resolve_generics(inner.as_ref().clone(), resolved),
+            )),
+            Ty::Tuple(inner) => Ty::Tuple(
+                inner
+                    .iter()
+                    .map(|t| self.resolve_generics(t.clone(), resolved))
+                    .collect(),
+            ),
+            Ty::Int { .. }
+            | Ty::Float { .. }
+            | Ty::Sized { .. }
+            | Ty::Unit
+            | Ty::String
+            | Ty::Bool
+            | Ty::Char
+            | Ty::Struct(_)
+            | Ty::Union(_)
+            | Ty::Infer
+            | Ty::Error => ty,
         }
     }
 
