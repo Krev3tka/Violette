@@ -203,6 +203,7 @@ pub enum TypedStmtKind {
 
     Struct {
         name: String,
+        generic_params: Vec<String>,
         fields: Vec<StructParam>,
     },
 

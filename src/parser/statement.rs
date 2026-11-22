@@ -88,6 +88,7 @@ pub enum Statement {
 
     Struct {
         name: String,
+        generic_params: Vec<String>,
         fields: Vec<StructParam>,
         span: Span,
     },
@@ -386,7 +387,7 @@ impl Parser {
                 self.next_token();
                 let value = match self.parse_expression(Lowest) {
                     Ok(expr) => {
-                        if !matches!(self.current_token.token, Token::RightBrace | Token::Eof) {
+                        if !matches!(self.current_token.token, Token::Eof) {
                             self.next_token();
                         }
                         expr
@@ -843,6 +844,51 @@ impl Parser {
         let open_brace_tok = self.current_token.token.clone();
         let open_brace_span = self.current_token.span;
 
+        let mut generic_params = Vec::new();
+
+        if matches!(self.current_token.token.clone(), Token::LeftBracket) {
+            let open_bracket_tok = self.current_token.token.clone();
+            let open_bracket_span = self.current_token.span;
+
+            self.next_token();
+
+            while !matches!(
+                self.current_token.token.clone(),
+                Token::RightBracket | Token::Eof
+            ) {
+                let type_param_name = match self.current_token.token.clone() {
+                    Token::UpperIdent(type_name) => type_name,
+                    _ => {
+                        return Err(ParseError::ExpectedIdentifier {
+                            context: "in generic type annotation",
+                            found: self.current_token.token.clone(),
+                            span: self.current_token.span,
+                        });
+                    }
+                };
+
+                generic_params.push(type_param_name);
+                self.next_token();
+
+                if matches!(self.current_token.token, Token::Comma) {
+                    self.next_token();
+                } else {
+                    break;
+                }
+            }
+
+            self.expect(
+                Token::RightBracket,
+                ParseError::UnclosedDelimiter {
+                    open_token: Box::new(open_bracket_tok),
+                    open_span: open_bracket_span,
+                    expected_token: Box::new(Token::RightBracket),
+                    found_tok: Box::new(self.current_token.token.clone()),
+                    found_span: self.current_token.span,
+                },
+            )?;
+        }
+
         self.expect(Token::LeftBrace, self.unexpected(&self.current_token))?;
         self.skip_terminators();
         let mut fields = Vec::new();
@@ -901,7 +947,12 @@ impl Parser {
             },
         )?;
 
-        Ok(Statement::Struct { name, fields, span })
+        Ok(Statement::Struct {
+            name,
+            generic_params,
+            fields,
+            span,
+        })
     }
 
     pub fn parse_enum(&mut self) -> Result<Statement, ParseError> {

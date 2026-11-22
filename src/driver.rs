@@ -281,20 +281,6 @@ pub fn compile(command: &str, file: &str) {
     fs::create_dir_all(&temp_dir).expect("Failed to create temp runtime dir");
 
     let runtime_header: &str = include_str!("../vio_helpers/vio_runtime/runtime.h");
-    let str_h: &str = include_str!("../vio_helpers/vio_string/vio_string.h");
-    let str_c: &str = include_str!("../vio_helpers/vio_string/vio_string.c");
-    let println_h: &str = include_str!("../vio_helpers/vio_io/vio_println.h");
-    let println_c: &str = include_str!("../vio_helpers/vio_io/vio_println.c");
-    let print_h: &str = include_str!("../vio_helpers/vio_io/vio_print.h");
-    let print_c: &str = include_str!("../vio_helpers/vio_io/vio_print.c");
-    let scanln_h: &str = include_str!("../vio_helpers/vio_io/vio_scanln.h");
-    let scanln_c: &str = include_str!("../vio_helpers/vio_io/vio_scanln.c");
-    let int_h: &str = include_str!("../vio_helpers/vio_casting/vio_int.h");
-    let int_c: &str = include_str!("../vio_helpers/vio_casting/vio_int.c");
-    let string_h: &str = include_str!("../vio_helpers/vio_casting/vio_string.h");
-    let string_c: &str = include_str!("../vio_helpers/vio_casting/vio_string.c");
-    let float_h: &str = include_str!("../vio_helpers/vio_casting/vio_float.h");
-    let float_c: &str = include_str!("../vio_helpers/vio_casting/vio_float.c");
 
     let write_rt = |sub: &str, name: &str, content: &str| -> std::path::PathBuf {
         let dir = temp_dir.join(sub);
@@ -308,20 +294,6 @@ pub fn compile(command: &str, file: &str) {
     };
 
     write_rt("", "vio_runtime.h", runtime_header);
-    write_rt("vio_string", "vio_string.h", str_h);
-    let str_c_path = write_rt("vio_string", "vio_string.c", str_c);
-    write_rt("vio_io", "vio_println.h", println_h);
-    let print_c_path = write_rt("vio_io", "vio_print.c", print_c);
-    write_rt("vio_io", "vio_print.h", print_h);
-    let println_c_path = write_rt("vio_io", "vio_println.c", println_c);
-    write_rt("vio_io", "vio_scanln.h", scanln_h);
-    let scanln_c_path = write_rt("vio_io", "vio_scanln.c", scanln_c);
-    write_rt("vio_casting", "vio_int.h", int_h);
-    let int_c_path = write_rt("vio_casting", "vio_int.c", int_c);
-    write_rt("vio_casting", "vio_string.h", string_h);
-    let string_c_path = write_rt("vio_casting", "vio_string.c", string_c);
-    write_rt("vio_casting", "vio_float.h", float_h);
-    let float_c_path = write_rt("vio_casting", "vio_float.c", float_c);
 
     let c_path = env::temp_dir().join(format!(
         "{}_vio_out.c",
@@ -345,13 +317,6 @@ pub fn compile(command: &str, file: &str) {
         .arg("-O0")
         .arg("-w")
         .arg(&c_path)
-        .arg(&str_c_path)
-        .arg(&print_c_path)
-        .arg(&println_c_path)
-        .arg(&scanln_c_path)
-        .arg(&int_c_path)
-        .arg(&string_c_path)
-        .arg(&float_c_path)
         .arg("-I")
         .arg(&temp_dir)
         .arg("-o")

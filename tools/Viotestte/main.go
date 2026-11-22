@@ -31,6 +31,7 @@ var ExpectedErrors = map[string]string{
 	"fail_operator_logic.vio": "operator `Add` cannot be applied to types `Int` and `String`",
 	"fail_unknown_name.vio": "found something undefined: `Ponit`",
 	"fail_arity_mismatch.vio": "function `mul_and_add` takes 2 arguments but only 1 were found",
+	"fail_wrong_annotation.vio": "found mismatched types",
 }
 
 var ExpectedOutputs = map[string]string{
@@ -50,10 +51,12 @@ var ExpectedOutputs = map[string]string{
 	"fibonacci.vio":       "55",
 	"field_assigning.vio": "15",
 	"fizzbuzz.vio":        "1\n2\nfizz\n4\nbuzz\nfizz\n7\n8\nfizz\nbuzz\n11\nfizz\n13\n14\nfizzbuzz",
-	"float_casting.vio":   "134\n542.960000",
+	"float_casting.vio":   "134\n542.96",
+	"folding_with_generics.vio": "30",
 	"funcs_with_assignment_syntax.vio": "7",
 	"if_else.vio":         "36\n10.648\n361",
 	"if_if_was_expr.vio":  "1\n-1\n0",
+	"key_value_struct_generics.vio": "3",
 	"lambda_with_no_params_at_all.vio": "42\n42",
 	"lambdas_like_in_haskell.vio": "10\n42",
 	"long_expr_in_lambda.vio": "true",

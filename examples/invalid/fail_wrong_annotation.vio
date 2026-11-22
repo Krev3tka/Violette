@@ -1,0 +1,5 @@
+func main() {
+    let word: Int32 = "Hi"
+
+    let nums: []Int = [1, 2, "3"]
+}

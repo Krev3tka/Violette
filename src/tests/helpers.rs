@@ -208,6 +208,7 @@ pub fn func(
 pub fn struct_def(name: &str, fields: Vec<StructParam>) -> Statement {
     Statement::Struct {
         name: name.to_string(),
+        generic_params: vec![],
         fields,
         span: dummy_span(),
     }

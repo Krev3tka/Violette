@@ -1,5 +1,6 @@
 use crate::lexer::span::Span;
 
+#[allow(dead_code)]
 #[derive(Clone)]
 pub struct Label {
     pub file_path: String,
@@ -31,5 +32,11 @@ impl Label {
             message: message.into(),
             style: LabelStyle::Secondary,
         }
+    }
+}
+
+impl LabelStyle {
+    pub fn is_primary(&self) -> bool {
+        matches!(self, LabelStyle::Primary)
     }
 }

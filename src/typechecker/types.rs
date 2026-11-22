@@ -72,7 +72,7 @@ impl fmt::Display for Ty {
             Ty::String => write!(f, "String"),
             Ty::Struct(name) => write!(f, "{}", name),
             Ty::Unit => write!(f, "Void"),
-            Ty::Array(inner) => write!(f, "[{}]", inner.as_ref()),
+            Ty::Array(inner) => write!(f, "[]{}", inner.as_ref()),
             Ty::Tuple(inner) => write!(
                 f,
                 "({})",

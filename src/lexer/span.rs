@@ -5,9 +5,9 @@ use crate::parser::{Expression, Statement};
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Ord, PartialOrd, Default)]
 pub struct Position {
-    /// 1-based line number.
+    /// 1-based line number
     pub line: usize,
-    /// 1-based column number.
+    /// 1-based column number
     pub col: usize,
 }
 
@@ -17,9 +17,9 @@ impl Position {
     }
 }
 
-/// Source code location represented by line and column numbers.
+/// Source code location represented by line and column numbers
 ///
-/// Used for diagnostic reporting and error tracking.
+/// Used for diagnostic reporting and error tracking
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Default)]
 pub struct Span {
     pub start: Position,
@@ -31,16 +31,60 @@ impl Span {
         Span { start, end }
     }
 
-    #[allow(dead_code)]
     pub fn merge(&self, with: &Span) -> Span {
         Self {
             start: self.start.min(with.start),
             end: self.end.max(with.end),
         }
     }
+
+    pub fn to_range(self, src: &str) -> std::ops::Range<usize> {
+        let start = Self::pos_to_char_offset(src, self.start);
+        let end = Self::pos_to_char_offset(src, self.end);
+
+        if end > start {
+            start..end
+        } else if self.start.line > 0 {
+            let max_len = src.chars().count();
+            start..(start + 1).min(max_len)
+        } else {
+            0..0
+        }
+    }
+
+    fn pos_to_char_offset(src: &str, pos: Position) -> usize {
+        if pos.line == 0 || pos.col == 0 {
+            return 0;
+        }
+
+        let mut cur_line = 1;
+        let mut cur_col = 1;
+        let mut char_index = 0;
+
+        for ch in src.chars() {
+            if cur_line == pos.line && cur_col == pos.col {
+                return char_index;
+            }
+
+            if ch == '\n' {
+                if cur_line == pos.line {
+                    return char_index;
+                }
+
+                cur_line += 1;
+                cur_col = 1;
+            } else {
+                cur_col += 1;
+            }
+
+            char_index += 1;
+        }
+
+        char_index
+    }
 }
 
-/// Token paired with its source code location.
+/// Token paired with source code location.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SpannedToken {
     pub token: Token,

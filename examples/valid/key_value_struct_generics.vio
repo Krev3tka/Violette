@@ -1,0 +1,14 @@
+struct KeyValue[K, V] {
+    key: K,
+    value: V,
+}
+
+func main() {
+    let map = [
+        KeyValue { key: "a", value: 1 },
+        KeyValue { key: "b", value: 2 },
+        KeyValue { key: "c", value: 3 }
+    ]
+
+    println(map[2].value)
+}

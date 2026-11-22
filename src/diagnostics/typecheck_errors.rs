@@ -1,10 +1,10 @@
 use crate::diagnostics::diagnostics::Diagnostics;
-use crate::diagnostics::labeling::{Label, LabelStyle};
+use crate::diagnostics::labeling::Label;
 use crate::lexer::span::Span;
 use crate::typechecker::checker::TypeError;
 use crate::typechecker::error::{BindingKind, DefinitionKind, LoopControlKind};
 use crate::typechecker::types::Ty;
-use colored::Colorize;
+use ariadne::{Color, Config, LabelAttach, Report, ReportKind, Source};
 
 impl Diagnostics for TypeError {
     fn message(&self, path: &str) -> String {
@@ -17,7 +17,7 @@ impl Diagnostics for TypeError {
             } => {
                 let (kind_str, help_message) = match kind {
                     BindingKind::Let => (
-                        "let-bound",
+                        "let",
                         "variable was declared with `let`, consider using `var` to make it mutable"
                             .to_string(),
                     ),
@@ -467,94 +467,48 @@ impl Diagnostics for TypeError {
         labels: &[Label],
         help: Option<&str>,
     ) -> String {
-        let mut res = "error: ".red().bold().to_string();
+        let src = std::fs::read_to_string(&path).unwrap_or_default();
+        let main_range = main_span.to_range(&src);
 
-        res.push_str(message.as_str());
-        res.push('\n');
+        let config = Config::default()
+            .with_label_attach(LabelAttach::Middle)
+            // .with_cross_gap(true)
+            .with_compact(false);
 
-        let underline = |span: Span| {
-            let len = span.end.col.saturating_sub(span.start.col).max(1);
+        let mut report =
+            Report::build(ReportKind::Custom("Error", Color::Red), (&path, main_range))
+                .with_config(config)
+                .with_message(message);
 
-            format!("{}{}", " ".repeat(span.start.col), "~".repeat(len))
-        };
+        for lbl in labels {
+            let color = if lbl.style.is_primary() {
+                Color::Red
+            } else {
+                Color::Cyan
+            };
 
-        let max_line = match labels.iter().max_by_key(|l| l.span.start.line) {
-            Some(v) => v,
-            None => unreachable!(),
-        };
+            let range = lbl.span.to_range(&src);
+            let order = -(range.start as i32);
 
-        let width = max_line.span.start.line.to_string().len();
-
-        // let is_compact = labels.len() == 1;
-        //
-        // let line_len = if is_compact { 50 } else { 60 };
-
-        let indent = " ".repeat(width);
-
-        res.push_str(
-            format!(
-                " {indent}  ╭─[ {}:{}:{} ]\n",
-                path, main_span.start.line, main_span.start.col
-            )
-            .as_str(),
-        );
-
-        res.push_str(&format!(" {indent}  \u{2502}\n"));
-
-        for (i, label) in labels.iter().enumerate() {
-            let file_content = std::fs::read_to_string(&label.file_path).unwrap_or_default();
-            let file_lines: Vec<&str> = file_content.lines().collect();
-
-            let code_line = file_lines
-                .get(label.span.start.line.saturating_sub(1))
-                .copied()
-                .unwrap_or("<source unavailable>");
-
-            res.push_str(&format!(
-                " {line:>width$}  \u{2502}  {code_line}\n",
-                line = label.span.start.line,
-                width = width,
-                code_line = code_line,
-            ));
-
-            match label.style {
-                LabelStyle::Primary => {
-                    res.push_str(&format!(
-                        " {indent}  \u{2502} {decl_mark} {message}\n",
-                        decl_mark = underline(label.span).red().bold(),
-                        message = label.message.red().bold()
-                    ));
-                }
-                LabelStyle::Secondary => {
-                    res.push_str(&format!(
-                        " {indent}  \u{2502} {decl_mark} {message}\n",
-                        decl_mark = underline(label.span).replace("~", "_").cyan().bold(),
-                        message = label.message.cyan().bold()
-                    ));
-                }
-            }
-
-            if i + 1 < labels.len() {
-                res.push_str(&format!(" {indent}  \u{2502}\n"));
-            }
-        }
-
-        res.push_str(&format!(
-            "{line_indent}──╯\n",
-            line_indent = "─".repeat(indent.len() + 1)
-        ));
-
-        if let Some(message) = help {
-            res.push_str(
-                format!(
-                    "{help_text} {message}\n",
-                    help_text = "help:".green().bold(),
-                    message = message.green().bold()
-                )
-                .as_str(),
+            report = report.with_label(
+                ariadne::Label::new((&path, range))
+                    .with_message(&lbl.message)
+                    .with_color(color)
+                    .with_order(order),
             )
         }
 
-        res
+        if let Some(help_msg) = help {
+            report = report.with_help(help_msg);
+        }
+
+        let mut buf = Vec::new();
+
+        report
+            .finish()
+            .write((&path, Source::from(&src)), &mut buf)
+            .unwrap();
+
+        String::from_utf8(buf).unwrap_or_default()
     }
 }

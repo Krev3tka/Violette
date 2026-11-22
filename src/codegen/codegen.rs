@@ -28,10 +28,11 @@ pub struct Codegen {
     slice_types: HashSet<String>,
     tuple_types: HashSet<Vec<String>>,
     type_subst: HashMap<String, Ty>,
-    generic_funcs: HashMap<String, TypedStmt>,
+    generic_decls: HashMap<String, TypedStmt>,
     emitted_monomorphs: HashSet<String>,
-    mono_prototypes: Vec<String>,
-    mono_bodies: Vec<String>,
+    mono_func_prototypes: Vec<String>,
+    mono_func_bodies: Vec<String>,
+    mono_structs: Vec<String>,
     methods_taking_ref: HashSet<String>,
     var_versions: usize,
     tmp_var_count: usize,
@@ -57,10 +58,11 @@ impl Codegen {
             slice_types: HashSet::new(),
             tuple_types: HashSet::new(),
             type_subst: HashMap::new(),
-            generic_funcs: HashMap::new(),
+            generic_decls: HashMap::new(),
             emitted_monomorphs: HashSet::new(),
-            mono_prototypes: Vec::new(),
-            mono_bodies: Vec::new(),
+            mono_func_prototypes: Vec::new(),
+            mono_func_bodies: Vec::new(),
+            mono_structs: Vec::new(),
             methods_taking_ref: HashSet::new(),
             var_versions: 0,
             tmp_var_count: 0,
@@ -124,6 +126,50 @@ impl Codegen {
                     String::from("MaybeNotRegisteredGenericType")
                 }
             }
+            Ty::Instantiated { name, args } => {
+                let res = format!(
+                    "{}_{}",
+                    name,
+                    args.iter()
+                        .map(|t| self.c_type(t))
+                        .collect::<Vec<_>>()
+                        .join("_")
+                );
+
+                if !self.emitted_monomorphs.contains(&res)
+                    && let Some(TypedStmtKind::Struct {
+                        generic_params,
+                        fields,
+                        ..
+                    }) = self.generic_decls.get(name).map(|n| n.kind.clone())
+                {
+                    self.emitted_monomorphs.insert(res.clone());
+
+                    let saved_type_subst = self.type_subst.clone();
+
+                    let zipped: HashMap<_, _> =
+                        generic_params.into_iter().zip(args.clone()).collect();
+
+                    self.type_subst = zipped;
+
+                    let mut c_fields = Vec::new();
+
+                    for f in fields {
+                        let ty = self.c_type(&self.type_param_to_ty(&f.to_func()));
+                        c_fields.push(format!("\t{} {}", ty, f.name));
+                    }
+
+                    self.mono_structs.push(format!(
+                        "typedef struct {{\n{};\n}} {};",
+                        c_fields.join(";\n"),
+                        res
+                    ));
+
+                    self.type_subst = saved_type_subst;
+                }
+
+                res
+            }
             Ty::Infer => "int64_t".to_string(),
             _ => "unknown".to_string(),
         }
@@ -141,7 +187,7 @@ impl Codegen {
             {
                 if !generic_params.is_empty() {
                     self.user_funcs.insert(name.clone());
-                    self.generic_funcs.insert(name.clone(), s.clone());
+                    self.generic_decls.insert(name.clone(), s.clone());
                 } else {
                     self.user_funcs.insert(name.clone());
                 }
@@ -163,7 +209,14 @@ impl Codegen {
                 TypedStmtKind::ExternFunc { name, .. } => {
                     self.extern_funcs.insert(name.clone());
                 }
-                TypedStmtKind::Struct { name, .. } => {
+                TypedStmtKind::Struct {
+                    name,
+                    generic_params,
+                    ..
+                } => {
+                    if !generic_params.is_empty() {
+                        self.generic_decls.insert(name.clone(), s.clone());
+                    }
                     self.struct_names.insert(name.clone());
                 }
                 TypedStmtKind::Enum { name, cases } => {
@@ -198,9 +251,10 @@ impl Codegen {
 
         for s in &prg.declarations {
             match s.kind {
-                TypedStmtKind::Struct { .. } | TypedStmtKind::Enum { .. } => {
-                    lines.push(self.emit_statement(s)?)
-                }
+                TypedStmtKind::Struct {
+                    ref generic_params, ..
+                } if generic_params.is_empty() => lines.push(self.emit_statement(s)?),
+                TypedStmtKind::Enum { .. } => lines.push(self.emit_statement(s)?),
                 _ => {}
             }
         }
@@ -221,6 +275,7 @@ impl Codegen {
                     } else {
                         format!("vio_user_{}", name)
                     };
+
                     let ret_str = self.c_type(return_type);
                     let params_str = self.format_params(params);
                     lines.push(format!("{ret_str} {c_name}({params_str});"));
@@ -252,6 +307,9 @@ impl Codegen {
 
         for s in &prg.declarations {
             match &s.kind {
+                TypedStmtKind::Struct { generic_params, .. } if !generic_params.is_empty() => {
+                    continue;
+                }
                 TypedStmtKind::Const { .. }
                 | TypedStmtKind::Struct { .. }
                 | TypedStmtKind::Enum { .. } => continue,
@@ -300,6 +358,11 @@ impl Codegen {
             final_lines.push(format!("typedef struct {name} {name};\n"));
         }
 
+        if !self.mono_structs.is_empty() {
+            final_lines.extend(self.mono_structs.clone());
+            final_lines.push("\n".to_string());
+        }
+
         // 8. Slices
 
         for slice_ty in &self.slice_types {
@@ -333,15 +396,15 @@ impl Codegen {
             final_lines.push("\n".to_string());
         }
 
-        if !self.mono_prototypes.is_empty() {
-            final_lines.extend(self.mono_prototypes.clone());
+        if !self.mono_func_prototypes.is_empty() {
+            final_lines.extend(self.mono_func_prototypes.clone());
             final_lines.push("\n".to_string());
         }
 
         final_lines.extend(lines.into_iter().skip(1));
 
-        if !self.mono_bodies.is_empty() {
-            final_lines.extend(self.mono_bodies.clone());
+        if !self.mono_func_bodies.is_empty() {
+            final_lines.extend(self.mono_func_bodies.clone());
             final_lines.push("\n".to_string());
         }
 
@@ -374,16 +437,19 @@ impl Codegen {
             TypedExprKind::CharLiteral { val } => {
                 format!("((uint32_t){:#X}U)", *val as u32)
             }
-            TypedExprKind::StructLiteral { name, fields } => {
+            TypedExprKind::StructLiteral { fields, .. } => {
                 if fields.is_empty() {
-                    return Ok(format!("({}){{0}}", name));
+                    return Ok(format!("({}){{0}}", self.c_type(&expr.ty)));
                 }
+
                 let mut c_fields = Vec::new();
+
                 for f in fields {
                     let f_val = self.emit_expression(&f.field_val)?;
                     c_fields.push(format!(".{} = {}", f.field_name, f_val));
                 }
-                format!("({}){{ {} }}", name, c_fields.join(", "))
+
+                format!("({}){{ {} }}", self.c_type(&expr.ty), c_fields.join(", "))
             }
             TypedExprKind::Prefix { operator, right } => {
                 if matches!(operator, Token::BitAnd) {
@@ -558,7 +624,7 @@ impl Codegen {
 
                 if !generic_types.is_empty() && !self.emitted_monomorphs.contains(&c_fn_name) {
                     self.emitted_monomorphs.insert(c_fn_name.clone());
-                    let generic = self.generic_funcs.get(&f);
+                    let generic = self.generic_decls.get(&f);
 
                     if let Some(fun) = generic
                         && let TypedStmtKind::Func {
@@ -584,15 +650,17 @@ impl Codegen {
 
                         let ret = self.c_type(&return_type);
                         let params_c = self.format_params(&params);
-                        self.mono_prototypes
+                        self.mono_func_prototypes
                             .push(format!("{} {}({});", ret, c_fn_name, params_c));
 
-                        let body_c = self.emit_block(&body)?;
+                        let func_c = self.emit_function_custom(
+                            c_fn_name.clone(),
+                            &params,
+                            &return_type,
+                            &body,
+                        )?;
 
-                        self.mono_bodies.push(format!(
-                            "{} {}({}) {{\n    {}\n}}",
-                            ret, c_fn_name, params_c, body_c
-                        ));
+                        self.mono_func_bodies.push(func_c);
 
                         self.is_main = saved_main;
                         self.scopes = saved_scopes;
@@ -1161,14 +1229,17 @@ impl Codegen {
                 } else {
                     format!("vio_user_{}", name)
                 };
+
                 self.emit_function_custom(c_name, params, return_type, body)?
             }
-            TypedStmtKind::Struct { name, fields } => {
+            TypedStmtKind::Struct { name, fields, .. } => {
                 let mut c_fields = Vec::new();
+
                 for f in fields {
                     let ty = self.c_type(&self.type_param_to_ty(&f.to_func()));
                     c_fields.push(format!("\t{} {}", ty, f.name));
                 }
+
                 format!("typedef struct {{\n{};\n}} {};", c_fields.join(";\n"), name)
             }
             TypedStmtKind::Extend { target, methods } => {

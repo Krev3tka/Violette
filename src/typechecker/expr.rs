@@ -815,12 +815,12 @@ impl Checker {
                         let mut resolved_generics = HashMap::new();
 
                         for (arg, param) in args.iter().zip(sig.params.clone()) {
-                            if let Ty::Param(generic_name) = param.ty.clone()
-                                && !resolved_generics.contains_key(&generic_name)
-                            {
-                                resolved_generics
-                                    .insert(generic_name.clone(), self.infer(&arg.value, None));
-                            }
+                            let expected_param_ty =
+                                self.resolve_generics(param.ty.clone(), &resolved_generics);
+
+                            let arg_ty = self.infer(&arg.value, Some(&expected_param_ty));
+
+                            self.unify_generic(&param.ty, &arg_ty, &mut resolved_generics);
                         }
 
                         let resolved_param_sigs: Vec<_> = sig
@@ -896,11 +896,7 @@ impl Checker {
                         TypedExpr {
                             kind: TypedExprKind::Call {
                                 function: Box::new(typed_function),
-                                args: args
-                                    .iter()
-                                    .zip(params.iter())
-                                    .map(|(e, param_ty)| self.check_expr(&e.value, Some(param_ty)))
-                                    .collect(),
+                                args: typed_args,
                                 generic_types: vec![],
                             },
                             ty: *ret,
@@ -1015,8 +1011,7 @@ impl Checker {
                     Some(t) => self.resolve(t),
                     None => {
                         if let Some(exp_r) = expected_ret
-                            && *exp_r != Ty::Infer
-                            && *exp_r != Ty::Error
+                            && !matches!(exp_r, Ty::Infer | Ty::Error | Ty::Param(_))
                         {
                             exp_r.clone()
                         } else {
@@ -1093,61 +1088,68 @@ impl Checker {
                     };
                 }
 
+                let sig = self.structs.get(name).cloned().unwrap();
+
                 if fields.is_empty() {
                     return TypedExpr {
                         kind: TypedExprKind::StructLiteral {
                             name: name.clone(),
-                            fields: fields
-                                .iter()
-                                .map(|f| TypedStructLiteralField {
-                                    field_name: f.field_name.clone(),
-                                    field_val: Box::new(
-                                        self.check_expr(f.field_val.as_ref(), None),
-                                    ),
-                                })
-                                .collect(),
+                            fields: vec![],
                         },
                         ty: Ty::Struct(name.clone()),
                         span: *span,
                     };
                 }
 
+                let mut typed_fields = Vec::new();
+                let mut resolved_generics = HashMap::new();
+
                 for f in fields {
-                    match self.infer(f.field_val.as_ref(), None) {
-                        Ty::Error => {
-                            return TypedExpr {
-                                kind: TypedExprKind::StructLiteral {
-                                    name: name.clone(),
-                                    fields: fields
-                                        .iter()
-                                        .map(|f| TypedStructLiteralField {
-                                            field_name: f.field_name.clone(),
-                                            field_val: Box::new(
-                                                self.check_expr(f.field_val.as_ref(), None),
-                                            ),
-                                        })
-                                        .collect(),
-                                },
-                                ty: Ty::Error,
-                                span: *span,
-                            };
-                        }
-                        _ => continue,
+                    let typed_val = self.check_expr(f.field_val.as_ref(), None);
+
+                    let sig_field_ty = sig
+                        .fields
+                        .iter()
+                        .find(|(n, _, _)| n == &f.field_name)
+                        .map(|found| found.1.clone());
+
+                    if let Some(sig_field_ty) = sig_field_ty {
+                        self.unify_generic(&sig_field_ty, &typed_val.ty, &mut resolved_generics);
+
+                        let resolved_ty =
+                            self.resolve_generics(sig_field_ty.clone(), &resolved_generics);
+
+                        self.expect(&typed_val.ty, &resolved_ty, f.field_val.as_ref().span());
                     }
+
+                    typed_fields.push(TypedStructLiteralField {
+                        field_name: f.field_name.clone(),
+                        field_val: Box::new(typed_val.clone()),
+                    });
                 }
+
+                let ty = if sig.generic_params.is_empty() {
+                    Ty::Struct(name.clone())
+                } else {
+                    let mut generic_types = Vec::new();
+
+                    for name in sig.generic_params {
+                        generic_types
+                            .push(resolved_generics.get(&name).cloned().unwrap_or(Ty::Error));
+                    }
+
+                    Ty::Instantiated {
+                        name: name.clone(),
+                        args: generic_types.clone(),
+                    }
+                };
 
                 TypedExpr {
                     kind: TypedExprKind::StructLiteral {
                         name: name.clone(),
-                        fields: fields
-                            .iter()
-                            .map(|f| TypedStructLiteralField {
-                                field_name: f.field_name.clone(),
-                                field_val: Box::new(self.check_expr(f.field_val.as_ref(), None)),
-                            })
-                            .collect(),
+                        fields: typed_fields,
                     },
-                    ty: Ty::Struct(name.clone()),
+                    ty,
                     span: *span,
                 }
             }
@@ -1207,6 +1209,7 @@ impl Checker {
                     Ty::Struct(s) => match self.structs.get(&s) {
                         Some(struct_sig) => {
                             match struct_sig
+                                .fields
                                 .iter()
                                 .find(|(curr_name, _, _)| curr_name == name)
                             {
@@ -1229,6 +1232,24 @@ impl Checker {
                             Ty::Error
                         }
                     },
+                    Ty::Instantiated { name: s, args } => {
+                        let sig = if let Some(sig) = self.structs.get(&s) {
+                            sig
+                        } else {
+                            unreachable!()
+                        };
+
+                        let found = sig
+                            .fields
+                            .iter()
+                            .find(|(n, _, _)| n == name)
+                            .map(|(_, t, _)| t);
+
+                        let tmp: HashMap<_, _> =
+                            sig.generic_params.clone().into_iter().zip(args).collect();
+
+                        self.resolve_generics(found.unwrap_or(&Ty::Error).clone(), &tmp)
+                    }
                     Ty::Error => Ty::Error,
                     _ => {
                         self.errors.push(TypeError::NoFields {
@@ -2035,7 +2056,7 @@ impl Checker {
                     }
 
                     let ret = if let Some(exp_ret) = expected_ret
-                        && exp_ret != &Ty::Infer
+                        && !matches!(exp_ret, Ty::Infer | Ty::Error | Ty::Param(_))
                     {
                         exp_ret.clone()
                     } else {
@@ -2112,14 +2133,7 @@ impl Checker {
                     ty: last_ty,
                     span: *span,
                 }
-            } // _ => {
-              //     TypedExpr::error(
-              //         expr.span(),
-              //         TypeError::Unreachable {
-              //             span: expr.span()
-              //         }
-              //     )
-              // }
+            }
         }
     }
 
@@ -2216,5 +2230,96 @@ impl Checker {
             | Expression::StringLiteral { .. }
             | Expression::Field { .. } => {}
         }
+    }
+
+    pub fn check_assignment(&mut self, name: &str, value_expr: &Expression) {
+        let entity = match self.env.lookup(name) {
+            Some(e) => e,
+            None => {
+                self.errors.push(TypeError::UnknownName {
+                    name: name.to_string(),
+                    span: value_expr.span(),
+                });
+                return;
+            }
+        };
+
+        if !entity.kind.is_mutable() {
+            self.errors.push(TypeError::AssignmentToImmutable {
+                name: name.to_string(),
+                kind: entity.kind,
+                assign_span: value_expr.span(),
+                decl_span: entity.span,
+            });
+            return;
+        }
+
+        let expected_ty = match &entity.ty {
+            Ty::Ref { inner, .. } => inner.as_ref(),
+            t => t,
+        };
+
+        let value_ty = self.infer(value_expr, None);
+
+        self.expect(&value_ty, expected_ty, value_expr.span())
+    }
+
+    pub fn check_field_assignment(
+        &mut self,
+        object: &Expression,
+        field_name: &str,
+        value_expr: &Expression,
+        span: Span,
+    ) {
+        if let Expression::Identifier { name: obj_name, .. } = object
+            && let Some(entity) = self.env.lookup(obj_name)
+            && !entity.kind.is_mutable()
+        {
+            self.errors.push(TypeError::AssignmentToImmutable {
+                name: format!("{}.{}", obj_name, field_name),
+                kind: entity.kind,
+                decl_span: entity.span,
+                assign_span: span,
+            });
+        }
+
+        let obj_ty = self.infer(object, None);
+
+        match obj_ty {
+            Ty::Struct(struct_name) => {
+                let field_ty = self
+                    .structs
+                    .get(&struct_name)
+                    .and_then(|sign| sign.fields.iter().find(|(n, _, _)| n == field_name))
+                    .map(|(_, ty, _)| ty.clone());
+
+                if let Some(field_ty) = field_ty {
+                    let val_ty = self.infer(value_expr, None);
+
+                    self.expect(&val_ty, &field_ty, value_expr.span());
+                } else {
+                    self.errors.push(TypeError::UnknownField {
+                        struct_name,
+                        field: field_name.to_string(),
+                        span,
+                    })
+                }
+            }
+            Ty::Error => {}
+            _ => self.errors.push(TypeError::NoFields { ty: obj_ty, span }),
+        }
+    }
+
+    pub fn check_block(&mut self, block: &[Statement]) -> Vec<TypedStmt> {
+        self.env.push();
+
+        let mut stmts = Vec::new();
+
+        for s in block {
+            stmts.push(self.check_stmt(s));
+        }
+        self.env.pop();
+
+        stmts
     }
 }

@@ -1452,16 +1452,15 @@ impl Parser {
             self.skip_terminators();
         }
 
-        self.expect(
-            Token::RightBrace,
-            ParseError::UnclosedDelimiter {
+        if !matches!(self.current_token.token.clone(), Token::RightBrace) {
+            return Err(ParseError::UnclosedDelimiter {
                 open_token: Box::new(open_brace_tok),
                 open_span: open_brace_span,
                 expected_token: Box::new(Token::RightBrace),
                 found_tok: Box::new(self.current_token.token.clone()),
                 found_span: self.current_token.span,
-            },
-        )?;
+            });
+        }
 
         // self.skip_terminators();
 
