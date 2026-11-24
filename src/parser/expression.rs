@@ -493,12 +493,7 @@ impl Parser {
                     }
                 }
             }
-            Token::Subtract
-            | Token::LogicNot
-            | Token::BitAnd
-            | Token::BitNot
-            | Token::Increment
-            | Token::Decrement => {
+            Token::Subtract | Token::LogicNot | Token::BitAnd | Token::BitNot => {
                 let operator = self.current_token.token.clone();
                 let op_span = self.current_token.span;
 
